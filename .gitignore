@@ -1,0 +1,13 @@
+*.so
+
+*.pyc
+
+.idea/
+
+workdirs/
+
+.vscode
+
+log/
+
+core
