@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+from megengine import Tensor
 
 def _scale_size(size, scale):
     """Rescale a size by a ratio.
@@ -244,14 +245,14 @@ def imdenormalize(img, mean, std, to_bgr=True):
 
 
 def is_var(tensor):
-    return isinstance(tensor, (fluid.core.VarBase, fluid.framework.Variable, fluid.framework.ComplexVariable))
+    return isinstance(tensor, Tensor)
 
 
 def is_ndarray(tensor):
     return isinstance(tensor, np.ndarray)
 
 
-def var2img(tensor, out_type=np.uint8, min_max=(0, 1)):
+def tensor2img(tensor, out_type=np.uint8, min_max=(0, 1)):
     """Convert variable or ndarray into image numpy arrays.
 
     After clamping to (min, max), image values will be normalized to [0, 1].
@@ -280,9 +281,9 @@ def var2img(tensor, out_type=np.uint8, min_max=(0, 1)):
         of shape (H x W).
     """
     if is_var(tensor):
-        tensor = tensor.astype('float32').detach().numpy()
+        tensor = tensor.astype('float32').numpy()
     elif isinstance(tensor, list) and all(is_var(t) for t in tensor):
-        tensor = [t.astype('float32').detach().numpy() for t in tensor]
+        tensor = [t.astype('float32').numpy() for t in tensor]
     else:
         assert is_ndarray(tensor) or (isinstance(tensor, list) and all(is_ndarray(t) for t in tensor))
 

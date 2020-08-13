@@ -9,8 +9,8 @@ model = dict(
         in_channels=3,
         out_channels=3,
         n_0=256,
-        n_R=64,
-        iterations_num=10,
+        n_R=128,
+        iterations_num=5,
         upscale_factor=scale),
     pixel_loss=dict(type='L1Loss'))
 # model training and testing settings
@@ -61,7 +61,7 @@ dataroot = "/opt/data/private/datasets"
 repeat_times = 1
 data = dict(
     # train
-    samples_per_gpu=4,
+    samples_per_gpu=6,
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',

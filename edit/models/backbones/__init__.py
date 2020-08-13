@@ -1,1 +1,1 @@
-from .restorer_backbones import DBPN
+from .restorer_backbones import DBPN, FSRCNN

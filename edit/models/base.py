@@ -1,5 +1,6 @@
 from abc import abstractmethod
 import megengine.module as M
+import megengine.jit as jit
 from megengine.distributed.util import get_rank
 from edit.core.optimizer import build_optimizers
 
@@ -25,7 +26,7 @@ class BaseModel(M.Module):
 
     def forward(self, *inputs, **kwargs):
         pass
-
+    
     @abstractmethod
     def init_weights(self):
         """Abstract method for initializing weight.

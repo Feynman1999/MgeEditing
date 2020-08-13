@@ -10,4 +10,3 @@ class L1Loss(M.Module):
 
     def forward(self, pred, label):
         return mgeloss.l1_loss(pred = pred, label = label)
-

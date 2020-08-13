@@ -4,7 +4,7 @@ import paddle.fluid as fluid
 from edit.datasets.sr_folder_dataset import SRFolderDataset
 from paddle.io import DataLoader
 from paddle.incubate.hapi.distributed import DistributedBatchSampler
-from edit.utils import var2img, imwrite
+from edit.utils import tensor2img, imwrite
 lq_folder = r"E:\git_repo\Code-Implementation-of-Super-Resolution-ZOO\datasets\DIV2K\train\A"
 gt_folder = r"E:\git_repo\Code-Implementation-of-Super-Resolution-ZOO\datasets\DIV2K\train\B"
 
@@ -46,7 +46,7 @@ def main():
             return_list=True)
 
         for batch_id, data in enumerate(train_loader):
-            imwrite(var2img(data[1]), "./test/niu.png")
+            imwrite(tensor2img(data[1]), "./test/niu.png")
             break
 
 

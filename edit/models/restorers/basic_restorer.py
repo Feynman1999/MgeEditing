@@ -4,7 +4,7 @@ import megengine.jit as jit
 import megengine.distributed as dist
 import megengine as mge
 from edit.core.evaluation import psnr, ssim
-from edit.utils import imwrite, var2img, bgr2ycbcr
+from edit.utils import imwrite, tensor2img, bgr2ycbcr
 from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
@@ -22,6 +22,13 @@ def train_generator_batch(image, label, *, opt, netG, netloss):
     return loss
 
 
+@jit.trace(symbolic=True)
+def test_generator_batch(image, *, netG):
+    netG.eval()
+    output = netG(image)
+    return output
+
+
 @MODELS.register_module()
 class BasicRestorer(BaseModel):
     """Basic model for image restoration.
@@ -29,8 +36,7 @@ class BasicRestorer(BaseModel):
     It must contain a generator that takes an image as inputs and outputs a
     restored image. It also has a pixel-wise loss for training.
 
-    The subclasses should overwrite the function `forward_train`,
-    `forward_test` and `train_step`.
+    The subclasses should overwrite the function `test_step` and `train_step`.
 
     Args:
         generator (dict): Config for the generator structure.
@@ -67,9 +73,6 @@ class BasicRestorer(BaseModel):
         """
         self.generator.init_weights(pretrained)
 
-    def forward(self, *inputs, **kwargs):
-        pass
-
     def train_step(self, batchdata):
         """train step.
 
@@ -78,7 +81,6 @@ class BasicRestorer(BaseModel):
         Returns:
             list: loss
         """
-        # 需要自己决定哪一部分是data，哪一部分是label
         data, label = batchdata
         # self.data.set_value(data)
         # self.label.set_value(label)
@@ -96,17 +98,17 @@ class BasicRestorer(BaseModel):
         Returns:
             list: outputs (already gathered from all threads)
         """
-        outputs = self.generator.test_batch([batchdata[0]])
+        output = test_generator_batch(batchdata[0], netG = self.generator)
         save_image_flag = kwargs.get('save_image')
         if save_image_flag:
             save_path = kwargs.get('save_path', None)
             start_id = kwargs.get('sample_id', None)
             if save_path is None or start_id is None:
                 raise RuntimeError("if save image in test_step, please set 'save_path' and 'sample_id' parameters")
-            G = outputs[0]
+            G = output
             for idx in range(G.shape[0]):
-                imwrite(var2img(G[idx], min_max=(-0.5, 0.5)), file_path=save_path + "_idx_{}.png".format(start_id + idx))
-        return outputs
+                imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=save_path + "_idx_{}.png".format(start_id + idx))
+        return [output, ]
 
     def cal_for_eval(self, gathered_outputs, gathered_batchdata):
         """
@@ -123,9 +125,9 @@ class BasicRestorer(BaseModel):
         res = []
         sample_nums = gathered_outputs.shape[0]
         for i in range(sample_nums):
-            output = var2img(gathered_outputs[i], min_max=(-0.5, 0.5))
+            output = tensor2img(gathered_outputs[i], min_max=(-0.5, 0.5))
             output_y = bgr2ycbcr(output, y_only=True)
-            gt = var2img(gathered_batchdata[i], min_max=(-0.5, 0.5))
+            gt = tensor2img(gathered_batchdata[i], min_max=(-0.5, 0.5))
             gt_y = bgr2ycbcr(gt, y_only=True)
             eval_result = dict()
             for metric in self.eval_cfg.metrics:

@@ -1,6 +1,6 @@
 exp_name = 'fsrcnn_x2_div2k'
 
-scale = 2
+scale = 4
 # model settings
 model = dict(
     type='BasicRestorer',
@@ -9,14 +9,14 @@ model = dict(
         in_channels=3,
         out_channels=3,
         upscale_factor=scale),
-    pixel_loss=dict(type='L2Loss', reduction='mean'))
+    pixel_loss=dict(type='L1Loss'))
 # model training and testing settings
 train_cfg = None
 eval_cfg = dict(metrics=['PSNR', 'SSIM'], crop_border=scale)
 img_norm_cfg = dict(mean=[0.5, 0.5, 0.5], std=[1, 1, 1])
 # dataset settings
 train_dataset_type = 'SRFolderDataset'
-val_dataset_type = 'SRFolderDataset'
+eval_dataset_type = 'SRFolderDataset'
 train_pipeline = [
     dict(
         type='LoadImageFromFile',
@@ -37,7 +37,7 @@ train_pipeline = [
     dict(type='ImageToTensor', keys=['lq', 'gt']),
     dict(type='Collect', keys=['lq', 'gt'])
 ]
-test_pipeline = [
+eval_pipeline = [
     dict(
         type='LoadImageFromFile',
         io_backend='disk',
@@ -65,35 +65,37 @@ data = dict(
         times=repeat_times,
         dataset=dict(
             type=train_dataset_type,
-            lq_folder=dataroot + "/DIV2K/DIV2K_train_LR",
+            lq_folder=dataroot + "/DIV2K/DIV2K_train_LR_bicubic/X4",
             gt_folder=dataroot + "/DIV2K/DIV2K_train_HR",
             pipeline=train_pipeline,
             scale=scale,
-            filename_tmpl='{}x2')),
-    # val
-    val_samples_per_gpu=1,
-    val_workers_per_gpu=4,
-    val=dict(
-        type=val_dataset_type,
-        lq_folder=dataroot + "/Set5/LR",
-        gt_folder=dataroot + "/Set5/HR",
-        pipeline=test_pipeline,
+            filename_tmpl='{}x4')),
+    # eval
+    eval_samples_per_gpu=1,
+    eval_workers_per_gpu=4,
+    eval=dict(
+        type=eval_dataset_type,
+        lq_folder=dataroot + "/Set5/LRbicx4",
+        gt_folder=dataroot + "/Set5/GTmod12",
+        pipeline=eval_pipeline,
         scale=scale,
-        filename_tmpl='{}x2'),
+        filename_tmpl='{}'),
     # test
+    test_samples_per_gpu=1,
+    test_workers_per_gpu=4,
     test=dict(
-        type=val_dataset_type,
-        lq_folder=dataroot + "/Set5/LR",
-        gt_folder=dataroot + "/Set5/HR",
-        pipeline=test_pipeline,
+        type=eval_pipeline,
+        lq_folder=dataroot + "/Set5/LRbicx4",
+        gt_folder=dataroot + "/Set5/GTmod12",
+        pipeline=eval_pipeline,
         scale=scale,
-        filename_tmpl='{}x2'))
+        filename_tmpl='{}'))
 
 # optimizer
-optimizers = dict(generator=dict(type='AdamOptimizer', learning_rate=4e-4, beta1=0.9, beta2=0.999))
+optimizers = dict(generator=dict(type='Adam', lr=1e-4, betas=(0.9, 0.999)))
 
 # learning policy
-total_epochs = 4000 // repeat_times
+total_epochs = 2000 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
