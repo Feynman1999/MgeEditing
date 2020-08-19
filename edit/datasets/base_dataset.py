@@ -17,9 +17,10 @@ class BaseDataset(MapDataset, metaclass=ABCMeta):
         pipeline (list[dict | callable]): A sequence of data transforms.
         test_mode (bool): If True, the dataset will work in test mode. Otherwise, in train mode.
     """
-    def __init__(self, pipeline, test_mode=False):
+    def __init__(self, pipeline, mode='train'):
         super(BaseDataset, self).__init__()
-        self.test_mode = test_mode
+        assert mode in ("train", "test", "eval")
+        self.mode = mode
         self.pipeline = Compose(pipeline)
         self.logger = get_root_logger()
 
@@ -37,7 +38,7 @@ class BaseDataset(MapDataset, metaclass=ABCMeta):
         All subclasses should overwrite this function
         """
 
-    def prepare_train_data(self, idx):
+    def prepare_data(self, idx):
         """Prepare training data.
 
         Args:
@@ -45,18 +46,6 @@ class BaseDataset(MapDataset, metaclass=ABCMeta):
 
         Returns:
             dict: Returned training batch.
-        """
-        results = copy.deepcopy(self.data_infos[idx])
-        return self.pipeline(results)
-
-    def prepare_test_data(self, idx):
-        """Prepare testing data.
-
-        Args:
-            idx (int): Index for getting each testing batch.
-
-        Returns:
-            Tensor: Returned testing batch.
         """
         results = copy.deepcopy(self.data_infos[idx])
         return self.pipeline(results)
@@ -75,7 +64,5 @@ class BaseDataset(MapDataset, metaclass=ABCMeta):
         Args:
             idx (int): Index for getting each item.
         """
-        if not self.test_mode:
-            return self.prepare_train_data(idx)
-        else:
-            return self.prepare_test_data(idx)
+        return self.prepare_data(idx)
+

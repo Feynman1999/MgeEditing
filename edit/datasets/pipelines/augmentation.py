@@ -114,24 +114,33 @@ class Flip(object):
 
 
 @PIPELINES.register_module()
-class GenerateFrameIndices(object):
-    """Generate frame index for REDS datasets. It also performs
-    temporal augmention with random interval.
+class GenerateFrameIndiceswithPadding(object):
+    """Generate frame index with padding for Many to One VSR when test and eval.
 
-    Required keys: lq_path, gt_path, key, num_input_frames
-    Added or modified keys:  lq_path, gt_path, interval, reverse
+    Required keys: lq_path, gt_path, key, num_input_frames, max_frame_num
+    Added or modified keys: lq_path, gt_path
 
     Args:
-        interval_list (list[int]): Interval list for temporal augmentation.
-            It will randomly pick an interval from interval_list and sample
-            frame index with the interval.
-        frames_per_clip(int): Number of frames per clips. Default: 100 for
-            REDS dataset.
+         padding (str): padding mode, one of
+            'replicate' | 'reflection' | 'reflection_circle' | 'circle'.
+
+            Examples: current_idx = 0, num_input_frames = 5
+            The generated frame indices under different padding mode:
+
+                replicate: [0, 0, 0, 1, 2]
+                reflection: [2, 1, 0, 1, 2]
+                reflection_circle: [4, 3, 0, 1, 2]
+                circle: [3, 4, 0, 1, 2]
+
+        filename_tmpl (str): Template for file name. Default: '{:08d}'.
     """
 
-    def __init__(self, interval_list, frames_per_clip=100):
-        self.interval_list = interval_list
-        self.frames_per_clip = frames_per_clip
+    def __init__(self, padding):
+        if padding not in ('replicate', 'reflection', 'reflection_circle', 'circle'):
+            raise ValueError(f'Wrong padding mode {padding}.'
+                             'Should be "replicate", "reflection", '
+                             '"reflection_circle",  "circle"')
+        self.padding = padding
 
     def __call__(self, results):
         """Call function.
@@ -143,8 +152,86 @@ class GenerateFrameIndices(object):
         Returns:
             dict: A dict containing the processed data and information.
         """
-        clip_name, frame_name = results['key'].split(
-            '/')  # key example: 000/00000000
+        clip_name, frame_name = results['key'].split('/') # 000/0000000.png
+        frame_name, ext_name = osp.splitext(frame_name)
+        padding_length = len(frame_name)
+        current_idx = int(frame_name)
+        max_frame_num = results['max_frame_num'] - 1  # start from 0
+        num_input_frames = results['num_input_frames']
+        num_pad = num_input_frames // 2
+
+        frame_list = []
+        for i in range(current_idx - num_pad, current_idx + num_pad + 1):
+            if i < 0:
+                if self.padding == 'replicate':
+                    pad_idx = 0
+                elif self.padding == 'reflection':
+                    pad_idx = -i
+                elif self.padding == 'reflection_circle':
+                    pad_idx = current_idx + num_pad - i
+                else:
+                    pad_idx = num_input_frames + i
+            elif i > max_frame_num:
+                if self.padding == 'replicate':
+                    pad_idx = max_frame_num
+                elif self.padding == 'reflection':
+                    pad_idx = max_frame_num * 2 - i
+                elif self.padding == 'reflection_circle':
+                    pad_idx = (current_idx - num_pad) - (i - max_frame_num)
+                else:
+                    pad_idx = i - num_input_frames
+            else:
+                pad_idx = i
+            frame_list.append(pad_idx)
+
+        lq_path_root = results['lq_path']
+        gt_path_root = results['gt_path']
+        lq_paths = [
+            osp.join(lq_path_root, clip_name,  str(idx).zfill(padding_length) +ext_name)
+            for idx in frame_list
+        ]
+        gt_paths = [osp.join(gt_path_root, clip_name, frame_name + ext_name)]
+        results['lq_path'] = lq_paths
+        results['gt_path'] = gt_paths
+
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__ + f"(padding='{self.padding}')"
+        return repr_str
+
+
+@PIPELINES.register_module()
+class GenerateFrameIndices(object):
+    """Generate frame index for many to many or many to one datasets. It also performs
+    temporal augmention with random interval.
+
+    Required keys: lq_path, gt_path, key, num_input_frames, max_frame_num
+    Added or modified keys:  lq_path, gt_path, interval
+
+    Args:
+        interval_list (list[int]): Interval list for temporal augmentation.
+            It will randomly pick an interval from interval_list and sample
+            frame index with the interval.
+    """
+
+    def __init__(self, interval_list, many2many = False):
+        self.interval_list = interval_list
+        self.many2many = many2many
+
+    def __call__(self, results):
+        """Call function.
+
+        Args:
+            results (dict): A dict containing the necessary information and
+                data for augmentation.
+
+        Returns:
+            dict: A dict containing the processed data and information.
+        """
+        clip_name, frame_name = results['key'].split('/')  # key example: 000/00000000.png
+        frame_name, ext_name = osp.splitext(frame_name)
+        padding_length = len(frame_name)
         center_frame_idx = int(frame_name)
         num_half_frames = results['num_input_frames'] // 2
 
@@ -152,11 +239,11 @@ class GenerateFrameIndices(object):
         # ensure not exceeding the borders
         start_frame_idx = center_frame_idx - num_half_frames * interval
         end_frame_idx = center_frame_idx + num_half_frames * interval
-        while (start_frame_idx < 0) or (end_frame_idx >= self.frames_per_clip):
-            center_frame_idx = np.random.randint(0, self.frames_per_clip)
+        while (start_frame_idx < 0) or (end_frame_idx >= results['max_frame_num']):
+            center_frame_idx = np.random.randint(0, results['max_frame_num'])
             start_frame_idx = center_frame_idx - num_half_frames * interval
             end_frame_idx = center_frame_idx + num_half_frames * interval
-        frame_name = f'{center_frame_idx:08d}'
+        frame_name = str(center_frame_idx).zfill(padding_length)
         neighbor_list = list(
             range(center_frame_idx - num_half_frames * interval,
                   center_frame_idx + num_half_frames * interval + 1, interval))
@@ -164,10 +251,16 @@ class GenerateFrameIndices(object):
         lq_path_root = results['lq_path']
         gt_path_root = results['gt_path']
         lq_path = [
-            osp.join(lq_path_root, clip_name, f'{v:08d}.png')
+            osp.join(lq_path_root, clip_name, str(v).zfill(padding_length) + ext_name)
             for v in neighbor_list
         ]
-        gt_path = [osp.join(gt_path_root, clip_name, f'{frame_name}.png')]
+        if self.many2many:
+            gt_path = [
+                osp.join(gt_path_root, clip_name, str(v).zfill(padding_length) + ext_name)
+                for v in neighbor_list
+            ]
+        else:
+            gt_path = [osp.join(gt_path_root, clip_name, frame_name + ext_name)]
         results['lq_path'] = lq_path
         results['gt_path'] = gt_path
         results['interval'] = interval
@@ -176,6 +269,48 @@ class GenerateFrameIndices(object):
 
     def __repr__(self):
         repr_str = self.__class__.__name__
-        repr_str += (f'(interval_list={self.interval_list}, '
-                     f'frames_per_clip={self.frames_per_clip})')
+        repr_str += f', interval_list={self.interval_list}'
+        return repr_str
+
+
+@PIPELINES.register_module()
+class TemporalReverse(object):
+    """Reverse frame lists for temporal augmentation.
+
+    Required keys are the keys in attributes "lq" and "gt",
+    added or modified keys are "lq", "gt" and "reverse".
+
+    Args:
+        keys (list[str]): The frame lists to be reversed.
+        reverse_ratio (float): The propability to reverse the frame lists.
+            Default: 0.5.
+    """
+
+    def __init__(self, keys, reverse_ratio=0.5):
+        self.keys = keys
+        self.reverse_ratio = reverse_ratio
+
+    def __call__(self, results):
+        """Call function.
+
+        Args:
+            results (dict): A dict containing the necessary information and
+                data for augmentation.
+
+        Returns:
+            dict: A dict containing the processed data and information.
+        """
+        reverse = np.random.random() < self.reverse_ratio
+
+        if reverse:
+            for key in self.keys:
+                results[key].reverse()
+
+        results['reverse'] = reverse
+
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f'(keys={self.keys}, reverse_ratio={self.reverse_ratio})'
         return repr_str

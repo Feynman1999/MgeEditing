@@ -14,8 +14,8 @@ class BaseSRDataset(BaseDataset):
     """Base class for super resolution Dataset.
     """
 
-    def __init__(self, pipeline, scale, test_mode=False):
-        super(BaseSRDataset, self).__init__(pipeline, test_mode)
+    def __init__(self, pipeline, scale, mode="train"):
+        super(BaseSRDataset, self).__init__(pipeline, mode)
         self.scale = scale
 
     @staticmethod

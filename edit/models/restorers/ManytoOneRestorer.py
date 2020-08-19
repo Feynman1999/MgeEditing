@@ -1,6 +1,6 @@
 import os
 import time
-from megengine.jit import trace, SublinearMemoryConfig
+from megengine.jit import trace
 import megengine.distributed as dist
 import megengine as mge
 from edit.core.evaluation import psnr, ssim
@@ -9,9 +9,8 @@ from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
 
-config = SublinearMemoryConfig()
 
-@trace(symbolic=True, sublinear_memory_config=config)
+@trace(symbolic=True)
 def train_generator_batch(image, label, *, opt, netG, netloss):
     netG.train()
     output = netG(image)
@@ -31,13 +30,13 @@ def test_generator_batch(image, *, netG):
 
 
 @MODELS.register_module()
-class BasicRestorer(BaseModel):
-    """Basic model for image restoration.
+class ManytoOneRestorer(BaseModel):
+    """ManytoOneRestorer for video restoration.
 
-    It must contain a generator that takes an image as inputs and outputs a
-    restored image. It also has a pixel-wise loss for training.
+    It must contain a generator that takes some component as inputs and outputs 
+    HR image.
 
-    The subclasses should overwrite the function `test_step` and `train_step`.
+    The subclasses should overwrite the function `test_step` and `train_step` and `cal_for_eval`.
 
     Args:
         generator (dict): Config for the generator structure.
@@ -49,7 +48,7 @@ class BasicRestorer(BaseModel):
     allowed_metrics = {'PSNR': psnr, 'SSIM': ssim}
 
     def __init__(self, generator, pixel_loss, train_cfg=None, eval_cfg=None, pretrained=None):
-        super(BasicRestorer, self).__init__()
+        super(ManytoOneRestorer, self).__init__()
 
         self.train_cfg = train_cfg
         self.eval_cfg = eval_cfg
@@ -83,8 +82,6 @@ class BasicRestorer(BaseModel):
             list: loss
         """
         data, label = batchdata
-        # self.data.set_value(data)
-        # self.label.set_value(label)
         self.optimizers['generator'].zero_grad()
         loss = train_generator_batch(data, label, opt=self.optimizers['generator'], netG=self.generator, netloss=self.pixel_loss)
         self.optimizers['generator'].step()  # 根据梯度更新参数值

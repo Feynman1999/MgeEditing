@@ -1,6 +1,5 @@
 from abc import abstractmethod
 import megengine.module as M
-import megengine.jit as jit
 from megengine.distributed.util import get_rank
 from edit.core.optimizer import build_optimizers
 

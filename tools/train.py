@@ -12,6 +12,7 @@ import time
 import argparse
 import megengine as mge
 import megengine.distributed as dist
+from megengine.jit import trace
 from megengine.data import RandomSampler, SequentialSampler, DataLoader
 
 from edit.utils import Config, mkdir_or_exist, build_from_cfg, get_root_logger
@@ -24,7 +25,7 @@ from edit.core.evaluation import EvalIterHook
 def parse_args():
     parser = argparse.ArgumentParser(description='Train an editor o(*￣▽￣*)ブ')
     parser.add_argument('config', help='train config file path')
-    parser.add_argument("-d", "--dynamic", default='true', action='store_true', help="enable dygraph mode")
+    parser.add_argument("-d", "--dynamic", default=False, action='store_true', help="enable dygraph mode")
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument("--gpus", type=int, default=1, help="how many gpus for one machine to use, 0 use cpu, default 1")
     parser.add_argument('--work_dir', type=str, default=None, help='the dir to save logs and models')
@@ -92,6 +93,11 @@ def train(model, datasets, cfg, rank):
 
 def worker(rank, world_size, cfg):
     logger = get_root_logger()  # 每个进程再创建一个logger
+    
+    # set dynamic graph for debug
+    if cfg.dynamic:
+        trace.enabled = False
+
     if world_size > 1:
         # Initialize distributed process group
         logger.info("init distributed process group {} / {}".format(rank, world_size))
@@ -111,7 +117,7 @@ def main():
     args = parse_args()
     cfg = Config.fromfile(args.config)
     cfg.gpus = args.gpus
-
+    cfg.dynamic = args.dynamic
     if args.work_dir is not None:
         cfg.work_dir = args.work_dir
     else:

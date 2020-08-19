@@ -41,6 +41,45 @@ class ImageToTensor(object):
 
 
 @PIPELINES.register_module()
+class FramesToTensor(ImageToTensor):
+    """
+    [HWC] -> [CHW]
+    It accpets a list of frames, concatenates in a new dimension (dim=0).
+
+    Args:
+        keys (Sequence[str]): Required keys to be converted.
+        to_float32 (bool): Whether convert numpy image array to np.float32
+            before converted to tensor. Default: True.
+    """
+
+    def __call__(self, results):
+        """Call function.
+
+        Args:
+            results (dict): A dict containing the necessary information and
+                data for augmentation.
+
+        Returns:
+            dict: A dict containing the processed data and information.
+        """
+        for key in self.keys:
+            if not isinstance(results[key], list):
+                raise TypeError(f'results["{key}"] should be a list, '
+                                f'but got {type(results[key])}')
+            for idx, v in enumerate(results[key]):
+                # deal with gray scale img: expand a color channel
+                if len(v.shape) == 2:
+                    v = v[..., None]
+                if self.to_float32 and not isinstance(v, np.float32):
+                    v = v.astype(np.float32)
+                results[key][idx] = v.transpose(2, 0, 1)
+            results[key] = np.stack(results[key], axis=0)
+            if results[key].shape[0] == 1:
+                results[key] = np.squeeze(results[key], axis=0)
+        return results
+
+
+@PIPELINES.register_module()
 class Collect(object):
     """Collect data from the loader relevant to the specific task.
 

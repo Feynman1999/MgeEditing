@@ -1,5 +1,6 @@
 from ..registry import PIPELINES
 from edit.utils import FileClient, imfrombytes
+import numpy as np
 
 
 @PIPELINES.register_module()
@@ -61,3 +62,63 @@ class LoadImageFromFile(object):
             f'(io_backend={self.io_backend}, key={self.key}, '
             f'flag={self.flag}, save_original_img={self.save_original_img})')
         return repr_str
+
+
+@PIPELINES.register_module()
+class LoadImageFromFileList(LoadImageFromFile):
+    """Load image from file list.
+
+    It accepts a list of path and read each frame from each path. A list
+    of frames will be returned.
+
+    Args:
+        io_backend (str): io backend where images are store. Default: 'disk'.
+        key (str): Keys in results to find corresponding path. Default: 'gt'.
+        flag (str): Loading flag for images. Default: 'color'.
+        save_original_img (bool): If True, maintain a copy of the image in
+            `results` dict with name of `f'ori_{key}'`. Default: False.
+        kwargs (dict): Args for file client.
+    """
+
+    def __call__(self, results):
+        """Call function.
+
+        Args:
+            results (dict): A dict containing the necessary information and
+                data for augmentation.
+
+        Returns:
+            dict: A dict containing the processed data and information.
+        """
+
+        if self.file_client is None:
+            self.file_client = FileClient(self.io_backend, **self.kwargs)
+        filepaths = results[f'{self.key}_path']
+        if not isinstance(filepaths, list):
+            raise TypeError(
+                f'filepath should be list, but got {type(filepaths)}')
+
+        filepaths = [str(v) for v in filepaths]
+
+        imgs = []
+        shapes = []
+        if self.save_original_img:
+            ori_imgs = []
+        for filepath in filepaths:
+            img_bytes = self.file_client.get(filepath)
+            img = imfrombytes(img_bytes, flag=self.flag)  # HWC, BGR
+            if img.ndim == 2:
+                img = np.expand_dims(img, axis=2)
+            imgs.append(img)
+            shapes.append(img.shape)
+            if self.save_original_img:
+                ori_imgs.append(img.copy())
+
+        results[self.key] = imgs
+        results[f'{self.key}_path'] = filepaths
+        results[f'{self.key}_ori_shape'] = shapes
+        if self.save_original_img:
+            results[f'ori_{self.key}'] = ori_imgs
+
+        return results
+

@@ -1,6 +1,6 @@
 import os
 import time
-from megengine.jit import trace, SublinearMemoryConfig
+from megengine.jit import trace
 import megengine.distributed as dist
 import megengine as mge
 from edit.core.evaluation import psnr, ssim
@@ -9,13 +9,45 @@ from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
 
-config = SublinearMemoryConfig()
 
-@trace(symbolic=True, sublinear_memory_config=config)
+# @trace(symbolic=True)
 def train_generator_batch(image, label, *, opt, netG, netloss):
     netG.train()
-    output = netG(image)
-    loss = netloss(output, label)
+    B,T,_,H,W = image.shape
+    # cal S
+    image_S = mge.functional.reshape(image, (B*T, -1, H, W))
+    image_S = mge.functional.interpolate(image_S, scale_factor = [0.25, 0.25])
+    image_S = mge.functional.interpolate(image_S, size = [H, W])
+    image_S = mge.functional.reshape(image_S, (B, T, -1, H, W))
+    image_D = image - image_S
+    # cal D
+    label_S = mge.functional.reshape(label, (B*T, -1, 4*H, 4*W))
+    label_S = mge.functional.interpolate(label_S, scale_factor = [0.25, 0.25])
+    label_S = mge.functional.interpolate(label_S, size = [4 * H, 4 * W])
+    label_S = mge.functional.reshape(label_S, (B, T, -1, 4*H, 4*W))
+    label_D = label - label_S
+
+    HR_G = []
+    HR_D = []
+    HR_S = []
+    for t in range(T):
+        if t>0:
+            imgHR, SD, S_hat, D_hat, img_S, img_D = netG(image[:, t, ...], image_S[:, t, ...], 
+                                        image_D[:, t, ...], image_S[:, t-1, ...],
+                                        image_D[:, t-1, ...], S_hat, D_hat, SD)
+        else:
+            imgHR, SD, S_hat, D_hat, img_S, img_D = netG(image[:, 0, ...], image_S[:, 0, ...], 
+                                        image_D[:, 0, ...], image_S[:, 1, ...],
+                                        image_D[:, 1, ...])
+        HR_G.append(mge.functional.add_axis(imgHR, axis = 1))
+        HR_D.append(mge.functional.add_axis(img_S, axis = 1))
+        HR_S.append(mge.functional.add_axis(img_D, axis = 1))
+
+    HR_G = mge.functional.concat(HR_G, axis = 1)
+    HR_D = mge.functional.concat(HR_D, axis = 1)
+    HR_S = mge.functional.concat(HR_S, axis = 1)
+    assert HR_G.shape == HR_D.shape and HR_D.shape == HR_S.shape # [B,T,C, H,W]
+    loss = netloss(HR_G, HR_D, HR_S, label, label_D, label_S)
     opt.backward(loss)
     if dist.is_distributed():
         # do all reduce mean
@@ -31,13 +63,13 @@ def test_generator_batch(image, *, netG):
 
 
 @MODELS.register_module()
-class BasicRestorer(BaseModel):
-    """Basic model for image restoration.
+class ManytoManyRestorer(BaseModel):
+    """ManytoManyRestorer for video restoration.
 
-    It must contain a generator that takes an image as inputs and outputs a
-    restored image. It also has a pixel-wise loss for training.
+    It must contain a generator that takes some component as inputs and outputs 
+    HR image.
 
-    The subclasses should overwrite the function `test_step` and `train_step`.
+    The subclasses should overwrite the function `test_step` and `train_step` and `cal_for_eval`.
 
     Args:
         generator (dict): Config for the generator structure.
@@ -49,7 +81,7 @@ class BasicRestorer(BaseModel):
     allowed_metrics = {'PSNR': psnr, 'SSIM': ssim}
 
     def __init__(self, generator, pixel_loss, train_cfg=None, eval_cfg=None, pretrained=None):
-        super(BasicRestorer, self).__init__()
+        super(ManytoManyRestorer, self).__init__()
 
         self.train_cfg = train_cfg
         self.eval_cfg = eval_cfg
@@ -83,10 +115,10 @@ class BasicRestorer(BaseModel):
             list: loss
         """
         data, label = batchdata
-        # self.data.set_value(data)
-        # self.label.set_value(label)
+        self.data.set_value(data)  # (4, 7, 3, 64, 64)
+        self.label.set_value(label)  # (4, 7, 3, 256, 256)
         self.optimizers['generator'].zero_grad()
-        loss = train_generator_batch(data, label, opt=self.optimizers['generator'], netG=self.generator, netloss=self.pixel_loss)
+        loss = train_generator_batch(self.data, self.label, opt=self.optimizers['generator'], netG=self.generator, netloss=self.pixel_loss)
         self.optimizers['generator'].step()  # 根据梯度更新参数值
         return loss
 

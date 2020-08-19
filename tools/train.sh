@@ -1,2 +1,1 @@
-python tools/train.py configs/restorers/DBPN/dbpn_x4_300k_div2k_epoch.py
-# visualdl --logdir  ./log  --port 30080
+python tools/train.py configs/restorers/RSDN/rsdn_x4_70e_mge_epoch.py

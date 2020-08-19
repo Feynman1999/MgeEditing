@@ -1,46 +1,53 @@
-exp_name = 'dbpn_x4_300k_div2k'
+exp_name = 'rsdn_x4_70e_mge'
 
 scale = 4
+
 # model settings
 model = dict(
-    type='BasicRestorer',
+    type='ManytoManyRestorer',
     generator=dict(
-        type='DBPN',
+        type='RSDN',
         in_channels=3,
         out_channels=3,
-        n_0=256,
-        n_R=64,
-        iterations_num=10,
-        upscale_factor=scale),
-    pixel_loss=dict(type='L1Loss'))
+        mid_channels=16,
+        hidden_channels = 3,
+        blocknums = 3,
+        upscale_factor = scale),
+    pixel_loss=dict(type='RSDNLoss'))
+
 # model training and testing settings
 train_cfg = None
-eval_cfg = dict(metrics=['PSNR', 'SSIM'], crop_border=scale)
+eval_cfg = dict(metrics=['PSNR'], crop_border=0)
 img_norm_cfg = dict(mean=[0.5, 0.5, 0.5], std=[1, 1, 1])
+
 # dataset settings
-train_dataset_type = 'SRFolderDataset'
-eval_dataset_type = 'SRFolderDataset'
+train_dataset_type = 'SRMGEDataset'
+eval_dataset_type = 'SRMGEDataset'
+test_dataset_type = 'SRMGEDataset'
 
 train_pipeline = [
+    dict(type='GenerateFrameIndices', interval_list=[1], many2many = True),
+    dict(type='TemporalReverse', keys=['lq_path', 'gt_path'], reverse_ratio=0),
     dict(
-        type='LoadImageFromFile',
+        type='LoadImageFromFileList',
         io_backend='disk',
         key='lq',
         flag='unchanged'),
     dict(
-        type='LoadImageFromFile',
+        type='LoadImageFromFileList',
         io_backend='disk',
         key='gt',
         flag='unchanged'),
-    dict(type='PairedRandomCrop', gt_patch_size=40*scale),
+    dict(type='PairedRandomCrop', gt_patch_size=160),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=False, **img_norm_cfg),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='horizontal'),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='vertical'),
     dict(type='RandomTransposeHW', keys=['lq', 'gt'], transpose_ratio=0.5),
-    dict(type='ImageToTensor', keys=['lq', 'gt']),
+    dict(type='FramesToTensor', keys=['lq', 'gt']),
     dict(type='Collect', keys=['lq', 'gt'])
 ]
+
 eval_pipeline = [
     dict(
         type='LoadImageFromFile',
@@ -54,52 +61,65 @@ eval_pipeline = [
         flag='unchanged'),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
-    dict(type='ImageToTensor', keys=['lq', 'gt']),
-    dict(type='Collect', keys=['lq', 'gt'])
+    dict(type='ImageToTensor', keys=['lq', 'gt']), # HWC -> CHW
+    dict(type='Collect', keys=['lq', 'gt', 'idx'])
 ]
+
+test_pipeline = [
+    dict(
+        type='LoadImageFromFile',
+        io_backend='disk',
+        key='lq',
+        flag='unchanged'),
+    dict(type='RescaleToZeroOne', keys=['lq']),
+    dict(type='Normalize', keys=['lq'], to_rgb=True, **img_norm_cfg),
+    dict(type='ImageToTensor', keys=['lq']), # HWC -> CHW
+    dict(type='Collect', keys=['lq', 'idx'])
+]
+
 
 dataroot = "/opt/data/private/datasets"
 repeat_times = 1
 data = dict(
     # train
-    samples_per_gpu=12,
-    workers_per_gpu=4,
+    samples_per_gpu=1,
+    workers_per_gpu=3,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
         dataset=dict(
             type=train_dataset_type,
-            lq_folder=dataroot + "/mge/pngs/LR/80",
-            gt_folder=dataroot + "/mge/pngs/HR/80",
+            lq_folder= dataroot + "/mge/pngs/LR",
+            gt_folder= dataroot + "/mge/pngs/HR",
+            num_input_frames=7,
             pipeline=train_pipeline,
-            scale=scale,
-            filename_tmpl='{}')),
+            scale=scale)),
     # eval
     eval_samples_per_gpu=1,
-    eval_workers_per_gpu=4,
+    eval_workers_per_gpu=1,
     eval=dict(
         type=eval_dataset_type,
-        lq_folder=dataroot + "/Set5/LRbicx4",
-        gt_folder=dataroot + "/Set5/GTmod12",
+        lq_folder= dataroot + "/Vid4/test/A",
+        gt_folder= dataroot + "/Vid4/test/B",
         pipeline=eval_pipeline,
         scale=scale,
-        filename_tmpl='{}'),
+        mode="eval"),
     # test
     test_samples_per_gpu=1,
     test_workers_per_gpu=4,
     test=dict(
-        type=eval_dataset_type,
-        lq_folder=dataroot + "/Set5/LRbicx4",
-        gt_folder=dataroot + "/Set5/GTmod12",
-        pipeline=eval_pipeline,
+        type=test_dataset_type,
+        lq_folder= dataroot + "/Vid4/test/A",
+        pipeline=test_pipeline,
         scale=scale,
-        filename_tmpl='{}'))
+        mode="test")
+)
 
 # optimizer
 optimizers = dict(generator=dict(type='Adam', lr=1e-4, betas=(0.9, 0.999)))
 
 # learning policy
-total_epochs = 2000 // repeat_times
+total_epochs = 100 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)

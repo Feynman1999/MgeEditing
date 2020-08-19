@@ -1,4 +1,4 @@
 from .builder import build_model, build, build_backbone, build_component, build_loss
-from .restorers import basic_restorer
+from .restorers import basic_restorer, ManytoManyRestorer, ManytoOneRestorer
 from .backbones import DBPN
-from .losses import L1Loss
+from .losses import L1Loss, CharbonnierLoss, RSDNLoss
