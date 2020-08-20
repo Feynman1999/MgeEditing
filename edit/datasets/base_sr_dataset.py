@@ -54,7 +54,7 @@ class BaseSRDataset(BaseDataset):
         """Evaluate with different metrics.
 
         Args:
-            results (list of dict): The output of forward_test() of the model.
+            results (list of dict): for every dict, record metric -> value for one frame
 
         Return:
             dict: Evaluation results dict.

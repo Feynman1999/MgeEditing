@@ -106,7 +106,7 @@ class ManytoOneRestorer(BaseModel):
                 raise RuntimeError("if save image in test_step, please set 'save_path' and 'sample_id' parameters")
             G = output
             for idx in range(G.shape[0]):
-                imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=save_path + "_idx_{}.png".format(start_id + idx))
+                imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, "idx_{}.png".format(start_id + idx)))
         return [output, ]
 
     def cal_for_eval(self, gathered_outputs, gathered_batchdata):

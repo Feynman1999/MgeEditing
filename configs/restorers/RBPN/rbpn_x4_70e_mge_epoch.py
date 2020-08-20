@@ -127,16 +127,16 @@ optimizers = dict(generator=dict(type='Adam', lr=1e-4, betas=(0.9, 0.999)))
 total_epochs = 100 // repeat_times
 
 # hooks
-lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
+lr_config = dict(policy='Step', step=[total_epochs // 100], gamma=0.7)
 checkpoint_config = dict(interval=total_epochs // 10)
 log_config = dict(
-    interval=200,
+    interval=5,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=20000, save_image=True)
+evaluation = dict(interval=5, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'

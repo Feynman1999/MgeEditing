@@ -7,12 +7,14 @@ from edit.utils import to_list, is_list_of, get_logger, mkdir_or_exist
 
 
 def gpu_gather(v):
-    raise NotImplementedError("gather")
+    raise NotImplementedError("gather for gpu tensor is not implement now")
     # if v is not None:
     #     v = [to_variable(l) for l in to_list(v)]
     # v = [_all_gather(l, ParallelEnv().nranks) for l in v]
     # return v
 
+def cpu_gather(v):
+    raise NotImplementedError("gather for cpu list is not implement now")
 
 class EvalIterHook(Hook):
     """evaluation hook for iteration-based runner.
@@ -85,7 +87,7 @@ class EvalIterHook(Hook):
             if self.local_rank == 0:
                 result = runner.model.cal_for_eval(gathered_outputs, gathered_batchdata)
                 assert is_list_of(result, dict)
-                self.logger.info(result)
+                # self.logger.info(result)
                 results += result
             else:
                 pass
@@ -100,7 +102,8 @@ class EvalIterHook(Hook):
             results (list of dict): Model forward results.
             iter: now iter.
         """
-        eval_res = self.dataloader.dataset.evaluate(results, **self.eval_kwargs)
-        self.logger.info("eval results for {} iters:".format(iters))
+        save_path = os.path.join(self.save_path, "iter_{}".format(iters))  # save for some information. e.g. SVG for everyframe value.
+        eval_res = self.dataloader.dataset.evaluate(results, save_path)
+        self.logger.info("*****   eval results for {} iters:   *****".format(iters))
         for name, val in eval_res.items():
             self.logger.info("metric: {}  average_val: {:.4f}".format(name, val))

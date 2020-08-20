@@ -17,8 +17,6 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 # TODO
 
 ### High
-* 对于视频类的任务，如何对结果进行重新归类(eval)     先不考虑并行计算，先考虑有了一个list of dict，如何在dataset的evaluate方法中去统计
-
 * 在train.py中完成test，这样就不用写重复的代码了？
 
 * 测试多卡训练
