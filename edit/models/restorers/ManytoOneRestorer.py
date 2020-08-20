@@ -1,6 +1,6 @@
 import os
 import time
-from megengine.jit import trace
+from megengine.jit import trace, SublinearMemoryConfig
 import megengine.distributed as dist
 import megengine as mge
 from edit.core.evaluation import psnr, ssim
@@ -9,8 +9,9 @@ from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
 
+config = SublinearMemoryConfig()
 
-@trace(symbolic=True)
+@trace(symbolic=True, sublinear_memory_config=config)
 def train_generator_batch(image, label, *, opt, netG, netloss):
     netG.train()
     output = netG(image)

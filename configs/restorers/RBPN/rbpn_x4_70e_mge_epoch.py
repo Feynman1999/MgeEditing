@@ -86,7 +86,7 @@ dataroot = "/opt/data/private/datasets"
 repeat_times = 1
 data = dict(
     # train
-    samples_per_gpu=2,
+    samples_per_gpu=12,
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
