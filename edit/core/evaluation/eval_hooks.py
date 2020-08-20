@@ -65,20 +65,21 @@ class EvalIterHook(Hook):
         for _, data in enumerate(self.dataloader):
             batchdata = data
             sample_nums_for_one_thread = batchdata[0].shape[0]
-            gathered_outputs = runner.model.test_step(batchdata,
-                                                      save_image=self.save_image,
-                                                      save_path=save_path,
-                                                      sample_id=sample_nums_all_threads + sample_nums_for_one_thread * self.local_rank)  # gather后的batched的outputs
+            outputs = runner.model.test_step(batchdata,
+                                             save_image=self.save_image,
+                                             save_path=save_path,
+                                             sample_id=sample_nums_all_threads + sample_nums_for_one_thread * self.local_rank)
             if self.nranks > 1:
+                # TODO:
+                # 一定是使用GPU，将所有线程的outputs和data收集过来
+                # gathered_outputs = xxx
+                # gathered_batchdata = xxx
                 pass
-                # if isinstance(runner.devide, fluid.CUDAPlace):
-                #     gathered_batchdata = gpu_gather(batchdata)
-                # else:
-                #     raise NotImplementedError("does not support multi_thread eval in cpu!")
             else:
-                gathered_batchdata = batchdata
-            assert gathered_batchdata[0].shape[0] == gathered_outputs[0].shape[0]
-            assert gathered_batchdata[0].shape[0] == sample_nums_for_one_thread * self.nranks
+                gathered_outputs = outputs  # list of tensor
+                gathered_batchdata = batchdata  # list of numpy
+            assert gathered_batchdata[0].shape[0] == gathered_outputs[0].shape[0]  # batch维度要匹配
+            assert gathered_batchdata[0].shape[0] == sample_nums_for_one_thread * self.nranks  # 确保是gather后的
             sample_nums_all_threads += gathered_outputs[0].shape[0]
             # 目前是所有进程前向并保存结果，0号进程去计算metric；之后增加CPU进程通信，把计算metric也分到不同进程上
             if self.local_rank == 0:

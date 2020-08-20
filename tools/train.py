@@ -137,7 +137,12 @@ def main():
     logger.info('Config:\n{}'.format(cfg.text))
 
     # get world_size
-    world_size = mge.get_device_count("gpu") if args.gpus is None else args.gpus
+    world_size = args.gpus
+    assert world_size <= mge.get_device_count("gpu")
+    if world_size == 0: # use cpu    
+        mge.set_default_device(device='cpux')
+    else:
+        pass  # mge默认使用GPU
 
     if world_size > 1:
         # scale learning rate by number of gpus

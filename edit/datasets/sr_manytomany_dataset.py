@@ -4,6 +4,7 @@
 import os
 from .base_sr_dataset import BaseSRDataset
 from .registry import DATASETS
+from .utils import get_key_for_video_imgs
 from edit.utils import scandir
 
 IMG_EXTENSIONS = ('.png', )
@@ -43,7 +44,8 @@ class SRManyToManyDataset(BaseSRDataset):
 
     def load_annotations(self):
         # get keys
-        keys = sorted(list(scandir(self.lq_folder, suffix=IMG_EXTENSIONS, recursive=True)))  # 000/00000.png
+        keys = sorted(list(scandir(self.lq_folder, suffix=IMG_EXTENSIONS, recursive=True)),
+                        key=get_key_for_video_imgs)  # 000/00000.png
         
         self.frame_num = dict()
         for key in keys:

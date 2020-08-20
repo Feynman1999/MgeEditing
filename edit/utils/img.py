@@ -281,9 +281,9 @@ def tensor2img(tensor, out_type=np.uint8, min_max=(0, 1)):
         of shape (H x W).
     """
     if is_var(tensor):
-        tensor = tensor.astype('float32').numpy()
+        tensor = tensor.to("cpu0").astype('float32').numpy()
     elif isinstance(tensor, list) and all(is_var(t) for t in tensor):
-        tensor = [t.astype('float32').numpy() for t in tensor]
+        tensor = [t.to("cpu0").astype('float32').numpy() for t in tensor]
     else:
         assert is_ndarray(tensor) or (isinstance(tensor, list) and all(is_ndarray(t) for t in tensor))
 

@@ -75,7 +75,7 @@ class RSDN(M.Module):
         self.blocknums = blocknums
         self.hidden_channels = hidden_channels
         SDBlocks = []
-        for i in range(blocknums):
+        for _ in range(blocknums):
             SDBlocks.append(SDBlock(mid_channels))
         self.SDBlocks = M.Sequential(*SDBlocks)
         
