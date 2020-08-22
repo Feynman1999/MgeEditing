@@ -2,6 +2,48 @@ import numpy as np
 import cv2
 from megengine import Tensor
 
+def _half(x):
+    if x % 2 ==0:
+        return (x//2, x//2)
+    else:
+        return (x//2, x//2 +1)
+
+def cal_pad_size(l, padding_multi):
+    diff = l % padding_multi
+    if diff == 0:
+        return (0, 0)
+    diff = padding_multi - diff
+    return _half(diff)
+
+def img_multi_padding(img, padding_multi = 4, pad_value = -0.5):
+    assert isinstance(img, np.ndarray)
+    dimlen = len(img.shape)
+    origin_H = img.shape[-2]
+    origin_W = img.shape[-1]
+    pad_H = cal_pad_size(origin_H, padding_multi)
+    pad_W = cal_pad_size(origin_W, padding_multi)
+    if dimlen == 5: # [B,N,C,H,W]
+        return np.pad(img, ((0,0), (0,0), (0,0), pad_H, pad_W), 'constant', constant_values=pad_value)
+    elif dimlen == 4:
+        return np.pad(img, ((0,0), (0,0), pad_H, pad_W), 'constant', constant_values=pad_value)
+    elif dimlen == 3:
+        return np.pad(img, ((0,0), pad_H, pad_W), 'constant', constant_values=pad_value)
+    elif dimlen == 2:
+        return np.pad(img, (pad_H, pad_W), 'constant', constant_values=pad_value)
+    else:
+        raise NotImplementedError("dimlen: {} not implement".format(dimlen))
+
+def img_de_multi_padding(img, origin_H, origin_W):
+    dimlen = len(img.shape)
+    paded_H = img.shape[-2]
+    paded_W = img.shape[-1]
+    pad_H = _half(paded_H - origin_H)
+    pad_W = _half(paded_W - origin_W)
+    if dimlen in (2, 3, 4):
+        return img[..., pad_H[0]: paded_H - pad_H[1], pad_W[0]: paded_W - pad_W[1]]
+    else:
+        raise NotImplementedError("dimlen: {} not implement".format(dimlen))
+
 def _scale_size(size, scale):
     """Rescale a size by a ratio.
 

@@ -129,6 +129,7 @@ class MUCAN(M.Module):
                  upscale_factor=4):
         super(MUCAN, self).__init__()
         self.nframes = nframes
+        self.upscale_factor = upscale_factor
         # 每个LR搞三个尺度
         self.feature_encoder_carb = M.Sequential(
             M.Conv2d(input_nc, ch, kernel_size=3, stride=1, padding=1),

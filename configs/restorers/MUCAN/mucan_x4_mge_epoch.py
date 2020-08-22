@@ -1,4 +1,4 @@
-exp_name = 'mucan_x4_mge_epoch'
+exp_name = 'mucan_x4_mge_epoch_9_128'
 
 scale = 4
 frames = 9
@@ -8,7 +8,7 @@ model = dict(
     type='ManytoOneRestorer',
     generator=dict(
         type='MUCAN',
-        ch=32*7,
+        ch=32*4,
         nframes = frames,
         input_nc = 3,
         output_nc = 3,
@@ -17,7 +17,7 @@ model = dict(
 
 # model training and testing settings
 train_cfg = None
-eval_cfg = dict(metrics=['PSNR'], crop_border=0)
+eval_cfg = dict(metrics=['PSNR'], crop_border=0, padding_multi = 4)
 img_norm_cfg = dict(mean=[0.5, 0.5, 0.5], std=[1, 1, 1])
 
 # dataset settings
@@ -26,8 +26,8 @@ eval_dataset_type = 'SRManyToOneDataset'
 test_dataset_type = 'SRManyToOneDataset'
 
 train_pipeline = [
-    dict(type='GenerateFrameIndices', interval_list=[1], many2many = False),
-    dict(type='TemporalReverse', keys=['lq_path', 'gt_path'], reverse_ratio=0),
+    dict(type='GenerateFrameIndices', interval_list=[1, 2], many2many = False),
+    dict(type='TemporalReverse', keys=['lq_path', 'gt_path'], reverse_ratio=0.2),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
@@ -61,7 +61,7 @@ eval_pipeline = [
         key='gt',
         flag='unchanged'),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
-    dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
+    dict(type='Normalize', keys=['lq', 'gt'], to_rgb=False, **img_norm_cfg),
     dict(type='FramesToTensor', keys=['lq', 'gt']), # HWC -> CHW
     dict(type='Collect', keys=['lq', 'gt'])
 ]
@@ -74,7 +74,7 @@ test_pipeline = [
         key='lq',
         flag='unchanged'),
     dict(type='RescaleToZeroOne', keys=['lq']),
-    dict(type='Normalize', keys=['lq'], to_rgb=False, **img_norm_cfg),
+    dict(type='Normalize', keys=['lq'], to_rgb=True, **img_norm_cfg),
     dict(type='FramesToTensor', keys=['lq']), # HWC -> CHW
     dict(type='Collect', keys=['lq'])
 ]
@@ -82,6 +82,7 @@ test_pipeline = [
 
 dataroot = "/opt/data/private/datasets"
 repeat_times = 1
+eval_part = ("08", "26")
 data = dict(
     # train
     samples_per_gpu=3,
@@ -95,18 +96,20 @@ data = dict(
             gt_folder= dataroot + "/mge/pngs/HR",
             num_input_frames=frames,
             pipeline=train_pipeline,
-            scale=scale)),
+            scale=scale,
+            eval_part = eval_part)),
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,
     eval=dict(
         type=eval_dataset_type,
-        lq_folder= dataroot + "/Vid4/test/A",
-        gt_folder= dataroot + "/Vid4/test/B",
+        lq_folder= dataroot + "/mge/pngs/LR",
+        gt_folder= dataroot + "/mge/pngs/HR",
         num_input_frames = frames,
         pipeline=eval_pipeline,
         scale=scale,
-        mode="eval"),
+        mode="eval",
+        eval_part = eval_part),
     # test
     test_samples_per_gpu=1,
     test_workers_per_gpu=4,
@@ -128,13 +131,13 @@ total_epochs = 70 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=total_epochs // 10)
 log_config = dict(
-    interval=500,
+    interval=5,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=5000, save_image=True)
+evaluation = dict(interval=50, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'

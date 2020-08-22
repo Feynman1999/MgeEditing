@@ -4,7 +4,7 @@ from megengine.jit import trace, SublinearMemoryConfig
 import megengine.distributed as dist
 import megengine as mge
 from edit.core.evaluation import psnr, ssim
-from edit.utils import imwrite, tensor2img, bgr2ycbcr
+from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de_multi_padding
 from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
@@ -97,7 +97,15 @@ class ManytoOneRestorer(BaseModel):
         Returns:
             list: outputs (already gathered from all threads)
         """
-        output = test_generator_batch(batchdata[0], netG = self.generator)
+        images = batchdata[0] # [B,N,C,H,W]
+        H,W = images.shape[-2], images.shape[-1]
+        scale = self.generator.upscale_factor
+        padding_multi = self.eval_cfg.padding_multi
+        # padding for H and W
+        images = img_multi_padding(images, padding_multi, -0.5)  # [B,N,C,H,W]
+        output = test_generator_batch(images, netG = self.generator)  # HR [B,C,4H,4W]
+        output = img_de_multi_padding(output, origin_H = H*scale, origin_W = W*scale)
+        
         save_image_flag = kwargs.get('save_image')
         if save_image_flag:
             save_path = kwargs.get('save_path', None)
