@@ -19,10 +19,13 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 ### High
 * 在train.py中完成test，这样就不用写重复的代码了？
 
+* 完成视频的ensemble策略
+
 * 测试多卡训练
 
 * 配置 lr_config， 通过optimizer进行手动设置
 
+* 完成many to many 的训练
 
 ### Mid
 * 动态配置SublinearMemoryConfig
@@ -45,3 +48,4 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 * 模型动转静、模型部署
 
 
+aistudio操作流程：按指定路径去activate mge环境，然后即可运行。

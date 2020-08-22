@@ -1,16 +1,14 @@
-exp_name = 'rbpn_x4_70e_mge'
+exp_name = 'mucan_x4_mge_epoch'
 
 scale = 4
-frames = 7
+frames = 9
 
 # model settings
 model = dict(
     type='ManytoOneRestorer',
     generator=dict(
-        type='RBPN',
-        cl=32,
-        cm=32,
-        ch=16,
+        type='MUCAN',
+        ch=32*7,
         nframes = frames,
         input_nc = 3,
         output_nc = 3,
@@ -86,7 +84,7 @@ dataroot = "/opt/data/private/datasets"
 repeat_times = 1
 data = dict(
     # train
-    samples_per_gpu=12,
+    samples_per_gpu=3,
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
@@ -121,14 +119,14 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=5e-5, betas=(0.9, 0.999)))
 
 # learning policy
-total_epochs = 100 // repeat_times
+total_epochs = 70 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
-checkpoint_config = dict(interval=total_epochs // 100)
+checkpoint_config = dict(interval=total_epochs // 10)
 log_config = dict(
     interval=500,
     hooks=[

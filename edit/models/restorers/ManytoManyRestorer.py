@@ -9,8 +9,7 @@ from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
 
-
-# @trace(symbolic=True)
+@trace(symbolic=False)
 def train_generator_batch(image, label, *, opt, netG, netloss):
     netG.train()
     B,T,_,H,W = image.shape

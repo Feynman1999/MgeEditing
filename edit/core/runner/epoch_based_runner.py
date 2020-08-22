@@ -3,7 +3,7 @@ import os.path as osp
 import megengine as mge
 from megengine.module import Module
 from .base_runner import BaseRunner, module_ckpt_suffix, optim_ckpt_suffix
-from edit.utils import is_list_of
+from edit.utils import is_list_of, mkdir_or_exist
 
 
 class EpochBasedRunner(BaseRunner):
@@ -118,6 +118,7 @@ class EpochBasedRunner(BaseRunner):
         filename = filename_tmpl.format(self.epoch + 1)
         filepath = osp.join(out_dir, filename)
         self.logger.info('save checkpoint to {}'.format(filepath))
+        mkdir_or_exist(filepath)
         if isinstance(self.model.optimizers, dict):
             for key in self.model.optimizers.keys():
                 submodule = getattr(self.model, key, None)

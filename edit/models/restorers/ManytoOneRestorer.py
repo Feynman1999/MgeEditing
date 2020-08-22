@@ -11,7 +11,7 @@ from ..registry import MODELS
 
 config = SublinearMemoryConfig()
 
-@trace(symbolic=True, sublinear_memory_config=config)
+@trace(symbolic=True)
 def train_generator_batch(image, label, *, opt, netG, netloss):
     netG.train()
     output = netG(image)
