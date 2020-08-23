@@ -1,0 +1,1 @@
+python tools/train.py configs/restorers/RBPN/rbpn_x4_mge_epoch_aistudio.py

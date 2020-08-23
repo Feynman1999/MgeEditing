@@ -19,22 +19,20 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 ### High
 * 将每一次eval生成的图片直接ffmpeg成视频  fps 3
 
-* 在train.py中完成test，这样就不用写重复的代码了？
+* test hook 完成test，这样就不用写重复的代码了？
 
 * 完成视频的ensemble策略(eval and test)
 
-* 测试多卡训练
-
 * 配置 lr 调度
 
-* 完成many to many 的训练
+* 完成many to many 的训练， 考虑怎么减少io时间。
+
+* 测试多卡训练
 
 ### Mid
 * 动态配置SublinearMemoryConfig
 
 * 完善init_weights(pretrained)的设计
-
-* 完成test workflow  test.py -> runner.test， 进行单卡和多卡的测试
 
 * 统计FLOPS
 
@@ -42,8 +40,6 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 * optimizer支持指定到参数的设置
 
 * 设置训练过程的seed，使得整个过程完全可复现
-
-* add ensemble 策略 for restorers 写个装饰器？
 
 * checkpoint simlink
 

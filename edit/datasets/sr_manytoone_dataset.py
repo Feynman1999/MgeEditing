@@ -145,7 +145,7 @@ class SRManyToOneDataset(BaseSRDataset):
                     average = sum(values) / len(values)
                     save_filename = clip_names[now_clip_idx] + "_" + metric 
                     title = "{} for {}, length: {}, average: {:.4f}".format(metric, clip_names[now_clip_idx], len(values), average)
-                    plt.figure(figsize=(len(values) // 2 + 1, 8))
+                    plt.figure(figsize=(len(values) // 4 + 1, 8))
                     plt.plot(list(range(len(values))), values, label=metric)  # promise that <= 10000
                     plt.title(title)
                     plt.xlabel('frame idx')

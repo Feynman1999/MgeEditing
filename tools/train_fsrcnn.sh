@@ -1,1 +1,0 @@
-python tools/train.py configs/restorers/FSRCNN/fsrcnn_x2_div2k_epoch.py

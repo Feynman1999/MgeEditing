@@ -1,14 +1,16 @@
-exp_name = 'mucan_x4_mge_epoch_9_128'
+exp_name = 'rbpn_x4_mge'
 
 scale = 4
-frames = 9
+frames = 7
 
 # model settings
 model = dict(
     type='ManytoOneRestorer',
     generator=dict(
-        type='MUCAN',
-        ch=32*4,
+        type='RBPN',
+        cl=128,
+        cm=128,
+        ch=32,
         nframes = frames,
         input_nc = 3,
         output_nc = 3,
@@ -17,7 +19,7 @@ model = dict(
 
 # model training and testing settings
 train_cfg = None
-eval_cfg = dict(metrics=['PSNR'], crop_border=0, padding_multi = 4)
+eval_cfg = dict(metrics=['PSNR'], crop_border=0)
 img_norm_cfg = dict(mean=[0.5, 0.5, 0.5], std=[1, 1, 1])
 
 # dataset settings
@@ -86,7 +88,7 @@ eval_part = ("08", "26")
 data = dict(
     # train
     samples_per_gpu=3,
-    workers_per_gpu=4,
+    workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
