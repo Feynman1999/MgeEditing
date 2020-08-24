@@ -99,7 +99,7 @@ class ManytoOneRestorer(BaseModel):
         """
         images = batchdata[0] # [B,N,C,H,W]
         H,W = images.shape[-2], images.shape[-1]
-        scale = self.generator.upscale_factor
+        scale = getattr(self.generator, 'upscale_factor', 4)
         padding_multi = self.eval_cfg.get('padding_multi', 1)
         # padding for H and W
         images = img_multi_padding(images, padding_multi, -0.5)  # [B,N,C,H,W]

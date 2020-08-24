@@ -43,9 +43,10 @@ class PairedRandomCrop(object):
         h_gt, w_gt, _ = results['gt'][0].shape
 
         if h_gt != h_lq * scale or w_gt != w_lq * scale:
-            raise ValueError(
-                f'Scale mismatches. GT ({h_gt}, {w_gt}) is not {scale}x ',
-                f'multiplication of LQ ({h_lq}, {w_lq}).')
+            pass
+            # raise ValueError(
+            #     f'Scale mismatches. GT ({h_gt}, {w_gt}) is not {scale}x ',
+            #     f'multiplication of LQ ({h_lq}, {w_lq}).')
         if h_lq < lq_patch_size or w_lq < lq_patch_size:
             raise ValueError(
                 f'LQ ({h_lq}, {w_lq}) is smaller than patch size ',

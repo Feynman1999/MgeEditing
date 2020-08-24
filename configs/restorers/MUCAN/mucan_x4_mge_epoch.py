@@ -40,7 +40,7 @@ train_pipeline = [
         flag='unchanged'),
     dict(type='PairedRandomCrop', gt_patch_size=256),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
-    dict(type='Normalize', keys=['lq', 'gt'], to_rgb=False, **img_norm_cfg),
+    dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='horizontal'),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='vertical'),
     dict(type='RandomTransposeHW', keys=['lq', 'gt'], transpose_ratio=0.5),
@@ -61,7 +61,7 @@ eval_pipeline = [
         key='gt',
         flag='unchanged'),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
-    dict(type='Normalize', keys=['lq', 'gt'], to_rgb=False, **img_norm_cfg),
+    dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='FramesToTensor', keys=['lq', 'gt']), # HWC -> CHW
     dict(type='Collect', keys=['lq', 'gt'])
 ]
@@ -92,8 +92,8 @@ data = dict(
         times=repeat_times,
         dataset=dict(
             type=train_dataset_type,
-            lq_folder= dataroot + "/mge/pngs/LR",
-            gt_folder= dataroot + "/mge/pngs/HR",
+            lq_folder= dataroot + "/mge/train/pngs/LR",
+            gt_folder= dataroot + "/mge/train/pngs/HR",
             num_input_frames=frames,
             pipeline=train_pipeline,
             scale=scale,
@@ -103,8 +103,8 @@ data = dict(
     eval_workers_per_gpu=4,
     eval=dict(
         type=eval_dataset_type,
-        lq_folder= dataroot + "/mge/pngs/LR",
-        gt_folder= dataroot + "/mge/pngs/HR",
+        lq_folder= dataroot + "/mge/train/pngs/LR",
+        gt_folder= dataroot + "/mge/train/pngs/HR",
         num_input_frames = frames,
         pipeline=eval_pipeline,
         scale=scale,
@@ -131,13 +131,13 @@ total_epochs = 70 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=total_epochs // 10)
 log_config = dict(
-    interval=200,
+    interval=300,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=20000, save_image=True)
+evaluation = dict(interval=30000, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'

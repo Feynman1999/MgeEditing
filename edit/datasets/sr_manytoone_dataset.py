@@ -73,7 +73,7 @@ class SRManyToOneDataset(BaseSRDataset):
             # do some checks, to make sure the key for LR and HR is same. 
             if self.mode in ("train", "eval"):
                 gt_path = os.path.join(self.gt_folder, key)
-                assert os.path.exists(gt_path), "please make sure the key for LR and HR is same"
+                assert os.path.exists(gt_path), "please make sure the key {} for LR and HR is same".format(key)
 
             if self.mode == "train":
                 data_infos.append(

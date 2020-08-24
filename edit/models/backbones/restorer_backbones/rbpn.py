@@ -145,7 +145,7 @@ class RBPN(M.Module):
                  upscale_factor=4):
         super(RBPN, self).__init__()
         self.nframes = nframes
-
+        self.upscale_factor = upscale_factor
         #Initial Feature Extraction
         self.conv1 = M.Sequential(
             M.Conv2d(input_nc, cl, kernel_size=3, stride=1, padding=1),

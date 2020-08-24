@@ -131,16 +131,16 @@ class GenerateFrameIndiceswithPadding(object):
                 reflection: [2, 1, 0, 1, 2]
                 reflection_circle: [4, 3, 0, 1, 2]
                 circle: [3, 4, 0, 1, 2]
-
-        filename_tmpl (str): Template for file name. Default: '{:08d}'.
     """
 
-    def __init__(self, padding):
+    def __init__(self, padding, index_start = 1, name_padding = False):
         if padding not in ('replicate', 'reflection', 'reflection_circle', 'circle'):
             raise ValueError(f'Wrong padding mode {padding}.'
                              'Should be "replicate", "reflection", '
                              '"reflection_circle",  "circle"')
         self.padding = padding
+        self.index_start = index_start
+        self.name_padding = name_padding
 
     def __call__(self, results):
         """Call function.
@@ -152,11 +152,14 @@ class GenerateFrameIndiceswithPadding(object):
         Returns:
             dict: A dict containing the processed data and information.
         """
-        clip_name, frame_name = results['key'].split('/') # 000/0000000.png
+        clip_name, frame_name = results['key'].split('/') # 000/0000001.png
         frame_name, ext_name = osp.splitext(frame_name)
-        padding_length = len(frame_name)
-        current_idx = int(frame_name)
-        max_frame_num = results['max_frame_num'] - 1  # start from 0
+        if self.name_padding:
+            padding_length = len(frame_name)
+        else:
+            padding_length = 0
+        current_idx = int(frame_name) - self.index_start  # start from 0
+        max_frame_num = results['max_frame_num'] - 1  
         num_input_frames = results['num_input_frames']
         num_pad = num_input_frames // 2
 
@@ -187,7 +190,7 @@ class GenerateFrameIndiceswithPadding(object):
         lq_path_root = results['lq_path']
         gt_path_root = results['gt_path']
         lq_paths = [
-            osp.join(lq_path_root, clip_name,  str(idx).zfill(padding_length) +ext_name)
+            osp.join(lq_path_root, clip_name,  str(idx + self.index_start).zfill(padding_length) +ext_name)
             for idx in frame_list
         ]
         gt_paths = [osp.join(gt_path_root, clip_name, frame_name + ext_name)]
@@ -215,9 +218,11 @@ class GenerateFrameIndices(object):
             frame index with the interval.
     """
 
-    def __init__(self, interval_list, many2many = False):
+    def __init__(self, interval_list, many2many = False, index_start = 1, name_padding = False):
         self.interval_list = interval_list
         self.many2many = many2many
+        self.index_start = index_start
+        self.name_padding = name_padding
 
     def __call__(self, results):
         """Call function.
@@ -231,7 +236,10 @@ class GenerateFrameIndices(object):
         """
         clip_name, frame_name = results['key'].split('/')  # key example: 000/00000000.png
         frame_name, ext_name = osp.splitext(frame_name)
-        padding_length = len(frame_name)
+        if self.name_padding:  # 由int恢复str时使用, int 方便下标计算
+            padding_length = len(frame_name)
+        else:
+            padding_length = 0
         center_frame_idx = int(frame_name)
         num_half_frames = results['num_input_frames'] // 2
 
@@ -239,11 +247,13 @@ class GenerateFrameIndices(object):
         # ensure not exceeding the borders
         start_frame_idx = center_frame_idx - num_half_frames * interval
         end_frame_idx = center_frame_idx + num_half_frames * interval
-        while (start_frame_idx < 0) or (end_frame_idx >= results['max_frame_num']):
-            center_frame_idx = np.random.randint(0, results['max_frame_num'])
+        start = self.index_start
+        end = start + results['max_frame_num']
+        while (start_frame_idx < start) or (end_frame_idx >= end):
+            center_frame_idx = np.random.randint(start, end)
             start_frame_idx = center_frame_idx - num_half_frames * interval
             end_frame_idx = center_frame_idx + num_half_frames * interval
-        frame_name = str(center_frame_idx).zfill(padding_length)
+        frame_name = str(center_frame_idx).zfill(padding_length) # 由于center_frame_idx可能改变，所以重新zfill
         neighbor_list = list(
             range(center_frame_idx - num_half_frames * interval,
                   center_frame_idx + num_half_frames * interval + 1, interval))
