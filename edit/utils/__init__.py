@@ -7,6 +7,7 @@ from .config import Config
 from .colorspace import bgr2ycbcr, bgr2gray
 from .img import tensor2img, imnormalize, imdenormalize, imflip_, imrescale, interp_codes, img_multi_padding, img_de_multi_padding
 from .logger import get_root_logger, get_logger
+from .video import images2video
 
 __all__ = [
     'Registry', 'build_from_cfg',

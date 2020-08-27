@@ -35,7 +35,7 @@ class EvalIterHook(Hook):
                             f'but got { type(dataloader)}')
         self.dataloader = dataloader
         self.eval_kwargs = eval_kwargs
-        self.interval = self.eval_kwargs.pop('interval', 3000)
+        self.interval = self.eval_kwargs.pop('interval', 10000)
         self.save_image = self.eval_kwargs.pop('save_image', False)
         self.save_path = self.eval_kwargs.pop('save_path', None)
         self.log_dir_path = self.eval_kwargs.pop('log_path', None)
@@ -102,7 +102,7 @@ class EvalIterHook(Hook):
             results (list of dict): Model forward results.
             iter: now iter.
         """
-        save_path = os.path.join(self.save_path, "iter_{}".format(iters))  # save for some information. e.g. SVG for everyframe value.
+        save_path = os.path.join(self.save_path, "iter_{}".format(iters))  # save for some information. e.g. SVG for everyframe value in VSR.
         eval_res = self.dataloader.dataset.evaluate(results, save_path)
         self.logger.info("*****   eval results for {} iters:   *****".format(iters))
         for name, val in eval_res.items():

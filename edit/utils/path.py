@@ -1,7 +1,17 @@
 import os
 import os.path as osp
+import ntpath
 from pathlib import Path
 
+def get_file_name(path):
+    '''
+        datasets/div2k/train/A/0001.jpg  ->  0001
+    :param path: the path
+    :return: the name
+    '''
+    short_path = ntpath.basename(path)  # get file name and ext
+    name = os.path.splitext(short_path)[0]  # Separating file name from extensions
+    return name
 
 def is_filepath(x):
     return isinstance(x, str) or isinstance(x, Path)
