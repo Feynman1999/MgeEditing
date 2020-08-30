@@ -46,7 +46,7 @@ class PairedRandomCrop(object):
         if h_gt != h_lq * scale or w_gt != w_lq * scale:
             # do resize, resize gt to lq * scale
             results['gt'] = [
-                imresize(v, (h_lq * scale, w_lq * scale))
+                imresize(v, (w_lq * scale, h_lq * scale))
                 for v in results['gt']
             ]
             

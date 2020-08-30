@@ -45,9 +45,10 @@ class SRManyToManyDataset(BaseVSRDataset):
         self.eval_part = eval_part
         if eval_part is not None:
             assert is_tuple_of(eval_part, str)
-        self.data_infos = self.load_annotations()
         self.LR_symbol = LR_symbol
 
+        self.data_infos = self.load_annotations()
+        
     def load_annotations(self):
         # get keys
         keys = sorted(list(scandir(self.lq_folder, suffix=IMG_EXTENSIONS, recursive=True)),

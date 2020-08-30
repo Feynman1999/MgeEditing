@@ -119,6 +119,6 @@ class LoadImageFromFileList(LoadImageFromFile):
         results[f'{self.key}_ori_shape'] = shapes
         if self.save_original_img:
             results[f'ori_{self.key}'] = ori_imgs
-
+        
         return results
 

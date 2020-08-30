@@ -150,15 +150,18 @@ class ManytoManyRestorer(BaseModel):
         assert len(batchdata[1].shape) == 1  # first frame flag
         
         if batchdata[1][0]:  # first frame
+            print("first frame")
             B, _ , now_H ,now_W = image.shape
+            print("use now_H : {} and now_W: {}".format(now_H, now_W))
             self.pre_S_hat = mge.tensor(np.zeros((B, hidden_channels, now_H, now_W), dtype=np.float32))
             self.pre_D_hat = F.zeros_like(self.pre_S_hat)
             self.pre_SD = F.zeros_like(self.pre_S_hat)
-            self.pre_S = F.interpolate(image, scale_factor = [0.25, 0.25])
+            self.pre_S = F.interpolate(mge.tensor(image), scale_factor = [0.25, 0.25])
             self.pre_S = F.interpolate(self.pre_S, size = [now_H, now_W])
-            self.pre_D = image - self.pre_S
-        
+            self.pre_D = mge.tensor(image) - self.pre_S
+
         outputs = test_generator_batch(image, self.pre_S, self.pre_D, self.pre_S_hat, self.pre_D_hat, self.pre_SD, netG = self.generator)
+        outputs = list(outputs)
         outputs[0] = img_de_multi_padding(outputs[0], origin_H = H*scale, origin_W = W*scale)
         # update hidden state
         G, self.pre_SD, self.pre_S_hat, self.pre_D_hat, self.pre_S, self.pre_D = outputs
@@ -170,7 +173,7 @@ class ManytoManyRestorer(BaseModel):
             if save_path is None or start_id is None:
                 raise RuntimeError("if save image in test_step, please set 'save_path' and 'sample_id' parameters")
             for idx in range(G.shape[0]):
-                imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=save_path + "_idx_{}.png".format(start_id + idx))
+                imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, "idx_{}.png".format(start_id + idx)))
 
         return outputs
 

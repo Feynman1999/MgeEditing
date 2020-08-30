@@ -278,7 +278,6 @@ class GenerateFrameIndices(object):
         results['lq_path'] = lq_path
         results['gt_path'] = gt_path
         results['interval'] = interval
-
         return results
 
     def __repr__(self):

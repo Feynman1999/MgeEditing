@@ -34,6 +34,9 @@ def img_multi_padding(img, padding_multi = 4, pad_value = -0.5):
         raise NotImplementedError("dimlen: {} not implement".format(dimlen))
 
 def img_de_multi_padding(img, origin_H, origin_W):
+    """
+        support tensor
+    """
     dimlen = len(img.shape)
     paded_H = img.shape[-2]
     paded_W = img.shape[-1]
