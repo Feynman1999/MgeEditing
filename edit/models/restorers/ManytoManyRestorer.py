@@ -1,51 +1,61 @@
 import os
 import time
+import numpy as np
 from megengine.jit import trace
 import megengine.distributed as dist
 import megengine as mge
+import megengine.functional as F
 from edit.core.evaluation import psnr, ssim
-from edit.utils import imwrite, tensor2img, bgr2ycbcr
+from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de_multi_padding
 from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
 
-@trace(symbolic=False)
+hidden_channels = 64
+
+@trace(symbolic=True)
 def train_generator_batch(image, label, *, opt, netG, netloss):
     netG.train()
     B,T,_,H,W = image.shape
-    # cal S
-    image_S = mge.functional.reshape(image, (B*T, -1, H, W))
-    image_S = mge.functional.interpolate(image_S, scale_factor = [0.25, 0.25])
-    image_S = mge.functional.interpolate(image_S, size = [H, W])
-    image_S = mge.functional.reshape(image_S, (B, T, -1, H, W))
+    # image
+    image_S = image.reshape((B*T, -1, H, W))
+    image_S = F.interpolate(image_S, scale_factor = [0.25, 0.25])
+    image_S = F.interpolate(image_S, size = [H, W])
+    image_S = image_S.reshape((B, T, -1, H, W))
     image_D = image - image_S
-    # cal D
-    label_S = mge.functional.reshape(label, (B*T, -1, 4*H, 4*W))
-    label_S = mge.functional.interpolate(label_S, scale_factor = [0.25, 0.25])
-    label_S = mge.functional.interpolate(label_S, size = [4 * H, 4 * W])
-    label_S = mge.functional.reshape(label_S, (B, T, -1, 4*H, 4*W))
+    # label
+    label_S = label.reshape((B*T, -1, 4*H, 4*W))
+    label_S = F.interpolate(label_S, scale_factor = [0.25, 0.25])
+    label_S = F.interpolate(label_S, size = [4 * H, 4 * W])
+    label_S = label_S.reshape((B, T, -1, 4*H, 4*W))
     label_D = label - label_S
 
     HR_G = []
     HR_D = []
     HR_S = []
-    for t in range(T):
-        if t>0:
-            imgHR, SD, S_hat, D_hat, img_S, img_D = netG(image[:, t, ...], image_S[:, t, ...], 
-                                        image_D[:, t, ...], image_S[:, t-1, ...],
-                                        image_D[:, t-1, ...], S_hat, D_hat, SD)
-        else:
-            imgHR, SD, S_hat, D_hat, img_S, img_D = netG(image[:, 0, ...], image_S[:, 0, ...], 
-                                        image_D[:, 0, ...], image_S[:, 1, ...],
-                                        image_D[:, 1, ...])
-        HR_G.append(mge.functional.add_axis(imgHR, axis = 1))
-        HR_D.append(mge.functional.add_axis(img_S, axis = 1))
-        HR_S.append(mge.functional.add_axis(img_D, axis = 1))
 
-    HR_G = mge.functional.concat(HR_G, axis = 1)
-    HR_D = mge.functional.concat(HR_D, axis = 1)
-    HR_S = mge.functional.concat(HR_S, axis = 1)
-    assert HR_G.shape == HR_D.shape and HR_D.shape == HR_S.shape # [B,T,C, H,W]
+    pre_S_hat = mge.tensor(np.zeros((B, hidden_channels, H, W), dtype=np.float32))
+    pre_D_hat = F.zeros_like(pre_S_hat)
+    pre_SD = F.zeros_like(pre_S_hat)
+    
+    imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(image[:, 0, ...], image_S[:, 0, ...], 
+                                        image_D[:, 0, ...], image_S[:, 1, ...],
+                                        image_D[:, 1, ...], pre_S_hat, pre_D_hat, pre_SD)
+    HR_G.append(F.add_axis(imgHR, axis = 1))
+    HR_D.append(F.add_axis(img_S, axis = 1))
+    HR_S.append(F.add_axis(img_D, axis = 1))
+    for t in range(1, T):
+        imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(image[:, t, ...], image_S[:, t, ...], 
+                                    image_D[:, t, ...], image_S[:, t-1, ...],
+                                    image_D[:, t-1, ...], pre_S_hat, pre_D_hat, pre_SD)
+        HR_G.append(F.add_axis(imgHR, axis = 1))
+        HR_D.append(F.add_axis(img_S, axis = 1))
+        HR_S.append(F.add_axis(img_D, axis = 1))
+
+    HR_G = F.concat(HR_G, axis = 1)
+    HR_D = F.concat(HR_D, axis = 1)
+    HR_S = F.concat(HR_S, axis = 1)
+    # assert HR_G.shape == HR_D.shape and HR_D.shape == HR_S.shape # [B,T,C,H,W]
     loss = netloss(HR_G, HR_D, HR_S, label, label_D, label_S)
     opt.backward(loss)
     if dist.is_distributed():
@@ -55,10 +65,14 @@ def train_generator_batch(image, label, *, opt, netG, netloss):
 
 
 @trace(symbolic=True)
-def test_generator_batch(image, *, netG):
+def test_generator_batch(image, pre_S, pre_D, pre_S_hat, pre_D_hat, pre_SD, *, netG):
     netG.eval()
-    output = netG(image)
-    return output
+    _,_,H,W = image.shape
+    image_S = F.interpolate(image, scale_factor = [0.25, 0.25])
+    image_S = F.interpolate(image_S, size = [H, W])
+    image_D = image - image_S
+    outputs = netG(image, image_S, image_D, pre_S, pre_D, pre_S_hat, pre_D_hat, pre_SD)
+    return list(outputs)[:4] + [image_S, image_D]
 
 
 @MODELS.register_module()
@@ -93,9 +107,6 @@ class ManytoManyRestorer(BaseModel):
         # load pretrained
         self.init_weights(pretrained)
 
-        self.data = mge.tensor()
-        self.label = mge.tensor()
-
     def init_weights(self, pretrained=None):
         """Init weights for models.
 
@@ -114,44 +125,65 @@ class ManytoManyRestorer(BaseModel):
             list: loss
         """
         data, label = batchdata
-        self.data.set_value(data)  # (4, 7, 3, 64, 64)
-        self.label.set_value(label)  # (4, 7, 3, 256, 256)
         self.optimizers['generator'].zero_grad()
-        loss = train_generator_batch(self.data, self.label, opt=self.optimizers['generator'], netG=self.generator, netloss=self.pixel_loss)
-        self.optimizers['generator'].step()  # 根据梯度更新参数值
+        loss = train_generator_batch(data, label, opt=self.optimizers['generator'], netG=self.generator, netloss=self.pixel_loss)
+        self.optimizers['generator'].step()
         return loss
 
     def test_step(self, batchdata, **kwargs):
         """test step.
-
+           need to know whether the first frame for video, and every step restore some hidden state.
         Args:
-            batchdata: list for train_batch, numpy.ndarray or variable, length up to Collect class.
+            batchdata: list for train_batch, numpy.ndarray, length up to Collect class.
 
         Returns:
-            list: outputs (already gathered from all threads)
+            list: outputs
         """
-        output = test_generator_batch(batchdata[0], netG = self.generator)
+        image = batchdata[0]  # [B,C,H,W]
+        H,W = image.shape[-2], image.shape[-1]
+        scale = getattr(self.generator, 'upscale_factor', 4)
+        padding_multi = self.eval_cfg.get('padding_multi', 1)
+        # padding for H and W
+        image = img_multi_padding(image, padding_multi = padding_multi, pad_value = -0.5)  # [B,C,H,W]
+        
+        assert image.shape[0] == 1  # only support batchsize 1
+        assert len(batchdata[1].shape) == 1  # first frame flag
+        
+        if batchdata[1][0]:  # first frame
+            B, _ , now_H ,now_W = image.shape
+            self.pre_S_hat = mge.tensor(np.zeros((B, hidden_channels, now_H, now_W), dtype=np.float32))
+            self.pre_D_hat = F.zeros_like(self.pre_S_hat)
+            self.pre_SD = F.zeros_like(self.pre_S_hat)
+            self.pre_S = F.interpolate(image, scale_factor = [0.25, 0.25])
+            self.pre_S = F.interpolate(self.pre_S, size = [now_H, now_W])
+            self.pre_D = image - self.pre_S
+        
+        outputs = test_generator_batch(image, self.pre_S, self.pre_D, self.pre_S_hat, self.pre_D_hat, self.pre_SD, netG = self.generator)
+        outputs[0] = img_de_multi_padding(outputs[0], origin_H = H*scale, origin_W = W*scale)
+        # update hidden state
+        G, self.pre_SD, self.pre_S_hat, self.pre_D_hat, self.pre_S, self.pre_D = outputs
+        
         save_image_flag = kwargs.get('save_image')
         if save_image_flag:
             save_path = kwargs.get('save_path', None)
             start_id = kwargs.get('sample_id', None)
             if save_path is None or start_id is None:
                 raise RuntimeError("if save image in test_step, please set 'save_path' and 'sample_id' parameters")
-            G = output
             for idx in range(G.shape[0]):
                 imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=save_path + "_idx_{}.png".format(start_id + idx))
-        return [output, ]
+
+        return outputs
 
     def cal_for_eval(self, gathered_outputs, gathered_batchdata):
         """
 
-        :param gathered_outputs: list of numpy, [B,C,H,W]
-        :param gathered_batchdata: list of variable, [B,C,H,W]
+        :param gathered_outputs: list of tensor, [B,C,H,W]
+        :param gathered_batchdata: list of numpy, [B,C,H,W]
         :return: eval result
         """
         crop_border = self.eval_cfg.crop_border
-        gathered_outputs = gathered_outputs[0]
-        gathered_batchdata = gathered_batchdata[-1]
+        gathered_outputs = gathered_outputs[0]  # image 
+        gathered_batchdata = gathered_batchdata[-1]  # label
         assert list(gathered_batchdata.shape) == list(gathered_outputs.shape), "{} != {}".format(list(gathered_batchdata.shape), list(gathered_outputs.shape))
 
         res = []

@@ -17,22 +17,26 @@ class HSA(M.Module):
         
     def forward(self, now_LR, pre_h_SD):
         """
-        now_LR: B,3,H,W
-        pre_h_SD: B,48,H,W
+            now_LR: B,3,H,W
+            pre_h_SD: B,48,H,W
         """
         batch, C, H, W = pre_h_SD.shape
-        kernels = self.conv(now_LR) # [B, k*k, H, W]
+        kernels = self.conv(now_LR)  # [B, k*k, H, W]
         batchwise_ans = []
         for idx in range(batch):
             kernel = kernels[idx]  # [k*k, H, W]
-            kernel = F.dimshuffle(kernel, (1, 2, 0)) # [H, W , k*k]
-            kernel = F.reshape(kernel, (H, W, 1, self.K, self.K, 1))
-            kernel = F.broadcast_to(kernel, (C, H, W, 1, self.K, self.K, 1))
-            batchwise_ans.append(F.local_conv2d(F.add_axis(pre_h_SD[idx], 0), kernel, [1, 1], [1, 1], [1, 1])) # [1, C, H, W]      some bug with padding       
+            kernel = F.dimshuffle(kernel, (1, 2, 0))  # [H, W, k*k]
+            kernel = kernel.reshape((1, H, W, 1, self.K, self.K, 1))
+            kernel = kernel.broadcast((C, H, W, 1, self.K, self.K, 1))
+            # 对于每个通道分别进行卷积，卷积核大小k*k
+            inp = F.add_axis(pre_h_SD[idx], 0)
+            print(inp.shape, kernel.shape)
+            batchwise_ans.append(F.local_conv2d(inp, kernel, [1, 1], [1, 1], [1, 1])) # [1, C, H, W]   some bug with padding, must list       
         similarity_matrix = F.concat(batchwise_ans, axis=0) # [B,C,H,W]
         del batchwise_ans
         similarity_matrix = F.sigmoid(similarity_matrix)
         return F.multiply(pre_h_SD, similarity_matrix)
+
 
 class SDBlock(M.Module):
     def __init__(self, channel_nums):
@@ -71,7 +75,7 @@ class RSDN(M.Module):
                  blocknums = 5,
                  upscale_factor=4):
         super(RSDN, self).__init__()
-        self.hsa = HSA(3)
+        # self.hsa = HSA(3)
         self.blocknums = blocknums
         self.hidden_channels = hidden_channels
         SDBlocks = []
@@ -99,15 +103,21 @@ class RSDN(M.Module):
         self.trans_D = ConvTranspose2d(hidden_channels, 3, 4, 4, 0, bias=False)
         self.trans_HR = ConvTranspose2d(hidden_channels, 3, 4, 4, 0, bias=False)
 
-    def forward(self, It, S, D, pre_S, pre_D, pre_S_hat=None, pre_D_hat=None, pre_SD=None):
-        B, _, H, W = It.shape
-        if pre_S_hat is None:
-            assert pre_D_hat is None and pre_SD is None
-            pre_S_hat = megengine.tensor(np.zeros((B, self.hidden_channels, H, W), dtype=np.float32))
-            pre_D_hat = F.zeros_like(pre_S_hat)
-            pre_SD = F.zeros_like(pre_S_hat)
+    def forward(self, It, S, D, pre_S, pre_D, pre_S_hat, pre_D_hat, pre_SD):
+        """
+            args:
+            It: the LR image for this time stamp
+            S: the structure component of now LR image
+            D: the detail component of now LR image
+            pre_S: the structure component of pre LR image
+            pre_D: the detail component of pre LR image
+            pre_S_hat: the hidden state of structure component
+            pre_D_hat: the hidden state of detail component
+            pre_SD: the overall hidden state
 
-        # pre_SD = self.hsa(It, pre_SD) # auto select
+            return: 
+        """
+        # pre_SD = self.hsa(It, pre_SD)  # auto select
         S = F.concat([pre_S, S, pre_S_hat, pre_SD], axis = 1)
         S = self.pre_SD_S(S)
         D = F.concat([pre_D, D, pre_D_hat, pre_SD], axis = 1) 

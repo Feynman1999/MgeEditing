@@ -17,13 +17,13 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 # TODO
 
 ### High
+* 完成many to many 的训练， 考虑怎么减少io时间。
+
 * test hook 完成test，这样就不用写重复的代码了？
 
 * 完成视频的ensemble策略(eval and test)
 
 * 配置 lr 调度
-
-* 完成many to many 的训练， 考虑怎么减少io时间。
 
 * 测试多卡训练
 

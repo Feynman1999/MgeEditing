@@ -39,7 +39,6 @@ class EvalIterHook(Hook):
         self.save_image = self.eval_kwargs.pop('save_image', False)
         self.save_path = self.eval_kwargs.pop('save_path', None)
         self.log_dir_path = self.eval_kwargs.pop('log_path', None)
-
         self.log_path = os.path.join(self.log_dir_path, "eval.log")
         mkdir_or_exist(self.log_dir_path)
         self.logger = get_logger(name = "EvalIterHook", log_file=self.log_path)

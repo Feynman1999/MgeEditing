@@ -4,6 +4,7 @@ import megengine.module as M
 from megengine.module.conv import Conv2d, ConvTranspose2d
 import megengine.functional as F
 from edit.models.builder import BACKBONES
+from edit.models.common import compute_cost_volume
 
 class ResBlock(M.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, activation='prelu'):
@@ -95,7 +96,7 @@ class CARBBlocks(M.Module):
 
 
 class AU(M.Module):
-    def __init__(self, K, d, ch):
+    def __init__(self, ch):
         super(AU, self).__init__()
         self.conv = M.Sequential(
             M.Conv2d(2*ch, ch, kernel_size=5, stride=1, padding=2),
@@ -112,6 +113,51 @@ class AU(M.Module):
         return self.conv(mid)
 
 
+class AU_CV(M.Module):
+    def __init__(self, K, d, ch):
+        super(AU_CV, self).__init__()
+        self.K = K
+        self.d = d
+        self.conv = M.Sequential(
+            M.Conv2d(ch * self.K, ch, kernel_size=3, stride=1, padding=1),
+            M.LeakyReLU()
+        )
+
+    def forward(self, mid, ref):
+        B, C, H, W = mid.shape
+        mid = F.normalize(mid, p=2, axis = 1)
+        ref = F.normalize(ref, p=2, axis = 1)
+        cost_volume, ref = compute_cost_volume(mid, ref, max_displacement = self.d)  # [B, (2d+1)**2, H, W]
+        cost_volume = F.dimshuffle(cost_volume, (0, 2, 3, 1))
+        cost_volume = cost_volume.reshape((-1, (2*self.d + 1)**2))
+        # argmax
+        indices = F.top_k(cost_volume, k = self.K, descending = True)[1]  # [B*H*W, K]
+        del cost_volume
+        ref_list = [] # [B, C, H, W]
+        origin_i_j = F.arange(0, H*W, 1)  # float32
+        origin_i = F.floor(origin_i_j / W)  # (H*W, ) 
+        origin_j = F.mod(origin_i_j, W)  # (H*W, )
+        del origin_i_j
+        # reshape ref
+        ref = ref.reshape((B, C, (H+2*self.d)*(W+2*self.d)))
+        for i in range(self.K):
+            index = indices[:, i]  # [B*H*W, ]
+            index = index.reshape((-1, H*W))
+            index_i = F.floor(index / (2*self.d + 1)) + origin_i  # [B, H*W] 
+            index_j = F.mod(index, (2*self.d + 1)) + origin_j  # [B, H*W]
+            # 根据每个pixel的i,j 算出index
+            index = index_i * W + index_j  # [B, H*W]
+            index = index.astype('int32')
+            # add axis
+            index=  F.add_axis(index, axis = 1) # [B, 1, H*W]
+            # broadcast
+            index = F.broadcast_to(index, (B, C, H*W))
+            # gather
+            output = F.gather(ref, axis = 2, index = index)  # [B, C, H*W]
+            ref_list.append(output.reshape((B, C, H, W)))
+        return self.conv(F.concat(ref_list, axis = 1))
+
+
 @BACKBONES.register_module()
 class MUCAN(M.Module):
     """MUCAN network structure.
@@ -126,7 +172,8 @@ class MUCAN(M.Module):
                  nframes = 7,
                  input_nc = 3,
                  output_nc = 3,
-                 upscale_factor=4):
+                 upscale_factor=4, 
+                 use_cost_volume = True):
         super(MUCAN, self).__init__()
         self.nframes = nframes
         self.upscale_factor = upscale_factor
@@ -141,10 +188,15 @@ class MUCAN(M.Module):
         self.fea_L2_conv1 = M.Conv2d(ch, ch, 3, 2, 1)
         self.fea_L2_conv2 = M.Conv2d(ch, ch, 3, 1, 1)
         self.lrelu = M.LeakyReLU(negative_slope=0.05)
-
-        self.AU0 = AU(K=4, d = 8, ch = ch)
-        self.AU1 = AU(K=5, d = 6, ch = ch)
-        self.AU2 = AU(K=6, d = 4, ch = ch)
+        
+        if use_cost_volume:
+            self.AU0 = AU_CV(K=6, d = 5, ch = ch) 
+            self.AU1 = AU_CV(K=5, d = 3, ch = ch)
+            self.AU2 = AU_CV(K=4, d = 3, ch = ch)
+        else:
+            self.AU0 = AU(ch = ch) 
+            self.AU1 = AU(ch = ch)
+            self.AU2 = AU(ch = ch)
 
         self.UP0 = M.ConvTranspose2d(ch, ch, kernel_size=4, stride=2, padding=1)
         self.UP1 = M.ConvTranspose2d(ch, ch, kernel_size=4, stride=2, padding=1)
