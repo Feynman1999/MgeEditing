@@ -1,6 +1,7 @@
 import random
 import math
 from ..registry import PIPELINES
+from edit.utils import imresize
 
 
 @PIPELINES.register_module()
@@ -43,10 +44,12 @@ class PairedRandomCrop(object):
         h_gt, w_gt, _ = results['gt'][0].shape
 
         if h_gt != h_lq * scale or w_gt != w_lq * scale:
-            pass
-            # raise ValueError(
-            #     f'Scale mismatches. GT ({h_gt}, {w_gt}) is not {scale}x ',
-            #     f'multiplication of LQ ({h_lq}, {w_lq}).')
+            # do resize, resize gt to lq * scale
+            results['gt'] = [
+                imresize(v, (h_lq * scale, w_lq * scale))
+                for v in results['gt']
+            ]
+            
         if h_lq < lq_patch_size or w_lq < lq_patch_size:
             raise ValueError(
                 f'LQ ({h_lq}, {w_lq}) is smaller than patch size ',
