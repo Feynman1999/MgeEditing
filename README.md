@@ -45,7 +45,7 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 
 
 aistudio操作流程：按指定路径去activate mge环境，然后即可运行。
-
+source activate /home/aistudio/external-libraries/envs/mge
 
 第16 23 52 59 62 72 88帧 LR多1 ，但使用windows上的ffmpeg时帧数正常。
 处理流程：

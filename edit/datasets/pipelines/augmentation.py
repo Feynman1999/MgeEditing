@@ -152,7 +152,9 @@ class GenerateFrameIndiceswithPadding(object):
         Returns:
             dict: A dict containing the processed data and information.
         """
-        clip_name, frame_name = results['key'].split('/') # 000/0000001.png
+        clip_name, frame_name = results['LRkey'].split('/') # 000/0000001.png
+        if results['HRkey']:
+            clip_name_HR, _ = results['HRkey'].split('/')
         frame_name, ext_name = osp.splitext(frame_name)
         if self.name_padding:
             padding_length = len(frame_name)
@@ -193,7 +195,7 @@ class GenerateFrameIndiceswithPadding(object):
             osp.join(lq_path_root, clip_name,  str(idx + self.index_start).zfill(padding_length) +ext_name)
             for idx in frame_list
         ]
-        gt_paths = [osp.join(gt_path_root, clip_name, frame_name + ext_name)]
+        gt_paths = [osp.join(gt_path_root, clip_name_HR, frame_name + ext_name)]
         results['lq_path'] = lq_paths
         results['gt_path'] = gt_paths
 
@@ -234,7 +236,9 @@ class GenerateFrameIndices(object):
         Returns:
             dict: A dict containing the processed data and information.
         """
-        clip_name, frame_name = results['key'].split('/')  # key example: 000/00000000.png
+        clip_name, frame_name = results['LRkey'].split('/')  # key example: 000_down/00000000.png
+        clip_name_HR, _ = results['HRkey'].split('/')  # key example: 000/00000000.png
+        
         frame_name, ext_name = osp.splitext(frame_name)
         if self.name_padding:  # 由int恢复str时使用, int 方便下标计算
             padding_length = len(frame_name)
@@ -266,11 +270,11 @@ class GenerateFrameIndices(object):
         ]
         if self.many2many:
             gt_path = [
-                osp.join(gt_path_root, clip_name, str(v).zfill(padding_length) + ext_name)
+                osp.join(gt_path_root, clip_name_HR, str(v).zfill(padding_length) + ext_name)
                 for v in neighbor_list
             ]
         else:
-            gt_path = [osp.join(gt_path_root, clip_name, frame_name + ext_name)]
+            gt_path = [osp.join(gt_path_root, clip_name_HR, frame_name + ext_name)]
         results['lq_path'] = lq_path
         results['gt_path'] = gt_path
         results['interval'] = interval

@@ -33,7 +33,8 @@ class SRManyToManyDataset(BaseVSRDataset):
                  num_input_frames = 7,
                  scale = 4,
                  mode = "train",
-                 eval_part = None):
+                 eval_part = None,
+                 LR_symbol = "@"):  # impossible name default
         super(SRManyToManyDataset, self).__init__(pipeline, scale, mode)
         assert num_input_frames % 2 == 1, (
             f'num_input_frames should be odd numbers, '
@@ -45,13 +46,18 @@ class SRManyToManyDataset(BaseVSRDataset):
         if eval_part is not None:
             assert is_tuple_of(eval_part, str)
         self.data_infos = self.load_annotations()
+        self.LR_symbol = LR_symbol
 
     def load_annotations(self):
         # get keys
         keys = sorted(list(scandir(self.lq_folder, suffix=IMG_EXTENSIONS, recursive=True)),
                         key=get_key_for_video_imgs)  # 000/00000.png
         
-        # do split for train and eval
+        if self.lq_folder == self.gt_folder:
+            # gt and lq in same dir, only select lq as keys
+            keys = [ key for key in keys if self.LR_symbol in key]
+
+        # do split for train and eval   
         if self.eval_part is not None:
             if self.mode == "train":
                 keys = [k for k in keys if k.split('/')[0] not in self.eval_part]
@@ -72,7 +78,7 @@ class SRManyToManyDataset(BaseVSRDataset):
         for key in keys:
             # do some checks, to make sure the key for LR and HR is same. 
             if self.mode in ("train", "eval"):
-                gt_path = os.path.join(self.gt_folder, key)
+                gt_path = os.path.join(self.gt_folder, key.replace(self.LR_symbol, ""))
                 assert os.path.exists(gt_path), "please make sure the key {} for LR and HR is same".format(key)
 
             if self.mode == "train":
@@ -80,7 +86,8 @@ class SRManyToManyDataset(BaseVSRDataset):
                     dict(
                         lq_path=self.lq_folder,
                         gt_path=self.gt_folder,
-                        key=key,
+                        LRkey=key,
+                        HRkey=key.replace(self.LR_symbol, ""),
                         max_frame_num=self.frame_num[key.split("/")[0]],
                         num_input_frames=self.num_input_frames
                     )
@@ -89,7 +96,7 @@ class SRManyToManyDataset(BaseVSRDataset):
                 data_infos.append(
                     dict(
                         lq_path = os.path.join(self.lq_folder, key),
-                        gt_path = os.path.join(self.gt_folder, key),
+                        gt_path = os.path.join(self.gt_folder, key.replace(self.LR_symbol, "")),
                         is_first = is_first
                     )
                 )

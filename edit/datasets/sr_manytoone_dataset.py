@@ -81,7 +81,8 @@ class SRManyToOneDataset(BaseVSRDataset):
                     dict(
                         lq_path=self.lq_folder,
                         gt_path=self.gt_folder,
-                        key=key,
+                        LRkey=key,
+                        HRkey=key,
                         max_frame_num=self.frame_num[key.split("/")[0]],
                         num_input_frames=self.num_input_frames
                     )
@@ -91,7 +92,8 @@ class SRManyToOneDataset(BaseVSRDataset):
                     dict(
                         lq_path = self.lq_folder,
                         gt_path = self.gt_folder,
-                        key = key,
+                        LRkey = key,
+                        HRkey = key,
                         max_frame_num=self.frame_num[key.split("/")[0]],
                         num_input_frames=self.num_input_frames
                     )
@@ -100,7 +102,7 @@ class SRManyToOneDataset(BaseVSRDataset):
                 data_infos.append(
                     dict(
                         lq_path = self.lq_folder,
-                        key = key,
+                        LRkey = key,
                         max_frame_num=self.frame_num[key.split("/")[0]],
                         num_input_frames=self.num_input_frames
                     )
