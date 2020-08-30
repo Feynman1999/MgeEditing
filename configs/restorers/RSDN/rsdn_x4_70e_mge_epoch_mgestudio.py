@@ -144,7 +144,7 @@ evaluation = dict(interval=100, save_image=True)
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
 load_from = None
-resume_from = None
+resume_from = f'/home/megstudio/workspace/checkpoints/epoch_5'
 resume_optim = True
 workflow = [('train', 1)]
 
