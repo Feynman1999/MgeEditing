@@ -26,7 +26,7 @@ eval_dataset_type = 'SRManyToManyDataset'
 test_dataset_type = 'SRManyToManyDataset'
 
 train_pipeline = [
-    dict(type='GenerateFrameIndices', interval_list=[1], many2many = True),
+    dict(type='GenerateFrameIndices', interval_list=[1], many2many = True, name_padding = True),
     dict(type='TemporalReverse', keys=['lq_path', 'gt_path'], reverse_ratio=0.2),
     dict(
         type='LoadImageFromFileList',
@@ -78,20 +78,20 @@ test_pipeline = [
 ]
 
 
-dataroot = "/opt/data/private/datasets"
+dataroot = "/home/aistudio/work/datasets"
 repeat_times = 1
 eval_part = ("26", )
 data = dict(
     # train
     samples_per_gpu=6,
-    workers_per_gpu=4,
+    workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
         dataset=dict(
             type=train_dataset_type,
-            lq_folder= dataroot + "/mge/train/pngs/LR",
-            gt_folder= dataroot + "/mge/train/pngs/HR",
+            lq_folder= dataroot + "/mge/train/LR",
+            gt_folder= dataroot + "/mge/train/HR",
             num_input_frames=9,
             pipeline=train_pipeline,
             scale=scale,
@@ -101,8 +101,8 @@ data = dict(
     eval_workers_per_gpu=4,
     eval=dict(
         type=eval_dataset_type,
-        lq_folder= dataroot + "/mge/train/pngs/LR",
-        gt_folder= dataroot + "/mge/train/pngs/HR",
+        lq_folder= dataroot + "/mge/train/LR",
+        gt_folder= dataroot + "/mge/train/HR",
         pipeline=eval_pipeline,
         scale=scale,
         mode="eval",
@@ -128,18 +128,18 @@ total_epochs = 100 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=total_epochs // 10)
 log_config = dict(
-    interval=300,
+    interval=3,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=30000, save_image=True)
+evaluation = dict(interval=100, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
 load_from = None
-resume_from = f'./workdirs/{exp_name}/20200830_003959/checkpoints/epoch_10'
+resume_from = None
 resume_optim = True
 workflow = [('train', 1)]
 

@@ -17,7 +17,11 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 # TODO
 
 ### High
-* 完成many to many 的训练， 考虑怎么减少io时间。
+* many to many eval时不能用多个clip，否则报错；若去掉trace则显存不足。方案：先使用一个clip eval
+
+* mgestudio版本不匹配且多线程好像有问题
+
+* 考虑怎么减少many to many的io时间
 
 * test hook 完成test，这样就不用写重复的代码了？
 
