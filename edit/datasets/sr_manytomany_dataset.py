@@ -51,8 +51,9 @@ class SRManyToManyDataset(BaseVSRDataset):
         
     def load_annotations(self):
         # get keys
-        keys = sorted(list(scandir(self.lq_folder, suffix=IMG_EXTENSIONS, recursive=True)),
-                        key=get_key_for_video_imgs)  # 000/00000.png
+        keys = list(scandir(self.lq_folder, suffix=IMG_EXTENSIONS, recursive=True))
+        keys = [ v for v in keys if len(v.split('/')) == 2]
+        keys = sorted(keys, key=get_key_for_video_imgs)  # 000/00000.png
         
         if self.lq_folder == self.gt_folder:
             # gt and lq in same dir, only select lq as keys
