@@ -135,7 +135,6 @@ log_config = dict(
     ])
 visual_config = None
 evaluation = dict(interval=30000, save_image=True)
-test = dict(save_dir=f'./workdirs/{exp_name}_test')
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
