@@ -45,6 +45,7 @@ class EpochBasedRunner(BaseRunner):
                                             save_image = True, 
                                             save_path = save_path,
                                             sample_id=sample_nums_all_threads + sample_nums_for_one_thread * self.local_rank)
+            sample_nums_all_threads += self.outputs[0].shape[0]
             self.call_hook('after_test_iter')
             self._iter += 1
 
