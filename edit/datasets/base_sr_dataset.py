@@ -104,6 +104,30 @@ class BaseVSRDataset(BaseDataset):
         results['scale'] = self.scale
         return self.pipeline(results)
 
+    def test_aggre(self, save_path):
+        clip_names = sorted(self.frame_num.keys())  # e.g. [`city`, `walk`]
+        frame_nums = [ self.frame_num[clip] for clip in clip_names ]
+
+        do_frames = 0
+        now_clip_idx = 0
+        total_deal = 0
+        for _ in range(len(self)):
+            do_frames += 1
+            if do_frames == frame_nums[now_clip_idx]:
+                clip_name = clip_names[now_clip_idx]
+                # move images to dir use shutil
+                save_dir_path = osp.join(save_path, clip_name)
+                mkdir_or_exist(save_dir_path)
+                # index from [total_deal, total_deal + do_frames)
+                for idx in range(total_deal, total_deal + do_frames):
+                    # move
+                    shutil.move(osp.join(save_path, "idx_" + str(idx) + ".png"), 
+                                osp.join(save_dir_path, "idx_" + str(idx - total_deal) + ".png"))
+
+                total_deal += do_frames
+                do_frames = 0
+                now_clip_idx += 1
+
     def evaluate(self, results, save_path):
         """ Evaluate with different metrics.
             collect images to dir.

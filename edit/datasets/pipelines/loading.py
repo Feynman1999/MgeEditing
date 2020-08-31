@@ -105,7 +105,12 @@ class LoadImageFromFileList(LoadImageFromFile):
         if self.save_original_img:
             ori_imgs = []
         for filepath in filepaths:
-            img_bytes = self.file_client.get(filepath)
+            if self.kwargs.get('use_mem', None):
+                pass
+                # 1.有了直接用
+                # 2.没有get并cache
+            else:
+                img_bytes = self.file_client.get(filepath)
             img = imfrombytes(img_bytes, flag=self.flag)  # HWC, BGR
             if img.ndim == 2:
                 img = np.expand_dims(img, axis=2)

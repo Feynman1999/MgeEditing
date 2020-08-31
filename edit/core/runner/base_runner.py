@@ -1,6 +1,7 @@
 import os.path as osp
 from abc import ABCMeta, abstractmethod
 import megengine as mge
+from megengine.distributed.util import get_rank, get_world_size, is_distributed
 from megengine.optimizer.optimizer import Optimizer
 from megengine.module import Module
 from edit.utils import mkdir_or_exist, build_from_cfg, get_root_logger
@@ -46,6 +47,14 @@ class BaseRunner(metaclass=ABCMeta):
         self._inner_iter = 0
         self._max_epochs = 0
         self._max_iters = 0
+
+        # dist
+        if is_distributed():
+            self.local_rank = get_rank()
+            self.nranks = get_world_size()
+        else:
+            self.local_rank = 0
+            self.nranks = 1
 
     @property
     def model_name(self):
