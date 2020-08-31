@@ -27,7 +27,7 @@ class HSA(M.Module):
             now_LR: B,3,H,W
             pre_h_SD: B,64,H,W
         """
-        pad = self.k // 2
+        pad = self.K // 2
         batch, C, H, W = pre_h_SD.shape
         kernels = self.conv(now_LR)  # [B, k*k, H, W]
         # 对 pre_h_SD进行padding
