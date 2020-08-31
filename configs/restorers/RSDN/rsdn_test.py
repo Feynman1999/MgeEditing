@@ -141,7 +141,7 @@ work_dir = f'./workdirs/{exp_name}'
 load_from = "/home/megstudio/workspace/checkpoints/rsdn_128_64_7/epoch_20"
 resume_from = None
 resume_optim = True
-workflow = 'train'
+workflow = 'test'
 
 # logger
 log_level = 'INFO'
