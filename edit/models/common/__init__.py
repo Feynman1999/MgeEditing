@@ -1,1 +1,1 @@
-from .cost_volume import compute_cost_volume
+from .cost_volume import compute_cost_volume, add_H_W_Padding

@@ -11,8 +11,9 @@ model = dict(
         out_channels=3,
         mid_channels=128,
         hidden_channels = 64,
-        blocknums = 7,
-        upscale_factor = scale),
+        blocknums = 9,
+        upscale_factor = scale,
+        hsa = True),
     pixel_loss=dict(type='RSDNLoss'))
 
 # model training and testing settings

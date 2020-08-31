@@ -4,7 +4,14 @@ import megengine.module as M
 from megengine.module.conv import Conv2d, ConvTranspose2d
 import megengine.functional as F
 from edit.models.builder import BACKBONES
+from edit.models.common import add_H_W_Padding
 
+class Identi(M.Module):
+    def __init__(self):
+        super(Identi, self).__init__()
+    
+    def forward(self, now_LR, pre_h_SD):
+        return pre_h_SD
 
 class HSA(M.Module):
     def __init__(self, K):
@@ -18,22 +25,22 @@ class HSA(M.Module):
     def forward(self, now_LR, pre_h_SD):
         """
             now_LR: B,3,H,W
-            pre_h_SD: B,48,H,W
+            pre_h_SD: B,64,H,W
         """
         batch, C, H, W = pre_h_SD.shape
         kernels = self.conv(now_LR)  # [B, k*k, H, W]
-        batchwise_ans = []
-        for idx in range(batch):
-            kernel = kernels[idx]  # [k*k, H, W]
-            kernel = F.dimshuffle(kernel, (1, 2, 0))  # [H, W, k*k]
-            kernel = kernel.reshape((1, H, W, 1, self.K, self.K, 1))
-            kernel = kernel.broadcast((C, H, W, 1, self.K, self.K, 1))
-            # 对于每个通道分别进行卷积，卷积核大小k*k
-            inp = F.add_axis(pre_h_SD[idx], 0)
-            print(inp.shape, kernel.shape)
-            batchwise_ans.append(F.local_conv2d(inp, kernel, [1, 1], [1, 1], [1, 1])) # [1, C, H, W]   some bug with padding, must list       
-        similarity_matrix = F.concat(batchwise_ans, axis=0) # [B,C,H,W]
-        del batchwise_ans
+        # 对 pre_h_SD进行padding
+        pre_h_SD = add_H_W_Padding(pre_h_SD, margin = 1)
+        similarity_matrix = F.zeros_like(pre_h_SD)
+        for i in range(self.K):
+            for j in range(self.K):
+                # 做点乘
+                kernel = kernels[:, i*self.K + j, :, :] # [B, H, W]
+                kernel = F.add_axis(kernel, axis = 1)  # [B, 1 ,H, W]
+                kernel = F.broadcast_to(kernel, [batch, C, H, W])
+                corr = kernel * pre_h_SD[:, :, i:(H+i), j:(W + j)]
+                similarity_matrix = similarity_matrix + corr # [B, C, H, W]
+        
         similarity_matrix = F.sigmoid(similarity_matrix)
         return F.multiply(pre_h_SD, similarity_matrix)
 
@@ -73,9 +80,13 @@ class RSDN(M.Module):
                  mid_channels = 128,
                  hidden_channels = 3 * 4 * 4,
                  blocknums = 5,
-                 upscale_factor=4):
+                 upscale_factor=4,
+                 hsa = False):
         super(RSDN, self).__init__()
-        # self.hsa = HSA(3)
+        if hsa: 
+            self.hsa = HSA(3)
+        else:
+            self.hsa = Identi()
         self.blocknums = blocknums
         self.hidden_channels = hidden_channels
         SDBlocks = []
@@ -117,7 +128,7 @@ class RSDN(M.Module):
 
             return: 
         """
-        # pre_SD = self.hsa(It, pre_SD)  # auto select
+        pre_SD = self.hsa(It, pre_SD)  # auto select
         S = F.concat([pre_S, S, pre_S_hat, pre_SD], axis = 1)
         S = self.pre_SD_S(S)
         D = F.concat([pre_D, D, pre_D_hat, pre_SD], axis = 1) 
