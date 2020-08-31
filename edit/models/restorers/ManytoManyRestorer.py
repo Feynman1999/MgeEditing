@@ -162,7 +162,7 @@ class ManytoManyRestorer(BaseModel):
             self.pre_S = F.interpolate(self.pre_S, size = [now_H, now_W])
             self.pre_D = mge.tensor(image) - self.pre_S
 
-        outputs = test_generator_batch(image, self.pre_S, self.pre_D, self.pre_S_hat, self.pre_D_hat, self.pre_SD, netG = self.generator)
+        outputs = test_generator_batch(mge.tensor(image), self.pre_S, self.pre_D, self.pre_S_hat, self.pre_D_hat, self.pre_SD, netG = self.generator)
         outputs = list(outputs)
         outputs[0] = img_de_multi_padding(outputs[0], origin_H = H*scale, origin_W = W*scale)
         # update hidden state
