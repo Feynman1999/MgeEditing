@@ -27,11 +27,12 @@ class HSA(M.Module):
             now_LR: B,3,H,W
             pre_h_SD: B,64,H,W
         """
+        pad = self.k // 2
         batch, C, H, W = pre_h_SD.shape
         kernels = self.conv(now_LR)  # [B, k*k, H, W]
         # 对 pre_h_SD进行padding
         similarity_matrix = F.zeros_like(pre_h_SD)
-        pre_h_SD = add_H_W_Padding(pre_h_SD, margin = 1)
+        pre_h_SD = add_H_W_Padding(pre_h_SD, margin = pad)
         for i in range(self.K):
             for j in range(self.K):
                 # 做点乘
@@ -42,7 +43,7 @@ class HSA(M.Module):
                 similarity_matrix = similarity_matrix + corr # [B, C, H, W]
         
         similarity_matrix = F.sigmoid(similarity_matrix)
-        return F.multiply(pre_h_SD, similarity_matrix)
+        return F.multiply(pre_h_SD[:, :, pad:(H+pad), pad:(W+pad)], similarity_matrix)
 
 
 class SDBlock(M.Module):
