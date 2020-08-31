@@ -30,8 +30,8 @@ class HSA(M.Module):
         batch, C, H, W = pre_h_SD.shape
         kernels = self.conv(now_LR)  # [B, k*k, H, W]
         # 对 pre_h_SD进行padding
-        pre_h_SD = add_H_W_Padding(pre_h_SD, margin = 1)
         similarity_matrix = F.zeros_like(pre_h_SD)
+        pre_h_SD = add_H_W_Padding(pre_h_SD, margin = 1)
         for i in range(self.K):
             for j in range(self.K):
                 # 做点乘
