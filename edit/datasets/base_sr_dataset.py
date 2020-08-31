@@ -122,7 +122,7 @@ class BaseVSRDataset(BaseDataset):
                 for idx in range(total_deal, total_deal + do_frames):
                     # move
                     shutil.move(osp.join(save_path, "idx_" + str(idx) + ".png"), 
-                                osp.join(save_dir_path, "idx_" + str(idx - total_deal + start_index).zfill(padding_len) + ".png"))
+                                osp.join(save_dir_path, str(idx - total_deal + start_index).zfill(padding_len) + ".png"))
 
                 total_deal += do_frames
                 do_frames = 0
