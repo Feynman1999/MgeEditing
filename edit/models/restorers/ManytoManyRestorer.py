@@ -150,8 +150,7 @@ class ManytoManyRestorer(BaseModel):
         
         assert image.shape[0] == 1  # only support batchsize 1
         assert len(batchdata[1].shape) == 1  # first frame flag
-        
-        if batchdata[1][0]:  # first frame
+        if batchdata[1][0] > 0.5:  # first frame
             print("first frame")
             self.now_test_num = 1
             B, _ , now_H ,now_W = image.shape

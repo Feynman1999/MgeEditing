@@ -73,9 +73,9 @@ class SRManyToManyDataset(BaseVSRDataset):
             self.frame_num[key.split("/")[0]] = 0
         for key in keys:
             self.frame_num[key.split("/")[0]] += 1
-        print(self.frame_num)
+        
         data_infos = []
-        is_first = True
+        is_first = 1
         now_deal = 0
         for key in keys:
             # do some checks, to make sure the key for LR and HR is same. 
@@ -115,7 +115,8 @@ class SRManyToManyDataset(BaseVSRDataset):
             # update is_first
             now_deal += 1
             if now_deal == self.frame_num[key.split("/")[0]]:
-                is_first = True
+                is_first = 1
+                now_deal = 0
             else:
-                is_first = False
+                is_first = 0
         return data_infos
