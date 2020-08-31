@@ -17,8 +17,6 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 # TODO
 
 ### High
-* test hook 完成test，这样就不用写重复的代码了？
-
 * 考虑怎么减少many to many的io时间（制作lmdb）
 
 * many to many eval时不能用多个clip，否则报错；若去掉trace则显存不足。方案：先使用一个clip eval （搞明白原因先，是因为代码bug还是shape不对应）
