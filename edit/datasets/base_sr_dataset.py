@@ -104,7 +104,7 @@ class BaseVSRDataset(BaseDataset):
         results['scale'] = self.scale
         return self.pipeline(results)
 
-    def test_aggre(self, save_path):
+    def test_aggre(self, save_path, padding_len = 4, start_index = 1):
         clip_names = sorted(self.frame_num.keys())  # e.g. [`city`, `walk`]
         frame_nums = [ self.frame_num[clip] for clip in clip_names ]
 
@@ -122,7 +122,7 @@ class BaseVSRDataset(BaseDataset):
                 for idx in range(total_deal, total_deal + do_frames):
                     # move
                     shutil.move(osp.join(save_path, "idx_" + str(idx) + ".png"), 
-                                osp.join(save_dir_path, "idx_" + str(idx - total_deal) + ".png"))
+                                osp.join(save_dir_path, "idx_" + str(idx - total_deal + start_index).zfill(padding_len) + ".png"))
 
                 total_deal += do_frames
                 do_frames = 0
