@@ -73,7 +73,7 @@ class SRManyToManyDataset(BaseVSRDataset):
             self.frame_num[key.split("/")[0]] = 0
         for key in keys:
             self.frame_num[key.split("/")[0]] += 1
-
+        print(self.frame_num)
         data_infos = []
         is_first = True
         now_deal = 0
