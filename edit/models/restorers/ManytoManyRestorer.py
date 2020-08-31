@@ -107,6 +107,8 @@ class ManytoManyRestorer(BaseModel):
         # load pretrained
         self.init_weights(pretrained)
 
+        self.now_test_num = 1
+
     def init_weights(self, pretrained=None):
         """Init weights for models.
 
@@ -151,6 +153,7 @@ class ManytoManyRestorer(BaseModel):
         
         if batchdata[1][0]:  # first frame
             print("first frame")
+            self.now_test_num = 1
             B, _ , now_H ,now_W = image.shape
             print("use now_H : {} and now_W: {}".format(now_H, now_W))
             self.pre_S_hat = mge.tensor(np.zeros((B, hidden_channels, now_H, now_W), dtype=np.float32))
@@ -174,7 +177,9 @@ class ManytoManyRestorer(BaseModel):
                 raise RuntimeError("if save image in test_step, please set 'save_path' and 'sample_id' parameters")
             for idx in range(G.shape[0]):
                 imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, "idx_{}.png".format(start_id + idx)))
-
+        
+        print("now test num: {}".format(self.now_test_num))
+        self.now_test_num += 1
         return outputs
 
     def cal_for_eval(self, gathered_outputs, gathered_batchdata):
