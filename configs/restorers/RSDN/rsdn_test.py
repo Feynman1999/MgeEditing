@@ -139,10 +139,10 @@ test = dict(save_dir=f'./workdirs/{exp_name}_test')
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = None
-resume_from = f'./workdirs/{exp_name}/20200830_003959/checkpoints/epoch_10'
+load_from = "/home/megstudio/workspace/checkpoints/rsdn_128_64_7/epoch_20"
+resume_from = None
 resume_optim = True
-workflow = [('train', 1)]
+workflow = 'train'
 
 # logger
 log_level = 'INFO'
