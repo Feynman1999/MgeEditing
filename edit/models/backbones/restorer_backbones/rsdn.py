@@ -6,6 +6,27 @@ import megengine.functional as F
 from edit.models.builder import BACKBONES
 from edit.models.common import add_H_W_Padding
 
+
+class PixelShuffle(M.Module):
+    def __init__(self, scale=4):
+        super(PixelShuffle, self).__init__()
+        self.scale = scale
+
+    def forward(self, inputs):
+        # N C iH iW
+        N, C, iH, iW = inputs.shape
+        oH = iH * self.scale
+        oW = iW * self.scale
+        oC = C // (self.scale ** 2)
+        # N C s s iH iW
+        output = inputs.reshape(N, oC, self.scale, self.scale, iH, iW)
+        # N C iH s iW s
+        output = F.dimshuffle(output, (0, 1, 4, 3, 5, 2))
+        # N C oH oW
+        output = output.reshape(N, oC, oH, oW)
+        return output
+
+
 class Identi(M.Module):
     def __init__(self):
         super(Identi, self).__init__()
@@ -82,7 +103,8 @@ class RSDN(M.Module):
                  hidden_channels = 3 * 4 * 4,
                  blocknums = 5,
                  upscale_factor=4,
-                 hsa = False):
+                 hsa = False, 
+                 pixel_shuffle = False):
         super(RSDN, self).__init__()
         if hsa: 
             self.hsa = HSA(3)
@@ -111,9 +133,14 @@ class RSDN(M.Module):
         self.convD = Conv2d(mid_channels, hidden_channels, 3, 1, 1)
         self.convHR = Conv2d(2 * hidden_channels, hidden_channels, 3, 1, 1)
 
-        self.trans_S = ConvTranspose2d(hidden_channels, 3, 4, 4, 0, bias=False)
-        self.trans_D = ConvTranspose2d(hidden_channels, 3, 4, 4, 0, bias=False)
-        self.trans_HR = ConvTranspose2d(hidden_channels, 3, 4, 4, 0, bias=False)
+        if pixel_shuffle:
+            self.trans_S = PixelShuffle(upscale_factor)
+            self.trans_D = PixelShuffle(upscale_factor)
+            self.trans_HR = PixelShuffle(upscale_factor)
+        else:
+            self.trans_S = ConvTranspose2d(hidden_channels, 3, 4, 4, 0, bias=False)
+            self.trans_D = ConvTranspose2d(hidden_channels, 3, 4, 4, 0, bias=False)
+            self.trans_HR = ConvTranspose2d(hidden_channels, 3, 4, 4, 0, bias=False)
 
     def forward(self, It, S, D, pre_S, pre_D, pre_S_hat, pre_D_hat, pre_SD):
         """

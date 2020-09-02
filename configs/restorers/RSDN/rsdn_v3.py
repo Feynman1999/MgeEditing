@@ -1,4 +1,4 @@
-exp_name = 'rsdn_x4_70e_mge'
+exp_name = 'rsdn_v3'
 
 scale = 4
 
@@ -10,10 +10,10 @@ model = dict(
         in_channels=3,
         out_channels=3,
         mid_channels=128,
-        hidden_channels = 64,
+        hidden_channels = 48,
         blocknums = 9,
         upscale_factor = scale,
-        hsa = True),
+        pixel_shuffle = True),
     pixel_loss=dict(type='RSDNLoss'))
 
 # model training and testing settings
@@ -27,20 +27,18 @@ eval_dataset_type = 'SRManyToManyDataset'
 test_dataset_type = 'SRManyToManyDataset'
 
 train_pipeline = [
-    dict(type='GenerateFrameIndices', interval_list=[1], many2many = True, name_padding = True),
+    dict(type='GenerateFrameIndices', interval_list=[1], many2many = True),
     dict(type='TemporalReverse', keys=['lq_path', 'gt_path'], reverse_ratio=0.2),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
         key='lq',
-        flag='unchanged',
-        use_mem = True),
+        flag='unchanged'),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
         key='gt',
-        flag='unchanged',
-        use_mem = True),
+        flag='unchanged'),
     dict(type='PairedRandomCrop', gt_patch_size=256),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
@@ -81,51 +79,48 @@ test_pipeline = [
 ]
 
 
-dataroot = "/home/megstudio/dataset"
+dataroot = "/opt/data/private/datasets"
 repeat_times = 1
 eval_part = ("26", )
 data = dict(
     # train
-    samples_per_gpu=6,
+    samples_per_gpu=5,
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
         dataset=dict(
             type=train_dataset_type,
-            lq_folder= dataroot + "/game1/train_png",
-            gt_folder= dataroot + "/game1/train_png",
-            num_input_frames=9,
+            lq_folder= dataroot + "/mge/train/pngs/LR",
+            gt_folder= dataroot + "/mge/train/pngs/HR",
+            num_input_frames=11,
             pipeline=train_pipeline,
             scale=scale,
-            eval_part = eval_part,
-            mode = "train"
-            )),
+            eval_part = eval_part)),
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,
     eval=dict(
         type=eval_dataset_type,
-        lq_folder= dataroot + "/game1/train_png",
-        gt_folder= dataroot + "/game1/train_png",
+        lq_folder= dataroot + "/mge/train/pngs/LR",
+        gt_folder= dataroot + "/mge/train/pngs/HR",
         pipeline=eval_pipeline,
         scale=scale,
         mode="eval",
-        eval_part = eval_part
-        ),
+        eval_part = eval_part),
     # test
     test_samples_per_gpu=1,
     test_workers_per_gpu=4,
     test=dict(
         type=test_dataset_type,
-        lq_folder= dataroot + "/Vid4/test/A",
+        lq_folder= "/home/megstudio/workspace/test/test",
         pipeline=test_pipeline,
         scale=scale,
         mode="test")
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=6 / 16 *1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=1e-4 *5/16, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 100 // repeat_times
@@ -134,20 +129,20 @@ total_epochs = 100 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=total_epochs // 20)
 log_config = dict(
-    interval=5,
+    interval=300,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=100, save_image=True)
+evaluation = dict(interval=30000, save_image=True) # false bug
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
 load_from = None
 resume_from = None
 resume_optim = True
-workflow = [('train', 1)]
+workflow = 'train'
 
 # logger
 log_level = 'INFO'

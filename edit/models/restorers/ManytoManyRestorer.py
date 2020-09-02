@@ -95,6 +95,8 @@ class ManytoManyRestorer(BaseModel):
 
     def __init__(self, generator, pixel_loss, train_cfg=None, eval_cfg=None, pretrained=None):
         super(ManytoManyRestorer, self).__init__()
+        global hidden_channels
+        hidden_channels = generator.hidden_channels
 
         self.train_cfg = train_cfg
         self.eval_cfg = eval_cfg

@@ -35,6 +35,6 @@ class RSDNLoss(M.Module):
         self.charbonnierloss = CharbonnierLoss()
 
     def forward(self, HR_G, HR_D, HR_S, label, label_D, label_S):
-        return self.a * self.charbonnierloss(HR_S, label_S) + \
-               self.b * self.charbonnierloss(HR_D, label_D) + \
-               self.c * self.charbonnierloss(HR_G, label)
+            return self.a * self.charbonnierloss(HR_S, label_S) + \
+                self.b * self.charbonnierloss(HR_D, label_D) + \
+                self.c * self.charbonnierloss(HR_G, label)
