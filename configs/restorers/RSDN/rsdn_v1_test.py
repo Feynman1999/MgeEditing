@@ -1,4 +1,4 @@
-exp_name = 'rsdn_x4_70e_mge'
+exp_name = 'rsdn_v1_test'
 
 scale = 4
 

@@ -11,7 +11,7 @@ model = dict(
         out_channels=3,
         mid_channels=128,
         hidden_channels = 64,
-        blocknums = 7,
+        blocknums = 9,
         upscale_factor = scale,
         hsa = True),
     pixel_loss=dict(type='RSDNLoss'))
@@ -79,35 +79,40 @@ test_pipeline = [
 ]
 
 
-dataroot = "/home/aistudio/work/datasets"
+dataroot = "/home/megstudio/dataset"
 repeat_times = 1
-eval_part = ("26", )
+eval_part = ("08.mp4_down4x.mp4_frames", "26.mp4_down4x.mp4_frames")
 data = dict(
     # train
-    samples_per_gpu=6,
-    workers_per_gpu=2,
+    samples_per_gpu=16,
+    workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
         dataset=dict(
             type=train_dataset_type,
-            lq_folder= dataroot + "/mge/train/LR",
-            gt_folder= dataroot + "/mge/train/HR",
+            lq_folder= dataroot + "/game1/train_png",
+            gt_folder= dataroot + "/game1/train_png",
             num_input_frames=9,
             pipeline=train_pipeline,
             scale=scale,
-            eval_part = eval_part)),
+            eval_part = eval_part,
+            mode = "train",
+            LR_symbol = "_down4x.mp4"
+            )),
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,
     eval=dict(
         type=eval_dataset_type,
-        lq_folder= dataroot + "/mge/train/LR",
-        gt_folder= dataroot + "/mge/train/HR",
+        lq_folder= dataroot + "/game1/train_png",
+        gt_folder= dataroot + "/game1/train_png",
         pipeline=eval_pipeline,
         scale=scale,
         mode="eval",
-        eval_part = eval_part),
+        eval_part = eval_part,
+        LR_symbol = "_down4x.mp4"
+        ),
     # test
     test_samples_per_gpu=1,
     test_workers_per_gpu=4,
@@ -120,16 +125,16 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=1e-4 *6/16, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=1e-4, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 100 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
-checkpoint_config = dict(interval=total_epochs // 10)
+checkpoint_config = dict(interval=total_epochs // 20)
 log_config = dict(
-    interval=3,
+    interval=5,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
@@ -139,10 +144,10 @@ evaluation = dict(interval=100, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = None
+load_from = f'/home/megstudio/workspace/checkpoints/rsdn_v2/epoch_40'
 resume_from = None
 resume_optim = True
-workflow = [('train', 1)]
+workflow = 'test'
 
 # logger
 log_level = 'INFO'

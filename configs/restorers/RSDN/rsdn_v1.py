@@ -135,14 +135,13 @@ log_config = dict(
     ])
 visual_config = None
 evaluation = dict(interval=30000, save_image=True)
-test = dict(save_dir=f'./workdirs/{exp_name}_test')
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
 load_from = None
 resume_from = f'./workdirs/{exp_name}/20200830_003959/checkpoints/epoch_10'
 resume_optim = True
-workflow = [('train', 1)]
+workflow = 'train'
 
 # logger
 log_level = 'INFO'
