@@ -26,6 +26,7 @@ class LoadImageFromFile(object):
                  flag='color',
                  channel_order='bgr',
                  save_original_img=False,
+                 use_mem = False,
                  **kwargs):
         self.io_backend = io_backend
         self.key = key
