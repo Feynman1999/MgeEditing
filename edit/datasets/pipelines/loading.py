@@ -1,7 +1,9 @@
+import os
 from ..registry import PIPELINES
 from edit.utils import FileClient, imfrombytes
 import numpy as np
 
+cache_dict = dict()
 
 @PIPELINES.register_module()
 class LoadImageFromFile(object):
@@ -104,11 +106,20 @@ class LoadImageFromFileList(LoadImageFromFile):
         shapes = []
         if self.save_original_img:
             ori_imgs = []
+
+        def get_cache_key(path):
+            l = path.split("/")
+            return os.path.join(l[-2], l[-1])
+
+        global cache_dict
         for filepath in filepaths:
             if self.kwargs.get('use_mem', None):
-                pass
-                # 1.有了直接用
-                # 2.没有get并cache
+                key = get_cache_key(filepath)
+                if cache_dict.__contains__(key):
+                    img_bytes = cache_dict.get(key)
+                else:
+                    img_bytes = self.file_client.get(filepath)
+                    cache_dict[key] = img_bytes
             else:
                 img_bytes = self.file_client.get(filepath)
             img = imfrombytes(img_bytes, flag=self.flag)  # HWC, BGR

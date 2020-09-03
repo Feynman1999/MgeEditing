@@ -17,7 +17,9 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 # TODO
 
 ### High
-* 考虑怎么减少many to many的io时间（制作lmdb）  和   部分存在内存中
+* 考虑怎么减少many to many的io时间（ 部分存在内存中  \  制作lmdb）
+
+* 检查初始化是否合理
 
 * many to many eval时不能用多个clip，否则报错；若去掉trace则显存不足。方案：先使用一个clip eval （搞明白原因先，是因为代码bug还是shape不对应）  显存不足（显存增长的bug)： 中间结果用numpy存储试一下
 对于test将10个clip分成3组，单独静态图测试（或者使用动态图，但有显存一直增加的bug）
