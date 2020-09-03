@@ -33,6 +33,7 @@ class LoadImageFromFile(object):
         self.flag = flag
         self.save_original_img = save_original_img
         self.channel_order = channel_order
+        self.use_mem = use_mem
         self.kwargs = kwargs
         self.file_client = None
 
@@ -114,7 +115,7 @@ class LoadImageFromFileList(LoadImageFromFile):
 
         global cache_dict
         for filepath in filepaths:
-            if self.kwargs.get('use_mem', None):
+            if self.use_mem:
                 key = get_cache_key(filepath)
                 if cache_dict.__contains__(key):
                     img_bytes = cache_dict.get(key)
