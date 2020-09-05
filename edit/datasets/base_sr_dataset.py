@@ -1,12 +1,14 @@
 import shutil
 from collections import defaultdict
 import matplotlib.pyplot as plt
+import numpy as np
+import os
 import os.path as osp
 import copy
 from collections import defaultdict
 from .base_dataset import BaseDataset
 from pathlib import Path
-from edit.utils import scandir, is_list_of, mkdir_or_exist, is_tuple_of
+from edit.utils import scandir, is_list_of, mkdir_or_exist, is_tuple_of, imread, imwrite
 
 
 IMG_EXTENSIONS = ('.jpg', '.JPG', '.jpeg', '.JPEG', '.png', '.PNG', '.ppm',
@@ -120,9 +122,25 @@ class BaseVSRDataset(BaseDataset):
                 mkdir_or_exist(save_dir_path)
                 # index from [total_deal, total_deal + do_frames)
                 for idx in range(total_deal, total_deal + do_frames):
-                    # move
-                    shutil.move(osp.join(save_path, "idx_" + str(idx) + ".png"), 
-                                osp.join(save_dir_path, str(idx - total_deal + start_index).zfill(padding_len) + ".png"))
+                    ensemble_path_1 = osp.join(save_path, "idx_{}_epoch_1.png".format(idx))
+                    desti_path = osp.join(save_dir_path, str(idx - total_deal + start_index).zfill(padding_len) + ".png")
+                    if osp.exists(ensemble_path_1):
+                        # get the content
+                        path = osp.join(save_path, "idx_{}.png".format(idx))
+                        sum_result = imread(path, flag='unchanged').astype(np.float32)
+                        os.remove(path)
+                        for e in range(1, 8):
+                            path = osp.join(save_path, "idx_{}_epoch_{}.png".format(idx, e))
+                            sum_result = sum_result + imread(path, flag='unchanged').astype(np.float32)
+                            os.remove(path)
+                        sum_result = sum_result / 8
+                        # 四舍五入
+                        sum_result = sum_result.round().astype(np.uint8)
+                        # save
+                        imwrite(sum_result, desti_path)
+                    else:
+                        # move
+                        shutil.move(osp.join(save_path, "idx_" + str(idx) + ".png"), desti_path)
 
                 total_deal += do_frames
                 do_frames = 0

@@ -2,6 +2,60 @@ import numpy as np
 import cv2
 from megengine import Tensor
 
+def ensemble_forward(batchdata, Type = 0):
+    """
+        batchdata:  B,C,H,W    numpy
+        Type:  0~7
+        return: ndarray
+    """
+    assert is_ndarray(batchdata)
+    assert len(batchdata.shape) == 4
+    if Type == 0:
+        return batchdata
+    elif Type == 1:
+        return np.flip(batchdata.transpose(0,1,3,2), axis=2)  # 逆时针旋转90度
+    elif Type == 2:
+        return np.flip(np.flip(batchdata, axis=2), axis=3)
+    elif Type == 3:
+        return np.flip(batchdata.transpose(0,1,3,2), axis=3)
+    elif Type == 4:
+        return np.flip(batchdata, axis = 3)
+    elif Type == 5:
+        return np.flip(np.flip(batchdata.transpose(0,1,3,2), axis=2), axis= 3)
+    elif Type == 6:
+        return np.flip(batchdata, axis = 2)
+    elif Type == 7:
+        return batchdata.transpose(0,1,3,2)
+    else:
+        raise NotImplementedError("")
+
+def ensemble_back(batchdata, Type = 0):
+    """
+        batchdata:  B,C,H,W    tensor
+        Type: 0~7
+        return: ndarray
+    """
+    assert is_var(batchdata)
+    batchdata = batchdata.to("cpu0").astype('float32').numpy()
+    if Type == 0:
+        return batchdata
+    elif Type == 1:
+        return np.flip(batchdata.transpose(0,1,3,2), axis=3)
+    elif Type == 2:
+        return np.flip(np.flip(batchdata, axis=2), axis=3)
+    elif Type == 3:
+        return np.flip(batchdata.transpose(0,1,3,2), axis=2) 
+    elif Type == 4:
+        return np.flip(batchdata, axis = 3)
+    elif Type == 5:
+        return np.flip(np.flip(batchdata, axis = 3).transpose(0,1,3,2), axis=3)
+    elif Type == 6:
+        return np.flip(batchdata, axis = 2)
+    elif Type == 7:
+        return batchdata.transpose(0,1,3,2)
+    else:
+        raise NotImplementedError("")
+
 def _half(x):
     if x % 2 ==0:
         return (x//2, x//2)

@@ -6,7 +6,7 @@ import megengine.distributed as dist
 import megengine as mge
 import megengine.functional as F
 from edit.core.evaluation import psnr, ssim
-from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de_multi_padding
+from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de_multi_padding, ensemble_forward, ensemble_back
 from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
@@ -143,7 +143,10 @@ class ManytoManyRestorer(BaseModel):
         Returns:
             list: outputs
         """
+        epoch = kwargs.get('epoch', 0)
         image = batchdata[0]  # [B,C,H,W]
+        image = ensemble_forward(image, Type = epoch)  # for ensemble
+
         H,W = image.shape[-2], image.shape[-1]
         scale = getattr(self.generator, 'upscale_factor', 4)
         padding_multi = self.eval_cfg.get('padding_multi', 1)
@@ -170,6 +173,9 @@ class ManytoManyRestorer(BaseModel):
         # update hidden state
         G, self.pre_SD, self.pre_S_hat, self.pre_D_hat, self.pre_S, self.pre_D = outputs
         
+        # back ensemble for G
+        G = ensemble_back(G, Type = epoch)
+
         save_image_flag = kwargs.get('save_image')
         if save_image_flag:
             save_path = kwargs.get('save_path', None)
@@ -177,8 +183,11 @@ class ManytoManyRestorer(BaseModel):
             if save_path is None or start_id is None:
                 raise RuntimeError("if save image in test_step, please set 'save_path' and 'sample_id' parameters")
             for idx in range(G.shape[0]):
-                imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, "idx_{}.png".format(start_id + idx)))
-        
+                if epoch == 0:
+                    imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, "idx_{}.png".format(start_id + idx)))
+                else:
+                    imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, "idx_{}_epoch_{}.png".format(start_id + idx, epoch)))
+
         print("now test num: {}".format(self.now_test_num))
         self.now_test_num += 1
         return outputs

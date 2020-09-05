@@ -17,6 +17,8 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 # TODO
 
 ### High
+* 完成视频的ensemble策略(for test now)
+
 * 考虑怎么减少many to many的io时间（ 部分存在内存中  \  制作lmdb）
 
 * 检查初始化是否合理
@@ -25,8 +27,6 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 对于test将10个clip分成3组，单独静态图测试（或者使用动态图，但有显存一直增加的bug）
 
 * 配置 lr 调度
-
-* 完成视频的ensemble策略(eval and test)
 
 * 测试多卡训练
 
@@ -38,6 +38,8 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 * 统计FLOPS
 
 ### Low
+* 视频的ensemble策略(for eval)
+
 * optimizer支持指定到参数的设置
 
 * 设置训练过程的seed，使得整个过程完全可复现

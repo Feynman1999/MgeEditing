@@ -23,6 +23,7 @@ def parse_args():
     parser.add_argument("-d", "--dynamic", default=False, action='store_true', help="enable dygraph mode")
     parser.add_argument("--gpus", type=int, default=1, help="how many gpus for one machine to use, 0 use cpu, default 1")
     parser.add_argument('--work_dir', type=str, default=None, help='the dir to save logs and models')
+    parser.add_argument('--ensemble', default=False)
     args = parser.parse_args()
     return args
 
@@ -48,7 +49,7 @@ def test(model, datasets, cfg, rank):
     else:
         raise RuntimeError("cfg.load_from should not be None for test")
 
-    runner.run(data_loaders, cfg.workflow, 1)
+    runner.run(data_loaders, cfg.workflow, 8 if cfg.ensemble else 1)
 
 def worker(rank, world_size, cfg):
     logger = get_root_logger()  # 每个进程再创建一个logger
@@ -77,6 +78,7 @@ def main():
     cfg = Config.fromfile(args.config)
     cfg.gpus = args.gpus
     cfg.dynamic = args.dynamic
+    cfg.ensemble = args.ensemble
     if args.work_dir is not None:
         cfg.work_dir = args.work_dir
     else:
