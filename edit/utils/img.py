@@ -35,8 +35,9 @@ def ensemble_back(batchdata, Type = 0):
         Type: 0~7
         return: ndarray
     """
-    assert is_var(batchdata)
-    batchdata = batchdata.to("cpu0").astype('float32').numpy()
+    assert is_var(batchdata) or is_ndarray(batchdata)
+    if is_var(batchdata):
+        batchdata = batchdata.to("cpu0").astype('float32').numpy()
     if Type == 0:
         return batchdata
     elif Type == 1:

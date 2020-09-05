@@ -171,6 +171,9 @@ class ManytoManyRestorer(BaseModel):
         outputs = list(outputs)
         outputs[0] = img_de_multi_padding(outputs[0], origin_H = H*scale, origin_W = W*scale)
         
+        for i in range(0, 6):
+            outputs[i] = outputs[i].numpy()
+
         # update hidden state
         G, self.pre_SD, self.pre_S_hat, self.pre_D_hat, self.pre_S, self.pre_D = outputs
         
