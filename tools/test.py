@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument("-d", "--dynamic", default=False, action='store_true', help="enable dygraph mode")
     parser.add_argument("--gpus", type=int, default=1, help="how many gpus for one machine to use, 0 use cpu, default 1")
     parser.add_argument('--work_dir', type=str, default=None, help='the dir to save logs and models')
-    parser.add_argument('--ensemble', default=False)
+    parser.add_argument("-e", "--ensemble", default=False, action = 'store_true')
     args = parser.parse_args()
     return args
 
