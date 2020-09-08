@@ -42,8 +42,8 @@ def train_generator_batch(image, label, *, opt, netG, netloss):
                                         image_D[:, 0, ...], image_S[:, 1, ...],
                                         image_D[:, 1, ...], pre_S_hat, pre_D_hat, pre_SD)
     HR_G.append(F.add_axis(imgHR, axis = 1))
-    HR_D.append(F.add_axis(img_S, axis = 1))
-    HR_S.append(F.add_axis(img_D, axis = 1))
+    HR_D.append(F.add_axis(img_D, axis = 1))
+    HR_S.append(F.add_axis(img_S, axis = 1))
     for t in range(1, T):
         imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(image[:, t, ...], image_S[:, t, ...], 
                                     image_D[:, t, ...], image_S[:, t-1, ...],
