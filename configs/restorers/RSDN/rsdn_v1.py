@@ -1,4 +1,4 @@
-exp_name = 'rsdn_x4_70e_mge'
+exp_name = 'rsdn_v1'
 
 scale = 4
 
@@ -128,18 +128,18 @@ total_epochs = 100 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=total_epochs // 10)
 log_config = dict(
-    interval=300,
+    interval=3,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=30000, save_image=True)
+evaluation = dict(interval=300, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
 load_from = None
-resume_from = f'./workdirs/{exp_name}/20200830_003959/checkpoints/epoch_10'
+resume_from = None
 resume_optim = True
 workflow = 'train'
 
