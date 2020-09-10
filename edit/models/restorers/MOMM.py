@@ -201,7 +201,7 @@ class MOMM(BaseModel):
             self.pre_S_hat = np.zeros((B, hidden_channels, now_H, now_W), dtype=np.float32)
             self.pre_D_hat = np.zeros_like(self.pre_S_hat)
             self.pre_SD = np.zeros_like(self.pre_S_hat)
-
+        
         outputs = test_generator_batch(image, self.pre_S_hat, self.pre_D_hat, self.pre_SD, netG = self.generator)
         outputs = list(outputs)
         outputs[0] = img_de_multi_padding(outputs[0], origin_H = H*scale, origin_W = W*scale)

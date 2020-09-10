@@ -18,7 +18,7 @@ model = dict(
 
 # model training and testing settings
 train_cfg = None
-eval_cfg = dict(metrics=['PSNR'], crop_border=0)
+eval_cfg = dict(metrics=['PSNR'], crop_border=0, padding_multi = 4)
 img_norm_cfg = dict(mean=[0.5, 0.5, 0.5], std=[1, 1, 1])
 
 # dataset settings
