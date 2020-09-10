@@ -2,14 +2,7 @@ import numpy as np
 import cv2
 from megengine import Tensor
 
-def ensemble_forward(batchdata, Type = 0):
-    """
-        batchdata:  B,C,H,W    numpy
-        Type:  0~7
-        return: ndarray
-    """
-    assert is_ndarray(batchdata)
-    assert len(batchdata.shape) == 4
+def ensemble_for_dim_4(batchdata, Type = 0):
     if Type == 0:
         return batchdata
     elif Type == 1:
@@ -29,15 +22,24 @@ def ensemble_forward(batchdata, Type = 0):
     else:
         raise NotImplementedError("")
 
-def ensemble_back(batchdata, Type = 0):
+def ensemble_forward(batchdata, Type = 0):
     """
-        batchdata:  B,C,H,W    tensor
-        Type: 0~7
+        batchdata:  B,C,H,W    numpy     or  B,T,C,H,W
+        Type:  0~7
         return: ndarray
     """
-    assert is_var(batchdata) or is_ndarray(batchdata)
-    if is_var(batchdata):
-        batchdata = batchdata.to("cpu0").astype('float32').numpy()
+    assert is_ndarray(batchdata)
+    assert len(batchdata.shape) == 4 or len(batchdata.shape) == 5
+    if len(batchdata.shape) == 4:
+        return ensemble_for_dim_4(batchdata, Type)
+    else:
+        L = []
+        for i in range(batchdata.shape[1]):
+            L.append(ensemble_for_dim_4(batchdata[:, i, ...], Type=Type))
+        return np.stack(L, axis = 1)  # B,T,C,H,W
+
+
+def ensemble_back_for_dim_4(batchdata, Type):
     if Type == 0:
         return batchdata
     elif Type == 1:
@@ -56,6 +58,24 @@ def ensemble_back(batchdata, Type = 0):
         return batchdata.transpose(0,1,3,2)
     else:
         raise NotImplementedError("")
+
+def ensemble_back(batchdata, Type = 0):
+    """
+        batchdata:  B,C,H,W    tensor
+        Type: 0~7
+        return: ndarray
+    """
+    assert is_var(batchdata) or is_ndarray(batchdata)
+    if is_var(batchdata):
+        batchdata = batchdata.to("cpu0").astype('float32').numpy()
+    if len(batchdata.shape) == 4:
+        return ensemble_back_for_dim_4(batchdata, Type)
+    else:
+        raise RuntimeError("ensemble back should for 4 dim not 5 dim usually!")
+        # L = []
+        # for i in range(batchdata.shape[1]):
+        #     L.append(ensemble_back_for_dim_4(batchdata[:, i, ...], Type=Type))
+        # return np.stack(L, axis = 1)  # B,T,C,H,W
 
 def _half(x):
     if x % 2 ==0:

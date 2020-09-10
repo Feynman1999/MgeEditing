@@ -99,14 +99,18 @@ def train_generator_batch(image, label, *, opt, netG, netloss):
 
 
 @trace(symbolic=True)
-def test_generator_batch(image, pre_S, pre_D, pre_S_hat, pre_D_hat, pre_SD, *, netG):
+def test_generator_batch(LR, pre_S_hat, pre_D_hat, pre_SD, *, netG):
     netG.eval()
-    _,_,H,W = image.shape
-    image_S = F.interpolate(image, scale_factor = [0.25, 0.25])
+    B,T,_,H,W = LR.shape
+    # image
+    image_S = LR.reshape((B*T, -1, H, W))
+    image_S = F.interpolate(image_S, scale_factor = [0.25, 0.25])
     image_S = F.interpolate(image_S, size = [H, W])
-    image_D = image - image_S
-    outputs = netG(image, image_S, image_D, pre_S, pre_D, pre_S_hat, pre_D_hat, pre_SD)
-    return list(outputs)[:4] + [image_S, image_D]
+    image_S = image_S.reshape((B, T, -1, H, W))
+    image_D = LR - image_S
+
+    outputs = netG(LR, image_S, image_D, pre_S_hat, pre_D_hat, pre_SD)
+    return list(outputs)[:4]
 
 
 @MODELS.register_module()
@@ -178,38 +182,35 @@ class MOMM(BaseModel):
             list: outputs
         """
         epoch = kwargs.get('epoch', 0)
-        image = batchdata[0]  # [B,C,H,W]
+        image = batchdata[0]  # [B,T,C,H,W]
         image = ensemble_forward(image, Type = epoch)  # for ensemble
 
         H,W = image.shape[-2], image.shape[-1]
         scale = getattr(self.generator, 'upscale_factor', 4)
         padding_multi = self.eval_cfg.get('padding_multi', 1)
         # padding for H and W
-        image = img_multi_padding(image, padding_multi = padding_multi, pad_value = -0.5)  # [B,C,H,W]
+        image = img_multi_padding(image, padding_multi = padding_multi, pad_value = -0.5)  # [B,T,C,H,W]
         
         assert image.shape[0] == 1  # only support batchsize 1
         assert len(batchdata[1].shape) == 1  # first frame flag
         if batchdata[1][0] > 0.5:  # first frame
             print("first frame")
             self.now_test_num = 1
-            B, _ , now_H ,now_W = image.shape
+            B,_,_,now_H ,now_W = image.shape
             print("use now_H : {} and now_W: {}".format(now_H, now_W))
             self.pre_S_hat = np.zeros((B, hidden_channels, now_H, now_W), dtype=np.float32)
             self.pre_D_hat = np.zeros_like(self.pre_S_hat)
             self.pre_SD = np.zeros_like(self.pre_S_hat)
-            self.pre_S = F.interpolate(mge.tensor(image), scale_factor = [0.25, 0.25])
-            self.pre_S = F.interpolate(self.pre_S, size = [now_H, now_W]).numpy()
-            self.pre_D = image - self.pre_S
 
-        outputs = test_generator_batch(image, self.pre_S, self.pre_D, self.pre_S_hat, self.pre_D_hat, self.pre_SD, netG = self.generator)
+        outputs = test_generator_batch(image, self.pre_S_hat, self.pre_D_hat, self.pre_SD, netG = self.generator)
         outputs = list(outputs)
         outputs[0] = img_de_multi_padding(outputs[0], origin_H = H*scale, origin_W = W*scale)
         
-        for i in range(0, 6):
+        for i in range(0, 4):
             outputs[i] = outputs[i].numpy()
 
         # update hidden state
-        G, self.pre_SD, self.pre_S_hat, self.pre_D_hat, self.pre_S, self.pre_D = outputs
+        G, self.pre_SD, self.pre_S_hat, self.pre_D_hat = outputs
         
         # back ensemble for G
         G = ensemble_back(G, Type = epoch)
