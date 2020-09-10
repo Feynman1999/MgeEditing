@@ -57,7 +57,7 @@ class SRManyToManyDataset(BaseVSRDataset):
         
         if self.lq_folder == self.gt_folder:
             # gt and lq in same dir, only select lq as keys
-            keys = [ key for key in keys if self.LR_symbol in key]
+            keys = [key for key in keys if self.LR_symbol in key]
 
         # do split for train and eval   
         if self.eval_part is not None:

@@ -57,14 +57,34 @@ def train_generator_batch(image, label, *, opt, netG, netloss):
     HR_D.append(F.add_axis(img_D, axis = 1))
     HR_S.append(F.add_axis(img_S, axis = 1))
 
+    for t in range(2, T-2):
+        imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(image[:, t-2:t+3, ...], image_S[:, t-2:t+3, ...], 
+                                                                 image_D[:, t-2:t+3, ...], pre_S_hat, pre_D_hat, pre_SD)
+        HR_G.append(F.add_axis(imgHR, axis = 1))
+        HR_D.append(F.add_axis(img_D, axis = 1))
+        HR_S.append(F.add_axis(img_S, axis = 1))
 
-    # for t in range(1, T):
-    #     imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(image[:, t, ...], image_S[:, t, ...], 
-    #                                 image_D[:, t, ...], image_S[:, t-1, ...],
-    #                                 image_D[:, t-1, ...], pre_S_hat, pre_D_hat, pre_SD)
-    #     HR_G.append(F.add_axis(imgHR, axis = 1))
-    #     HR_D.append(F.add_axis(img_S, axis = 1))
-    #     HR_S.append(F.add_axis(img_D, axis = 1))
+    # T-2 frame
+    LR = F.concat([image[:, T-4:T, ...], F.add_axis(image[:, -2, ...], axis=1)], axis = 1)
+    LR_S = F.concat([image_S[:, T-4:T, ...], F.add_axis(image_S[:, -2, ...], axis=1)], axis = 1)
+    LR_D = F.concat([image_D[:, T-4:T, ...], F.add_axis(image_D[:, -2, ...], axis=1)], axis = 1)
+    imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(LR, LR_S, LR_D, pre_S_hat, pre_D_hat, pre_SD)
+    # T-2 frame result
+    HR_G.append(F.add_axis(imgHR, axis = 1))
+    HR_D.append(F.add_axis(img_D, axis = 1))
+    HR_S.append(F.add_axis(img_S, axis = 1))
+
+
+    # T-1 frame
+    LR = F.concat([image[:, T-3:T, ...], F.add_axis(image[:, -2, ...], axis=1), F.add_axis(image[:, -3, ...], axis=1)], axis = 1)
+    LR_S = F.concat([image_S[:, T-3:T, ...], F.add_axis(image_S[:, -2, ...], axis=1), F.add_axis(image_S[:, -3, ...], axis=1)], axis = 1)
+    LR_D = F.concat([image_D[:, T-3:T, ...], F.add_axis(image_D[:, -2, ...], axis=1), F.add_axis(image_D[:, -3, ...], axis=1)], axis = 1)
+    imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(LR, LR_S, LR_D, pre_S_hat, pre_D_hat, pre_SD)
+    # T-1 frame result
+    HR_G.append(F.add_axis(imgHR, axis = 1))
+    HR_D.append(F.add_axis(img_D, axis = 1))
+    HR_S.append(F.add_axis(img_S, axis = 1))
+
 
     HR_G = F.concat(HR_G, axis = 1)
     HR_D = F.concat(HR_D, axis = 1)
@@ -90,7 +110,7 @@ def test_generator_batch(image, pre_S, pre_D, pre_S_hat, pre_D_hat, pre_SD, *, n
 
 
 @MODELS.register_module()
-class ManytoManyRestorer(BaseModel):
+class MOMM(BaseModel):
     """ManytoManyRestorer for video restoration.
 
     It must contain a generator that takes some component as inputs and outputs 
@@ -108,7 +128,7 @@ class ManytoManyRestorer(BaseModel):
     allowed_metrics = {'PSNR': psnr, 'SSIM': ssim}
 
     def __init__(self, generator, pixel_loss, train_cfg=None, eval_cfg=None, pretrained=None):
-        super(ManytoManyRestorer, self).__init__()
+        super(MOMM, self).__init__()
         global hidden_channels
         hidden_channels = generator.hidden_channels
 

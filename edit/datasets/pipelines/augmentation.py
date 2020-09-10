@@ -153,7 +153,7 @@ class GenerateFrameIndiceswithPadding(object):
             dict: A dict containing the processed data and information.
         """
         clip_name, frame_name = results['LRkey'].split('/') # 000/0000001.png
-        if results['HRkey']:
+        if 'HRkey' in results.keys():
             clip_name_HR, _ = results['HRkey'].split('/')
         frame_name, ext_name = osp.splitext(frame_name)
         if self.name_padding:
@@ -191,6 +191,7 @@ class GenerateFrameIndiceswithPadding(object):
 
         lq_path_root = results['lq_path']
         gt_path_root = results['gt_path']
+        
         lq_paths = [
             osp.join(lq_path_root, clip_name,  str(idx + self.index_start).zfill(padding_length) +ext_name)
             for idx in frame_list
