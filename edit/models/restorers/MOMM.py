@@ -1,7 +1,7 @@
 import os
 import time
 import numpy as np
-from megengine.jit import trace
+from megengine.jit import trace, SublinearMemoryConfig
 import megengine.distributed as dist
 import megengine as mge
 import megengine.functional as F
@@ -13,7 +13,9 @@ from ..registry import MODELS
 
 hidden_channels = 48
 
-@trace(symbolic=True)
+config = SublinearMemoryConfig()
+
+@trace(symbolic=True, sublinear_memory_config=config)
 def train_generator_batch(image, label, *, opt, netG, netloss):
     netG.train()
     B,T,_,H,W = image.shape

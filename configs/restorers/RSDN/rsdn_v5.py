@@ -11,7 +11,7 @@ model = dict(
         out_channels=3,
         mid_channels=128,
         hidden_channels = 64,
-        ch = 28,
+        ch = 32,
         blocknums = 7,
         upscale_factor = scale),
     pixel_loss=dict(type='RSDNLoss'))
