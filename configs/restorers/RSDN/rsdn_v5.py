@@ -50,7 +50,7 @@ train_pipeline = [
 ]
 
 eval_pipeline = [
-    dict(type="GenerateFrameIndiceswithPadding", padding='reflection_circle'),
+    dict(type="GenerateFrameIndiceswithPadding", padding='reflection_circle', name_padding = True),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
@@ -68,7 +68,7 @@ eval_pipeline = [
 ]
 
 test_pipeline = [
-    dict(type="GenerateFrameIndiceswithPadding", padding='reflection_circle'),
+    dict(type="GenerateFrameIndiceswithPadding", padding='reflection_circle', name_padding = True),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
