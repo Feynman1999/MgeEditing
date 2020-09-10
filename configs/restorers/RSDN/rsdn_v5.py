@@ -82,7 +82,7 @@ test_pipeline = [
 
 dataroot = "/home/megstudio/dataset"
 repeat_times = 1
-eval_part = ("26.mp4_down4x.mp4_frames", )
+eval_part = ("26.mkv_down4x.mp4_frames", )
 data = dict(
     # train
     samples_per_gpu=2,
