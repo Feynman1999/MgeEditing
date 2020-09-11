@@ -9,10 +9,10 @@ model = dict(
         type='RSDNV2',
         in_channels=3,
         out_channels=3,
-        mid_channels=92,
-        hidden_channels = 46,
-        ch = 46,
-        blocknums = 7,
+        mid_channels=80,
+        hidden_channels = 48,
+        ch = 32,
+        blocknums = 8,
         upscale_factor = scale),
     pixel_loss=dict(type='RSDNLoss'))
 

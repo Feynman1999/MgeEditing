@@ -242,10 +242,10 @@ class RSDNV2(M.Module):
         LR = self.deal_before_SD_block(LR)  # [B, 5*48, H, W]
         LR_S = self.deal_before_SD_block(LR_S)  # [B, 5*48, H, W]
         LR_D = self.deal_before_SD_block(LR_D)  # [B, 5*48, H, W]
-       
+               
         S = F.concat([LR, LR_S, pre_S_hat, pre_SD], axis = 1)
         S = self.pre_SD_S(S)
-        D = F.concat([LR, LR_S, pre_D_hat, pre_SD], axis = 1) 
+        D = F.concat([LR, LR_D, pre_D_hat, pre_SD], axis = 1) 
         D = self.pre_SD_D(D)
         for i in range(self.blocknums):
             S,D = self.SDBlocks[i](S, D)
