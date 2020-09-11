@@ -9,9 +9,9 @@ model = dict(
         type='RSDNV2',
         in_channels=3,
         out_channels=3,
-        mid_channels=256,
-        hidden_channels = 128,
-        ch = 64,
+        mid_channels=172,
+        hidden_channels = 86,
+        ch = 43,
         blocknums = 8,
         upscale_factor = scale),
     pixel_loss=dict(type='RSDNLoss'))
@@ -85,7 +85,7 @@ repeat_times = 1
 eval_part = ("26.mkv_down4x.mp4_frames", )
 data = dict(
     # train
-    samples_per_gpu=5,
+    samples_per_gpu=8,
     workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
@@ -126,7 +126,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.6*1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=1e-4, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 100 // repeat_times
