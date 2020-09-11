@@ -1,4 +1,4 @@
-exp_name = 'rsdn_v5'
+exp_name = 'rsdn_v6'
 
 scale = 4
 
@@ -9,9 +9,9 @@ model = dict(
         type='RSDNV2',
         in_channels=3,
         out_channels=3,
-        mid_channels=256,
-        hidden_channels = 128,
-        ch = 128,
+        mid_channels=92,
+        hidden_channels = 46,
+        ch = 46,
         blocknums = 7,
         upscale_factor = scale),
     pixel_loss=dict(type='RSDNLoss'))
@@ -27,7 +27,7 @@ eval_dataset_type = 'SRManyToOneDataset'
 test_dataset_type = 'SRManyToOneDataset'
 
 train_pipeline = [
-    dict(type='GenerateFrameIndices', interval_list=[1], many2many = True, name_padding = True),
+    dict(type='GenerateFrameIndices', interval_list=[1], many2many = True, name_padding = False),
     dict(type='TemporalReverse', keys=['lq_path', 'gt_path'], reverse_ratio=0.3),
     dict(
         type='LoadImageFromFileList',
@@ -50,7 +50,7 @@ train_pipeline = [
 ]
 
 eval_pipeline = [
-    dict(type="GenerateFrameIndiceswithPadding", padding='reflection_circle', name_padding = True),
+    dict(type="GenerateFrameIndiceswithPadding", padding='reflection_circle', name_padding = False),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
@@ -80,39 +80,37 @@ test_pipeline = [
     dict(type='Collect', keys=['lq', 'is_first'])
 ]
 
-dataroot = "/home/megstudio/dataset"
+dataroot = "/opt/data/private/datasets"
 repeat_times = 1
-eval_part = ("26.mkv_down4x.mp4_frames", )
+eval_part = ("26", )
 data = dict(
     # train
-    samples_per_gpu=4,
+    samples_per_gpu=8,
     workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
         dataset=dict(
             type=train_dataset_type,
-            lq_folder= dataroot + "/game1/train_png",
-            gt_folder= dataroot + "/game1/train_png",
+            lq_folder= dataroot + "/mge/train/pngs/LR",
+            gt_folder= dataroot + "/mge/train/pngs/HR",
             num_input_frames=9,
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part,
-            mode = "train",
-            LR_symbol = "_down4x.mp4")),
+            mode = "train")),
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,
     eval=dict(
         type=eval_dataset_type,
-        lq_folder= dataroot + "/game1/train_png",
-        gt_folder= dataroot + "/game1/train_png",
+        lq_folder= dataroot + "/mge/train/pngs/LR",
+        gt_folder= dataroot + "/mge/train/pngs/HR",
         num_input_frames = 5,
         pipeline=eval_pipeline,
         scale=scale,
         mode="eval",
-        eval_part = eval_part,
-        LR_symbol = "_down4x.mp4"),
+        eval_part = eval_part),
     # test
     test_samples_per_gpu=1,
     test_workers_per_gpu=4,
@@ -126,7 +124,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.5*1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=1e-4, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 100 // repeat_times
@@ -141,7 +139,7 @@ log_config = dict(
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=20000, save_image=True)
+evaluation = dict(interval=10000, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
