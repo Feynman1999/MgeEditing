@@ -38,3 +38,13 @@ class RSDNLoss(M.Module):
             return self.a * self.charbonnierloss(HR_S, label_S) + \
                 self.b * self.charbonnierloss(HR_D, label_D) + \
                 self.c * self.charbonnierloss(HR_G, label)
+
+
+@LOSSES.register_module()
+class RSDNLossv2(M.Module):
+    def __init__(self):
+        super(RSDNLossv2, self).__init__()
+        self.charbonnierloss = CharbonnierLoss()
+
+    def forward(self, HR_G, label):
+        return self.charbonnierloss(HR_G, label)
