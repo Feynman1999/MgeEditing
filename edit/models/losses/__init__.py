@@ -1,1 +1,1 @@
-from .pixelwise_loss import L1Loss, CharbonnierLoss, RSDNLoss
+from .pixelwise_loss import L1Loss, CharbonnierLoss, RSDNLoss, RSDNLossv2
