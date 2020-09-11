@@ -139,7 +139,7 @@ class SRManyToManyDataset(BaseVSRDataset):
             if now_deal == self.frame_num[key.split("/")[0]]:
                 is_first = 1
                 now_deal = 0
-            elif now_deal in sence[key.split("/")[0]]:
+            elif key.split("/")[0] in sence.keys() and now_deal in sence[key.split("/")[0]]:
                 is_first = 1
             else:
                 is_first = 0
