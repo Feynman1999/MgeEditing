@@ -27,7 +27,7 @@ eval_dataset_type = 'SRManyToOneDataset'
 test_dataset_type = 'SRManyToOneDataset'
 
 train_pipeline = [
-    dict(type='GenerateFrameIndices', interval_list=[1], many2many = True, name_padding = True),
+    dict(type='GenerateFrameIndices', interval_list=[1,2], many2many = True, name_padding = True),
     dict(type='TemporalReverse', keys=['lq_path', 'gt_path'], reverse_ratio=0.3),
     dict(
         type='LoadImageFromFileList',
@@ -80,37 +80,39 @@ test_pipeline = [
     dict(type='Collect', keys=['lq', 'is_first'])
 ]
 
-dataroot = "/home/aistudio/work/datasets"
+dataroot = "/home/megstudio/dataset"
 repeat_times = 1
-eval_part = ("26", )
+eval_part = ("26.mkv_down4x.mp4_frames", )
 data = dict(
     # train
-    samples_per_gpu=16,
-    workers_per_gpu=1,
+    samples_per_gpu=8,
+    workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
         dataset=dict(
             type=train_dataset_type,
-            lq_folder= dataroot + "/mge/train/LR",
-            gt_folder= dataroot + "/mge/train/HR",
+            lq_folder= dataroot + "/game1/train_png",
+            gt_folder= dataroot + "/game1/train_png",
             num_input_frames=9,
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part,
-            mode = "train")),
+            mode = "train",
+            LR_symbol = "_down4x.mp4")),
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,
     eval=dict(
         type=eval_dataset_type,
-        lq_folder= dataroot + "/mge/train/LR",
-        gt_folder= dataroot + "/mge/train/HR",
+        lq_folder= dataroot + "/game1/train_png",
+        gt_folder= dataroot + "/game1/train_png",
         num_input_frames = 5,
         pipeline=eval_pipeline,
         scale=scale,
         mode="eval",
-        eval_part = eval_part),
+        eval_part = eval_part,
+        LR_symbol = "_down4x.mp4"),
     # test
     test_samples_per_gpu=1,
     test_workers_per_gpu=4,
@@ -124,7 +126,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=2 * 1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=1e-4, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 100 // repeat_times
