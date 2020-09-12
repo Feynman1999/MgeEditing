@@ -76,25 +76,25 @@ class SRManyToManyDataset(BaseVSRDataset):
         
         # for meg competition
         sence = dict()
-        sence['92'] = []
-        sence['92'].append(304)
-        sence['93'] = []
-        sence['93'].append(156)
-        sence['93'].append(449)
-        sence['93'].append(740)
-        sence['94'] = []
-        sence['94'].append(363)
-        sence['94'].append(375)
-        sence['95'] = []
-        sence['95'].append(196)
-        sence['95'].append(272)
-        sence['95'].append(347)
-        sence['96'] = []
-        sence['96'].append(120)
-        sence['97'] = []
-        sence['97'].append(53)
-        sence['99'] = []
-        sence['99'].append(181)
+        # sence['92'] = []
+        # sence['92'].append(304)
+        # sence['93'] = []
+        # sence['93'].append(156)
+        # sence['93'].append(449)
+        # sence['93'].append(740)
+        # sence['94'] = []
+        # sence['94'].append(363)
+        # sence['94'].append(375)
+        # sence['95'] = []
+        # sence['95'].append(196)
+        # sence['95'].append(272)
+        # sence['95'].append(347)
+        # sence['96'] = []
+        # sence['96'].append(120)
+        # sence['97'] = []
+        # sence['97'].append(53)
+        # sence['99'] = []
+        # sence['99'].append(181)
 
         data_infos = []
         is_first = 1

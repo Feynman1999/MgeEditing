@@ -17,6 +17,8 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 # TODO
 
 ### High
+* LRU cache?
+
 * 完成视频的ensemble策略(for test now)
 
 * 考虑怎么减少many to many的io时间（ 部分存在内存中  \  制作lmdb）

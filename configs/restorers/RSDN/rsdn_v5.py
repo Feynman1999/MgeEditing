@@ -82,7 +82,7 @@ test_pipeline = [
 
 dataroot = "/home/megstudio/dataset"
 repeat_times = 1
-eval_part = ("26.mkv_down4x.mp4_frames", )
+eval_part = None
 data = dict(
     # train
     samples_per_gpu=8,
@@ -141,12 +141,12 @@ log_config = dict(
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=20000, save_image=True)
+evaluation = dict(interval=2000000, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
 load_from = None
-resume_from = None
+resume_from = f'./workdirs/{exp_name}/20200911_075509/epoch_2'
 resume_optim = True
 workflow = 'train'
 

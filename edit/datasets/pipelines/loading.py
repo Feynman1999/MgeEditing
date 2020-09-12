@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 from ..registry import PIPELINES
 from edit.utils import FileClient, imfrombytes
 import numpy as np
@@ -84,6 +85,7 @@ class LoadImageFromFileList(LoadImageFromFile):
         kwargs (dict): Args for file client.
     """
 
+    @lru_cache(maxsize=None)
     def __call__(self, results):
         """Call function.
 
