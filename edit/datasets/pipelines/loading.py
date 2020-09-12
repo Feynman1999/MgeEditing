@@ -85,7 +85,7 @@ class LoadImageFromFileList(LoadImageFromFile):
         kwargs (dict): Args for file client.
     """
 
-    @lru_cache(maxsize=None)
+    # @lru_cache(maxsize=None)
     def __call__(self, results):
         """Call function.
 
