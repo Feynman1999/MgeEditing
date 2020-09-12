@@ -173,7 +173,7 @@ class MUCAN(M.Module):
                  input_nc = 3,
                  output_nc = 3,
                  upscale_factor=4, 
-                 use_cost_volume = True):
+                 use_cost_volume = False):
         super(MUCAN, self).__init__()
         self.nframes = nframes
         self.upscale_factor = upscale_factor
