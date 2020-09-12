@@ -4,7 +4,7 @@ from megengine.jit import trace, SublinearMemoryConfig
 import megengine.distributed as dist
 import megengine as mge
 from edit.core.evaluation import psnr, ssim
-from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de_multi_padding
+from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de_multi_padding, ensemble_back, ensemble_forward
 from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
@@ -97,7 +97,10 @@ class ManytoOneRestorer(BaseModel):
         Returns:
             list: outputs (already gathered from all threads)
         """
+        epoch = kwargs.get('epoch', 0)
         images = batchdata[0] # [B,N,C,H,W]
+        images = ensemble_forward(images, Type = epoch)  # for ensemble
+
         H,W = images.shape[-2], images.shape[-1]
         scale = getattr(self.generator, 'upscale_factor', 4)
         padding_multi = self.eval_cfg.get('padding_multi', 1)
@@ -106,15 +109,21 @@ class ManytoOneRestorer(BaseModel):
         output = test_generator_batch(images, netG = self.generator)  # HR [B,C,4H,4W]
         output = img_de_multi_padding(output, origin_H = H*scale, origin_W = W*scale)
         
+        # back ensemble for G
+        G = ensemble_back(output, Type = epoch)
+
         save_image_flag = kwargs.get('save_image')
         if save_image_flag:
             save_path = kwargs.get('save_path', None)
             start_id = kwargs.get('sample_id', None)
             if save_path is None or start_id is None:
                 raise RuntimeError("if save image in test_step, please set 'save_path' and 'sample_id' parameters")
-            G = output
             for idx in range(G.shape[0]):
-                imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, "idx_{}.png".format(start_id + idx)))
+                if epoch == 0:
+                    imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, "idx_{}.png".format(start_id + idx)))
+                else:
+                    imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, "idx_{}_epoch_{}.png".format(start_id + idx, epoch)))
+
         return [output, ]
 
     def cal_for_eval(self, gathered_outputs, gathered_batchdata):

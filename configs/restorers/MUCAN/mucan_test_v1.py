@@ -115,7 +115,7 @@ data = dict(
     test_workers_per_gpu=4,
     test=dict(
         type=test_dataset_type,
-        lq_folder= dataroot + "/Vid4/test/A",
+        lq_folder= "/home/megstudio/workspace/test/test1",
         num_input_frames = frames,
         pipeline=test_pipeline,
         scale=scale,
@@ -142,10 +142,10 @@ evaluation = dict(interval=30000, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = None
+load_from = f'/home/megstudio/workspace/checkpoints/mucan_v1/epoch_63'
 resume_from = None
 resume_optim = True
-workflow = 'train'
+workflow = 'test'
 
 # logger
 log_level = 'INFO'
