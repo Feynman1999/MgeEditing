@@ -8,7 +8,7 @@ model = dict(
     type='ManytoOneRestorer',
     generator=dict(
         type='MUCAN',
-        ch=32*8,
+        ch=144,
         nframes = frames,
         input_nc = 3,
         output_nc = 3,
@@ -27,7 +27,7 @@ test_dataset_type = 'SRManyToOneDataset'
 
 train_pipeline = [
     dict(type='GenerateFrameIndices', interval_list=[1, 2], many2many = False, name_padding = True),
-    dict(type='TemporalReverse', keys=['lq_path', 'gt_path'], reverse_ratio=0.3),
+    dict(type='TemporalReverse', keys=['lq_path', 'gt_path'], reverse_ratio=0.2),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
@@ -38,7 +38,7 @@ train_pipeline = [
         io_backend='disk',
         key='gt',
         flag='unchanged'),
-    dict(type='PairedRandomCrop', gt_patch_size=256),
+    dict(type='PairedRandomCrop', gt_patch_size=72 * 4),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='horizontal'),
@@ -85,8 +85,8 @@ repeat_times = 1
 eval_part = ("26", )
 data = dict(
     # train
-    samples_per_gpu=3,
-    workers_per_gpu=3,
+    samples_per_gpu=1,
+    workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
@@ -100,7 +100,7 @@ data = dict(
             eval_part = eval_part)),
     # eval
     eval_samples_per_gpu=1,
-    eval_workers_per_gpu=4,
+    eval_workers_per_gpu=1,
     eval=dict(
         type=eval_dataset_type,
         lq_folder= dataroot + "/mge/train/LR",
@@ -123,7 +123,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=3/16 * 1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=8/16 * 1e-4, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 100 // repeat_times
