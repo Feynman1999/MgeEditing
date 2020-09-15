@@ -1,7 +1,9 @@
 """
-for MOMM V2 model
+for MOMM V3 model
 不使用SD结构
-使用RNN + window
+使用RNN + window(5)
+使用bicubic残差
+更改AU模块为两个3*3卷积
 """
 
 import numpy as np
@@ -16,8 +18,10 @@ class AU(M.Module):
     def __init__(self, ch):
         super(AU, self).__init__()
         self.conv = M.Sequential(
-            M.Conv2d(2*ch, ch, kernel_size=5, stride=1, padding=2),
-            M.LeakyReLU()
+            M.Conv2d(2*ch, ch, kernel_size=3, stride=1, padding=1),
+            M.LeakyReLU(),
+            M.Conv2d(ch, ch, kernel_size=3, stride=1, padding=1),
+            M.LeakyReLU(),
         )
 
     def forward(self, mid, ref):
@@ -32,7 +36,7 @@ class AU(M.Module):
 class CARBBlock(M.Module):
     def __init__(self, channel_num):
         super(CARBBlock, self).__init__()
-        self.conv1 = M.Sequential(
+        self.conv1 = M.Sequential(  
             M.Conv2d(channel_num, channel_num, kernel_size=3, padding=1, stride=1),
             M.LeakyReLU(),
             M.Conv2d(channel_num, channel_num, kernel_size=3, padding=1, stride=1),
@@ -107,7 +111,7 @@ class Identi(M.Module):
 
 
 @BACKBONES.register_module()
-class RSDNV3(M.Module):
+class RSDNV4(M.Module):
     """RSDN network structure.
 
     Paper:
@@ -119,28 +123,28 @@ class RSDNV3(M.Module):
     def __init__(self,
                  in_channels=3,
                  out_channels=3,
-                 mid_channels = 128,
-                 hidden_channels = 3 * 4 * 4,
+                 mid_channels = 160,
                  ch = 24,
-                 blocknums = 5,
+                 blocknums1 = 3,
+                 blocknums2 = 3,
                  upscale_factor=4,
                  hsa = False, 
-                 pixel_shuffle = False,
+                 pixel_shuffle = True,
                  window_size = 5):
-        super(RSDNV3, self).__init__()
+        super(RSDNV4, self).__init__()
         if hsa: 
             raise NotImplementedError("")
         else:
             self.hsa = Identi()
         self.window_size = window_size
-        self.blocknums = blocknums
-        self.hidden_channels = hidden_channels
+        self.blocknums1 = blocknums1
+        self.blocknums2 = blocknums2
 
-        # 每个LR搞三个尺度(同时适用于S和D)
+        # 每个LR搞三个尺度
         self.feature_encoder_carb = M.Sequential(
             M.Conv2d(in_channels, ch, kernel_size=3, stride=1, padding=1),
             M.LeakyReLU(negative_slope=0.05),
-            CARBBlocks(channel_num=ch, block_num=blocknums)
+            CARBBlocks(channel_num=ch, block_num=self.blocknums1)
         )
         self.fea_L1_conv1 = M.Conv2d(ch, ch, 3, 2, 1)
         self.fea_L1_conv2 = M.Conv2d(ch, ch, 3, 1, 1)
@@ -155,24 +159,29 @@ class RSDNV3(M.Module):
         self.UP1 = M.ConvTranspose2d(ch, ch, kernel_size=4, stride=2, padding=1)
 
         self.pre_SD_S = M.Sequential(
-            Conv2d(hidden_channels + self.window_size*ch, mid_channels, 3, 1, 1),
+            Conv2d(48 + mid_channels + self.window_size*ch, mid_channels, 3, 1, 1),
             M.LeakyReLU()
         )
 
         self.convs = M.Sequential(
-            CARBBlocks(channel_num=mid_channels, block_num=blocknums),
-            Conv2d(mid_channels, hidden_channels, 3, 1, 1),
-            M.LeakyReLU()
+            CARBBlocks(channel_num=mid_channels, block_num=self.blocknums2),
+        )
+
+        self.hidden = M.Sequential(
+            Conv2d(2*mid_channels, mid_channels, 3, 1, 1),
+            M.LeakyReLU(),
+            CARBBlocks(channel_num=mid_channels, block_num=3),
         )
 
         self.tail = M.Sequential(
-            CARBBlocks(channel_num=hidden_channels, block_num=3),
+            CARBBlocks(channel_num=mid_channels, block_num=3),
+            Conv2d(mid_channels, 48, 3, 1, 1)
         )
 
         if pixel_shuffle:
             self.trans_HR = PixelShuffle(upscale_factor)
         else:
-            self.trans_HR = ConvTranspose2d(hidden_channels, 3, 4, 4, 0, bias=False)
+            self.trans_HR = ConvTranspose2d(48, 3, 4, 4, 0, bias=True)
 
     def deal_before_SD_block(self, x):
         B, N, C, H, W = x.shape  # N video frames
@@ -203,23 +212,19 @@ class RSDNV3(M.Module):
             align_LRs.append(AU0_out)
 
         align_LRs = F.concat(align_LRs, axis = 1)
-        return align_LRs  # [B, 5*48, H, W]
+        return align_LRs  # [B, 5*24, H, W]
 
-    def forward(self, LR, pre_SD):
-        """
-            args:
-            LR: the LR images for this time stamp (5 frames)
-            return: 
-        """
+    def forward(self, LR, pre_HR, pre_SD):
         pre_SD = self.hsa(LR, pre_SD)  # auto select for hidden SD
         # do mucan 
-        LR = self.deal_before_SD_block(LR)  # [B, 5*48, H, W]
-        S = F.concat([LR, pre_SD], axis = 1)
+        LR = self.deal_before_SD_block(LR)  # [B, 5*24, H, W]
+        S = F.concat([LR, pre_SD, pre_HR], axis = 1)  # 5*24 + 48 + 64
         S = self.pre_SD_S(S)
         S = self.convs(S)
         del LR
-        HR = self.trans_HR(self.tail(S))
-        return HR, S
+        hidden_state = self.hidden(F.concat([S, pre_SD], axis=1))
+        HR = self.tail(S)
+        return self.trans_HR(HR), HR, hidden_state
 
     def init_weights(self, pretrained=None, strict=True):
         # 这里也可以进行参数的load，比如不在之前保存的路径中的模型（预训练好的）

@@ -1,5 +1,6 @@
 """
 for MOMM model
+使用RNN + window + SD
 """
 
 import numpy as np
