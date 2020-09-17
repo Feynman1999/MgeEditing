@@ -85,7 +85,7 @@ repeat_times = 1
 eval_part = ("26", )
 data = dict(
     # train
-    samples_per_gpu=3,
+    samples_per_gpu=2,
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
@@ -123,7 +123,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=5e-5, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=5e-6 / 3, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 100 // repeat_times
@@ -132,17 +132,17 @@ total_epochs = 100 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=total_epochs // 50)
 log_config = dict(
-    interval=300,
+    interval=200,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=30000, save_image=True)
+evaluation = dict(interval=20000, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = None
+load_from = f'./workdirs/{exp_name}/20200916_235906/checkpoints/epoch_8'
 resume_from = None
 resume_optim = True
 workflow = 'train'

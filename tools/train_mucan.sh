@@ -1,2 +1,2 @@
-nohup python -u tools/train.py configs/restorers/MUCAN/mucan_x4_mge_epoch.py  >> /opt/data/private/mucan1.log 2>&1 &
+nohup python -u tools/train.py configs/restorers/MUCAN/mucan_x4_mge_epoch.py  >> /opt/data/private/mucan_baseline_low_lr_stage2.log 2>&1 &
 # python tools/train.py configs/restorers/MUCAN/mucan_x4_mge_epoch.py
