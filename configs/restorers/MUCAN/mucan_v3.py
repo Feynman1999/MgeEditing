@@ -1,18 +1,20 @@
-exp_name = 'mucan_v2'
+exp_name = 'mucan_v3'
 
 scale = 4
-frames = 9
+frames = 7
 
 # model settings
 model = dict(
-    type='ManytoOneRestorer',
+    type='ManytoOneRestorer_v2',
     generator=dict(
-        type='MUCAN',
-        ch=180,
+        type='MUCANV2',
+        ch=128,
         nframes = frames,
         input_nc = 3,
         output_nc = 3,
-        upscale_factor = scale),
+        upscale_factor = scale,
+        blocknums1 = 5,
+        blocknums2 = 10),
     pixel_loss=dict(type='L1Loss'))
 
 # model training and testing settings
@@ -38,7 +40,7 @@ train_pipeline = [
         io_backend='disk',
         key='gt',
         flag='unchanged'),
-    dict(type='PairedRandomCrop', gt_patch_size=68 * 4),
+    dict(type='PairedRandomCrop', gt_patch_size=64 * 4),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='horizontal'),
@@ -123,7 +125,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=8/16/10 * 1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=8/32 * 1e-4, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 100 // repeat_times
@@ -138,11 +140,11 @@ log_config = dict(
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=20000, save_image=True)
+evaluation = dict(interval=30000, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20200915_091533/checkpoints/epoch_58'
+load_from = None
 resume_from = None
 resume_optim = True
 workflow = 'train'
