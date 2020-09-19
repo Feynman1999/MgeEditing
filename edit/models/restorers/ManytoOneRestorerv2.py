@@ -34,7 +34,7 @@ def train_generator_batch(image, mid_bicubic, label, *, opt, netG, netloss):
     return loss
 
 
-@trace(symbolic=True, sublinear_memory_config=config)
+@trace(symbolic=True)
 def test_generator_batch(image, mid_bicubic, *, netG):
     netG.eval()
     output = netG(image, mid_bicubic)

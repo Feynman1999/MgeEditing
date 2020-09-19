@@ -59,6 +59,10 @@ class EvalIterHook(Hook):
         """
         if not self.every_n_iters(runner, self.interval):
             return
+
+        for key, para in runner.model.generator.named_parameters():
+            para.requires_grad = False
+
         self.logger.info("start to eval for iter: {}".format(runner.iter+1))
         save_path = os.path.join(self.save_path, "iter_{}".format(runner.iter+1))
         results = []  # list of dict
@@ -92,6 +96,9 @@ class EvalIterHook(Hook):
                 pass
         if self.local_rank == 0:
             self.evaluate(results, runner.iter+1)
+
+        for key, para in runner.model.generator.named_parameters():
+            para.requires_grad = True
 
     def evaluate(self, results, iters):
         """Evaluation function.
