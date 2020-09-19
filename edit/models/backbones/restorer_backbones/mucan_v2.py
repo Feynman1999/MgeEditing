@@ -226,7 +226,7 @@ class MUCANV2(M.Module):
         align_LRs = F.concat(align_LRs, axis = 1)  # [B, N*C, H, W]
         align_LRs = self.non_local(align_LRs)  # [B, N*C, H, W]
         align_LRs = self.aggre(align_LRs)
-        align_lRs = align_LRs + self.carbs(align_LRs)
+        align_LRs = align_LRs + self.carbs(align_LRs)
         return self.main_conv(align_LRs) + x_mid_bicubic
 
     def init_weights(self, pretrained=None, strict=True):
