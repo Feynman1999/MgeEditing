@@ -118,7 +118,7 @@ class Separate_non_local(M.Module):
         A3 = self.A3(x).reshape(B, N, C, H, W).reshape(B, N, C*H*W)
         B3 = F.dimshuffle(self.B3(x).reshape(B, N, C, H, W).reshape(B, N, C*H*W), (0, 2, 1))
 
-        D1 = self.D1(x).reshape(B, N*C, H*W).permute(0, 2, 1)  # [B, H*W, N*C]
+        D1 = F.dimshuffle(self.D1(x).reshape(B, N*C, H*W),(0, 2, 1))  # [B, H*W, N*C]
         D2 = F.dimshuffle(self.D2(x).reshape(B, N, C, H, W), (0, 2, 1, 3, 4)).reshape(B, C, N*H*W)
         D3 = self.D3(x).reshape(B, N, C, H, W).reshape(B, N, C*H*W)
 
