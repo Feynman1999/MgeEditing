@@ -19,7 +19,7 @@ def is_filepath(x):
 
 def check_file_exist(filename, msg_tmpl='file "{}" does not exist'):
     if not osp.isfile(filename):
-        print(filename)
+        # print(filename)
         raise FileNotFoundError(msg_tmpl.format(filename))
 
 
