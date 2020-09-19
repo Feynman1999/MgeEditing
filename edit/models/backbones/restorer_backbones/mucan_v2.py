@@ -97,9 +97,6 @@ class Separate_non_local(M.Module):
     def __init__(self, channel_num, frames):
         super(Separate_non_local, self).__init__()
         self.frames = frames
-        self.A1 = M.Conv2d(channel_num * frames, channel_num * frames, kernel_size=1, padding=0, stride=1)
-        self.B1 = M.Conv2d(channel_num * frames, channel_num * frames, kernel_size=1, padding=0, stride=1)
-        self.D1 = M.Conv2d(channel_num * frames, channel_num * frames, kernel_size=1, padding=0, stride=1)
         self.A2 = M.Conv2d(channel_num * frames, channel_num * frames, kernel_size=1, padding=0, stride=1)
         self.B2 = M.Conv2d(channel_num * frames, channel_num * frames, kernel_size=1, padding=0, stride=1)
         self.D2 = M.Conv2d(channel_num * frames, channel_num * frames, kernel_size=1, padding=0, stride=1)
@@ -111,25 +108,20 @@ class Separate_non_local(M.Module):
         B, C, H, W = x.shape
         N = self.frames
         C = C // N
-        A1 = F.dimshuffle(self.A1(x).reshape(B, N*C, H*W), (0, 2, 1))  # [B, H*W, N*C]
-        B1 = self.B1(x).reshape(B, N*C, H*W)
         A2 = F.dimshuffle(self.A2(x).reshape(B, N, C, H, W), (0, 2, 1, 3, 4)).reshape(B, C, N*H*W)
         B2 = F.dimshuffle(self.B2(x).reshape(B, N, C, H, W), (0, 1, 3, 4, 2)).reshape(B, N*H*W, C)
         A3 = self.A3(x).reshape(B, N, C, H, W).reshape(B, N, C*H*W)
         B3 = F.dimshuffle(self.B3(x).reshape(B, N, C, H, W).reshape(B, N, C*H*W), (0, 2, 1))
 
-        D1 = F.dimshuffle(self.D1(x).reshape(B, N*C, H*W),(0, 2, 1))  # [B, H*W, N*C]
         D2 = F.dimshuffle(self.D2(x).reshape(B, N, C, H, W), (0, 2, 1, 3, 4)).reshape(B, C, N*H*W)
         D3 = self.D3(x).reshape(B, N, C, H, W).reshape(B, N, C*H*W)
 
-        attention1 = F.softmax(F.batched_matrix_mul(A1, B1), axis = -1)  # [B, H*W, H*W]
         attention2 = F.softmax(F.batched_matrix_mul(A2, B2), axis = -1)  # [B, C, C]
         attention3 = F.softmax(F.batched_matrix_mul(A3, B3), axis = -1)  # [B, N, N]
 
-        E1 = F.dimshuffle(F.batched_matrix_mul(attention1, D1),(0, 2, 1)).reshape(B, N*C, H, W)
         E2 = F.dimshuffle(F.batched_matrix_mul(attention2, D2).reshape(B, C, N, H, W), (0, 2, 1, 3, 4)).reshape(B, N*C, H, W)
         E3 = F.batched_matrix_mul(attention3, D3).reshape(B, N*C, H, W)
-        return x + E1 + E2 + E3
+        return x + E2 + E3
 
 
 @BACKBONES.register_module()
