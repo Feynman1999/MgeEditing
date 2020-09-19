@@ -118,7 +118,7 @@ data = dict(
     test_workers_per_gpu=4,
     test=dict(
         type=test_dataset_type,
-        lq_folder= "/home/megstudio/workspace/test/test1",
+        lq_folder= "/home/megstudio/workspace/test/test2",
         num_input_frames = 5,
         pipeline=test_pipeline,
         scale=scale,
@@ -145,7 +145,7 @@ evaluation = dict(interval=2000000, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'/home/megstudio/workspace/checkpoints/rsdn_v8/epoch_20'
+load_from = f'/home/megstudio/workspace/checkpoints/rsdn_v8/epoch_30'
 resume_from = None
 resume_optim = True
 workflow = 'test'
