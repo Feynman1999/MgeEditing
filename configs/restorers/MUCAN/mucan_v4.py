@@ -93,8 +93,8 @@ data = dict(
         times=repeat_times,
         dataset=dict(
             type=train_dataset_type,
-            lq_folder= dataroot + "/mge/train/LR",
-            gt_folder= dataroot + "/mge/train/HR",
+            lq_folder= dataroot + "/game1/train_png",
+            gt_folder= dataroot + "/game1/train_png",
             num_input_frames=frames,
             pipeline=train_pipeline,
             scale=scale,
@@ -104,8 +104,8 @@ data = dict(
     eval_workers_per_gpu=0,
     eval=dict(
         type=eval_dataset_type,
-        lq_folder= dataroot + "/mge/train/LR",
-        gt_folder= dataroot + "/mge/train/HR",
+        lq_folder= dataroot + "/game1/train_png",
+        gt_folder= dataroot + "/game1/train_png",
         num_input_frames = frames,
         pipeline=eval_pipeline,
         scale=scale,
@@ -133,13 +133,13 @@ total_epochs = 100 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=total_epochs // 50)
 log_config = dict(
-    interval=300,
+    interval=3,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=30000, save_image=True)
+evaluation = dict(interval=30, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
