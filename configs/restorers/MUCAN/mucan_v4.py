@@ -98,7 +98,8 @@ data = dict(
             num_input_frames=frames,
             pipeline=train_pipeline,
             scale=scale,
-            eval_part = eval_part)),
+            eval_part = eval_part,
+            LR_symbol = "_down4x.mp4")),
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=0,
@@ -110,7 +111,8 @@ data = dict(
         pipeline=eval_pipeline,
         scale=scale,
         mode="eval",
-        eval_part = eval_part),
+        eval_part = eval_part,
+        LR_symbol = "_down4x.mp4"),
     # test
     test_samples_per_gpu=1,
     test_workers_per_gpu=4,
