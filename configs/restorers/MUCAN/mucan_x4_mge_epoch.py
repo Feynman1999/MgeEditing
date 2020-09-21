@@ -85,8 +85,8 @@ repeat_times = 1
 eval_part = None
 data = dict(
     # train
-    samples_per_gpu=2,
-    workers_per_gpu=4,
+    samples_per_gpu=3,
+    workers_per_gpu=7,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
@@ -132,13 +132,13 @@ total_epochs = 100 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=total_epochs // 50)
 log_config = dict(
-    interval=100,
+    interval=400,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=10000, save_image=True)
+evaluation = dict(interval=2000000, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
