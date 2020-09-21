@@ -6,6 +6,13 @@ import megengine.functional as F
 from edit.models.builder import BACKBONES
 from edit.models.common import compute_cost_volume
 
+class Identi(M.Module):
+    def __init__(self):
+        super(Identi, self).__init__()
+    
+    def forward(self, x):
+        return x
+
 class PixelShuffle(M.Module):
     def __init__(self, scale=2):
         super(PixelShuffle, self).__init__()
@@ -140,7 +147,8 @@ class MUCANV2(M.Module):
                  output_nc = 3,
                  upscale_factor=4,
                  blocknums1 = 5,
-                 blocknums2 = 15):
+                 blocknums2 = 15,
+                 non_local = True):
         super(MUCANV2, self).__init__()
         self.nframes = nframes
         self.upscale_factor = upscale_factor
@@ -163,7 +171,10 @@ class MUCANV2(M.Module):
         self.UP0 = M.ConvTranspose2d(ch, ch, kernel_size=4, stride=2, padding=1)
         self.UP1 = M.ConvTranspose2d(ch, ch, kernel_size=4, stride=2, padding=1)
 
-        self.non_local = Separate_non_local(ch, nframes)
+        if non_local:
+            self.non_local = Separate_non_local(ch, nframes)
+        else:
+            self.non_local = Identi()
 
         self.aggre = M.Conv2d(ch * self.nframes, ch, kernel_size=3, stride=1, padding=1)
 
