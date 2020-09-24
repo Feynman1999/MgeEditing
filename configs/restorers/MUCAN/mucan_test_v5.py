@@ -146,10 +146,10 @@ evaluation = dict(interval=20000000, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20200923_043324/checkpoints/epoch_34'
+load_from = '/home/megstudio/workspace/checkpoints/mucan_v5/epoch_5'
 resume_from = None
 resume_optim = True
-workflow = 'train'
+workflow = 'test'
 
 # logger
 log_level = 'INFO'
