@@ -49,28 +49,3 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 * checkpoint simlink
 
 * 模型动转静、模型部署
-
-
-* aistudio操作流程：按指定路径去activate mge环境，然后即可运行。
-source activate /home/aistudio/external-libraries/envs/mge
-缺点：shm太小
-有点：有数据集，显卡32GB，性能好
-
-* mgestudio
-缺点：性能一般
-优点：shm大，可以正常使用
-
-* aimax
-缺点：性能一般
-优点：shm大，可以正常使用
-
-* 级链
-缺点：贵
-优点：内存大
-
-
-第16 23 52 59 62 72 88帧 LR多1 ，但使用windows上的ffmpeg时帧数正常。
-处理流程：
-1. 将HR的mp4/mkv转为LR，指令：ffmpeg -i 16.mkv -vf scale=iw/4:ih/4 -c:v libx264 -preset slow -crf 21 test.mp4
-2. 将HR和LR的视频分别转为pngs，指令： ffmpeg -i test.mp4  %d.png   (1 index, name no padding)
-还不清楚和官方是否一样
