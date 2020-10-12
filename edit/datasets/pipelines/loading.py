@@ -53,6 +53,8 @@ class LoadImageFromFile(object):
         filepath = str(results[f'{self.key}_path'])
         img_bytes = self.file_client.get(filepath)
         img = imfrombytes(img_bytes, flag=self.flag, channel_order=self.channel_order)  # HWC
+        if len(img.shape) == 2:
+            img = np.expand_dims(img, axis=2)
 
         results[self.key] = img
         results[f'{self.key}_path'] = filepath

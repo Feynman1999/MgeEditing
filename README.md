@@ -17,6 +17,8 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 # TODO
 
 ### High
+focal loss 对不对，先把cls准确度提上去
+
 * LRU cache?
 
 * 完成视频的ensemble策略(for test now)

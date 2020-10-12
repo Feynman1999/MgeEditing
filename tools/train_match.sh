@@ -1,0 +1,1 @@
+python tools/train.py configs/matching/siamfcpp/v1.py
