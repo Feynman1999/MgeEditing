@@ -253,6 +253,21 @@ def imrescale(img, scale, return_scale=False, interpolation='area'):
         return rescaled_img
 
 
+def bboxflip_(bbox, direction='horizontal', Len = 400):
+    """
+        top left  bottom  right
+    """
+    assert direction in ['horizontal', 'vertical']
+    assert len(bbox.shape) == 1 and len(bbox) == 4
+    if direction == 'horizontal':
+        x = bbox[3] - bbox[1]
+        bbox[3] = Len-1-bbox[1]
+        bbox[1] = bbox[3] - x 
+    else:
+        x = bbox[2] - bbox[0]
+        bbox[2] = Len-1-bbox[0]
+        bbox[0] = bbox[2] - x
+
 def imflip_(img, direction='horizontal'):
     """Inplace flip an image horizontally or vertically.
 

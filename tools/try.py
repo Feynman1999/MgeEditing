@@ -52,7 +52,7 @@ def get_cls_reg_ctr_targets(points, gt_bboxes, bbox_scale = 0.25):
     centerness_targets = F.sqrt(F.abs(up_bottom * left_right))
     return cls_labels, bbox_targets, centerness_targets
 
-a = get_xy_ctr_np(19, 127.5, 8)
+a = get_xy_ctr_np(37, 255.5, 8)
 print(a)
 # gt_bboxes = mge.tensor(np.array([[0,0,255,255], [100,100,355,355]]).astype(np.float32))
 

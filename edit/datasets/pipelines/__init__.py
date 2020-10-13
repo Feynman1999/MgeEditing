@@ -5,3 +5,4 @@ from .crop import PairedRandomCrop
 from .normalization import RescaleToZeroOne, Normalize
 from .augmentation import Flip
 from .resize import RandomResizedCrop, Resize
+from .colorjitter import Bgr2Gray, ColorJitter

@@ -72,7 +72,10 @@ class BaseMatchDataset(BaseDataset):
 
         for res in results:
             for metric, val in res.items():
+                if "id" in metric:
+                    continue
                 eval_results[metric].append(val)
+
         for metric, val_list in eval_results.items():
             assert len(val_list) == len(self), (
                 f'Length of evaluation result of {metric} is {len(val_list)}, '

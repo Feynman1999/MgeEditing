@@ -17,7 +17,11 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 # TODO
 
 ### High
-focal loss 对不对，先把cls准确度提上去
+输入调大，不用下采样   ->  1.9 
+增加flip 和 tranpose  ->  1.5
+centerness -> 1.4
+eval统计各个类别的统计信息，不光整体的均值，还有各个类别的，以及偏差最大的
+搞明白BN save会不会出问题？如何test
 
 * LRU cache?
 

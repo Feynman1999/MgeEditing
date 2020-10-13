@@ -17,9 +17,8 @@ def get_box(xy_ctr, offsets):
         xy_ctr: [1,2,19,19]
         offsets: [B,2,19,19]
     """
-    
-    xy0 = (xy_ctr - F.zeros_like(offsets) - 127.5)  # top-left
-    xy1 = xy0 + 255  # bottom-right
+    xy0 = (xy_ctr - offsets)  # top-left
+    xy1 = xy0 + 511  # bottom-right
     bboxes_pred = F.concat([xy0, xy1], axis=1)  # (B,4,H,W)
     return bboxes_pred
 
@@ -29,7 +28,7 @@ config = SublinearMemoryConfig()
 def train_generator_batch(optical, sar, label, *, opt, netG):
     netG.train()
     cls_score, offsets, ctr_score = netG(sar, optical)
-    loss = netG.loss(cls_score, offsets, ctr_score, label)
+    loss, loss_cls, loss_reg, loss_ctr = netG.loss(cls_score, offsets, ctr_score, label)
     opt.backward(loss)
     if dist.is_distributed():
         # do all reduce mean
@@ -46,7 +45,7 @@ def train_generator_batch(optical, sar, label, *, opt, netG):
     for i in range(B):
         output.append(F.add_axis(pred_box[i, :, max_id[i]], axis=0)) # (1, 4)
     output = F.concat(output, axis=0)  # (B, 4)
-    return [loss, F.norm(output[:, 0:2] - label[:, 0:2], p=2, axis = 1).mean()]
+    return [loss_cls, loss_reg, F.norm(output[:, 0:2] - label[:, 0:2], p=2, axis = 1).mean()]
 
 
 @trace(symbolic=True)
@@ -55,7 +54,7 @@ def test_generator_batch(optical, sar, *, netG):
     cls_score, offsets, ctr_score = netG(sar, optical)  # [B,1,19,19]  [B,2,19,19]  [B,1,19,19]
     B, _, _, _ = cls_score.shape
     # 加权
-    cls_score = cls_score * ctr_score
+    # cls_score = cls_score * ctr_score
     cls_score = cls_score.reshape(B, -1)
     # find the max
     max_id = F.argmax(cls_score, axis = 1)  # (B, )
@@ -125,6 +124,8 @@ class BasicMatching(BaseModel):
         """
         optical = batchdata[0]  # [B ,1 , H, W]
         sar = batchdata[1]
+        class_id = batchdata[2]
+        file_id = batchdata[3]
         
         pre_bbox = test_generator_batch(optical, sar, netG=self.generator)  # [B, 4]
 
@@ -134,27 +135,51 @@ class BasicMatching(BaseModel):
             start_id = kwargs.get('sample_id', None)
             if save_path is None or start_id is None:
                 raise RuntimeError("if save image in test_step, please set 'save_path' and 'sample_id' parameters")
-            for idx in range(pre_bbox.shape[0]):
-                imwrite(tensor2img(optical[idx], min_max=(-0.64, 1.36)), file_path=os.path.join(save_path, "idx_{}.png".format(start_id + idx)))
-                
+            
+            with open(os.path.join(save_path, "result.txt"), 'a+') as f:
+                for idx in range(pre_bbox.shape[0]):
+                    # imwrite(tensor2img(optical[idx], min_max=(-0.64, 1.36)), file_path=os.path.join(save_path, "idx_{}.png".format(start_id + idx)))
+                    # 向txt中加入一行
+                    suffix = ".tif"
+                    write_str = ""
+                    write_str += str(class_id[idx])
+                    write_str += " "
+                    write_str += str(class_id[idx])
+                    write_str += "_"
+                    write_str += str(file_id[idx]) + suffix
+                    write_str += " "
+                    write_str += str(class_id[idx])
+                    write_str += "_sar_"
+                    write_str += str(file_id[idx]) + suffix
+                    write_str += " "
+                    write_str += str(int(pre_bbox[idx][1]*2+0.5))
+                    write_str += " "
+                    write_str += str(int(pre_bbox[idx][0]*2+0.5))
+                    write_str += "\n"
+                    f.write(write_str)
+
         return [pre_bbox, ]
 
     def cal_for_eval(self, gathered_outputs, gathered_batchdata):
         """
 
         :param gathered_outputs: list of variable, [pre_bbox, ]
-        :param gathered_batchdata: list of numpy, [optical, sar, bbox_gt]
+        :param gathered_batchdata: list of numpy, [optical, sar, bbox_gt, class_id, file_id]
         :return: eval result
         """
-        gathered_outputs = gathered_outputs[0]
-        gathered_batchdata = gathered_batchdata[-1]
-        assert list(gathered_batchdata.shape) == list(gathered_outputs.shape), "{} != {}".format(list(gathered_batchdata.shape), list(gathered_outputs.shape))
+        pre_bbox = gathered_outputs[0]
+        bbox_gt = gathered_batchdata[2]
+        class_id = gathered_batchdata[-2]
+        file_id = gathered_batchdata[-1]
+        assert list(bbox_gt.shape) == list(pre_bbox.shape), "{} != {}".format(list(bbox_gt.shape), list(pre_bbox.shape))
 
         res = []
-        sample_nums = gathered_outputs.shape[0]
+        sample_nums = pre_bbox.shape[0]
         for i in range(sample_nums):
             eval_result = dict()
             for metric in self.eval_cfg.metrics:
-                eval_result[metric+"_RGB"] = self.train_cfg['scale'] * self.allowed_metrics[metric](gathered_outputs[i].numpy(), gathered_batchdata[i])
+                eval_result[metric] = self.allowed_metrics[metric](pre_bbox[i].numpy(), bbox_gt[i])
+            eval_result['class_id'] = class_id[i]
+            eval_result['file_id'] = file_id[i]
             res.append(eval_result)
         return res

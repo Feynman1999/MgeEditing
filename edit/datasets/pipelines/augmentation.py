@@ -1,7 +1,7 @@
 import numpy as np
 import os.path as osp
 from ..registry import PIPELINES
-from edit.utils import imflip_
+from edit.utils import imflip_, bboxflip_
 
 
 @PIPELINES.register_module()
@@ -39,10 +39,19 @@ class RandomTransposeHW(object):
 
         if transpose:
             for key in self.keys:
-                if isinstance(results[key], list):
-                    results[key] = [v.transpose(1, 0, 2) for v in results[key]]
+                if key in ('bbox', 'bboxes'):
+                    if isinstance(results[key], list):
+                        raise NotImplementedError("not imple for key is list for bbox tranposeHW")
+                    else:
+                        tmp_bbox = results[key].copy()
+                        tmp_bbox[0], tmp_bbox[1] = tmp_bbox[1], tmp_bbox[0]
+                        tmp_bbox[2], tmp_bbox[3] = tmp_bbox[3], tmp_bbox[2]
+                        results[key] = tmp_bbox
                 else:
-                    results[key] = results[key].transpose(1, 0, 2)
+                    if isinstance(results[key], list):
+                        results[key] = [v.transpose(1, 0, 2) for v in results[key]]
+                    else:
+                        results[key] = results[key].transpose(1, 0, 2)
 
         results['transpose'] = transpose
 
@@ -73,13 +82,14 @@ class Flip(object):
     """
     _directions = ['horizontal', 'vertical']
 
-    def __init__(self, keys, flip_ratio=0.5, direction='horizontal'):
+    def __init__(self, keys, flip_ratio=0.5, direction='horizontal', Len=400):
         if direction not in self._directions:
             raise ValueError(f'Direction {direction} is not supported.'
                              f'Currently support ones are {self._directions}')
         self.keys = keys
         self.flip_ratio = flip_ratio
         self.direction = direction
+        self.Len = Len
 
     def __call__(self, results):
         """Call function.
@@ -97,9 +107,15 @@ class Flip(object):
             for key in self.keys:
                 if isinstance(results[key], list):
                     for v in results[key]:
-                        imflip_(v, self.direction)
+                        if key in ('bbox', 'bboxes'):
+                            bboxflip_(v, self.direction, self.Len)
+                        else:
+                            imflip_(v, self.direction)
                 else:
-                    imflip_(results[key], self.direction)
+                    if key in ('bbox', 'bboxes'):
+                        bboxflip_(results[key], self.direction, self.Len)
+                    else:
+                        imflip_(results[key], self.direction)
 
         results['flip'] = flip
         results['flip_direction'] = self.direction

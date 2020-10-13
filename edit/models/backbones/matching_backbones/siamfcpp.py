@@ -39,8 +39,6 @@ def get_xy_ctr_np(score_size, score_offset, total_stride):
 class SIAMFCPP(M.Module):
     """
         channels (int): Number of channels in the input feature map.
-        center_sampling (bool): If true, use center sampling. Default: False.
-        center_sample_radius (float): Radius of center sampling. Default: 1.5.
         centerness_on_reg (bool): If true, position centerness on the
             regress branch. Please refer to https://github.com/tianzhi0549/FCOS/issues/89#issuecomment-516877042.
             Default: False.
@@ -54,12 +52,10 @@ class SIAMFCPP(M.Module):
                        loss_bbox,
                        loss_centerness,
                        stacked_convs = 3,
-                       feat_channels = 64,
-                       z_size = 256,
-                       x_size = 400,
-                       center_sampling=False, 
-                       center_sample_radius=1.5,
-                       lambda1=0,
+                       feat_channels = 24,
+                       z_size = 512,
+                       x_size = 800,
+                       lambda1=2,
                        lambda2=0
                        ):
         self.in_cha = in_cha
@@ -67,10 +63,8 @@ class SIAMFCPP(M.Module):
         self.cls_out_channels = 1
         self.stacked_convs = stacked_convs  # should > 1
         self.feat_channels = feat_channels
-        self.center_sampling = center_sampling
-        self.center_sample_radius = center_sample_radius
         self.total_stride = 8
-        self.score_size = 19
+        self.score_size = 37
         self.z_size = z_size
         self.x_size = x_size
         self.lambda1 = lambda1
@@ -78,7 +72,7 @@ class SIAMFCPP(M.Module):
         
         self.score_offset = (x_size - 1 - (self.score_size - 1) * self.total_stride) / 2  # /2
 
-        self.fm_ctr = get_xy_ctr_np(self.score_size, self.score_offset, self.total_stride)  # [1, 2, 19, 19]
+        self.fm_ctr = get_xy_ctr_np(self.score_size, self.score_offset, self.total_stride)  # [1, 2, 37, 37]
 
         self._init_layers() # r_z_k, c_z_k, r_x, c_x, cls_convs, reg_convs, conv_cls, conv_reg, conv_centerness
 
@@ -90,8 +84,8 @@ class SIAMFCPP(M.Module):
         """Initialize layers of the head."""
         self.backbone_sar = AlexNet(self.in_cha)
         self.backbone_opt = AlexNet(self.in_cha)
-        self.bi = mge.Parameter(value=[0.0])
-        self.si = mge.Parameter(value=[1.0])
+        # self.bi = mge.Parameter(value=[0.0])
+        # self.si = mge.Parameter(value=[1.0])
 
         self._init_feature_adjust()
         self._init_cls_convs()
@@ -156,7 +150,7 @@ class SIAMFCPP(M.Module):
         r_out = self.reg_convs(r_out)
 
         # classification score
-        cls_score = self.conv_cls(c_out)  # [B,1,19,19]
+        cls_score = self.conv_cls(c_out)  # [B,1,37,37]
         
         # center-ness score
         ctr_score = self.conv_centerness(r_out)
@@ -164,36 +158,36 @@ class SIAMFCPP(M.Module):
 
         # regression
         offsets = self.conv_reg(r_out)
-        offsets = F.exp(self.si * offsets + self.bi) * self.total_stride  # [B,2,19,19]
+        offsets = F.relu(offsets*self.total_stride + (self.z_size-1)/2)  # [B,2,37,37]
         
         # bbox decoding
-        # bbox = get_box(self.fm_ctr, offsets)  # (B, 2, 19, 19)
+        # bbox = get_box(self.fm_ctr, offsets)  # (B, 2, 37, 37)
 
         return [cls_score, offsets, ctr_score]
 
     def forward(self, sar, optical):
         feat1 = self.backbone_sar(sar)
         feat2 = self.backbone_opt(optical)
-        c_z_k = self.c_z_k(feat1)  # 50, 32
-        r_z_k = self.r_z_k(feat1)  # 50, 32
-        c_x = self.c_x(feat2)  # 50, 32
-        r_x = self.r_x(feat2)  # 50, 32
+        c_z_k = self.c_z_k(feat1)  # 100, 64
+        r_z_k = self.r_z_k(feat1)  # 100, 64
+        c_x = self.c_x(feat2)  # 100, 64
+        r_x = self.r_x(feat2)  # 100, 64
         # do depth-wise cross-correlation
-        r_out = xcorr_depthwise(r_x, r_z_k)  # [19, 19]
-        c_out = xcorr_depthwise(c_x, c_z_k)  # [19, 19]
+        r_out = xcorr_depthwise(r_x, r_z_k)  # [37, 37]
+        c_out = xcorr_depthwise(c_x, c_z_k)  # [37, 37]
         # get result
         return self.head(c_out, r_out)
 
-    def get_cls_reg_ctr_targets(self, points, gt_bboxes, bbox_scale = 0.075):
+    def get_cls_reg_ctr_targets(self, points, gt_bboxes, bbox_scale = 0.15):
         """
             Compute regression, classification targets for points in multiple images.
             Args:
-                points (Tensor): (1, 2, 19, 19).
+                points (Tensor): (1, 2, 37, 37).
                 gt_bboxes (Tensor): Ground truth bboxes of each image, (B,4), in [tl_x, tl_y, br_x, br_y] format.
             Returns:
-                cls_labels (Tensor): Labels. (B, 1, 19, 19)   0 or 1, 0 means background, 1 means in the box.
-                bbox_targets (Tensor): BBox targets. (B, 4, 19, 19)  only consider the foreground, for the background should set loss as 0!
-                centerness_targets (Tensor): (B, 1, 19, 19)  only consider the foreground, for the background should set loss as 0!
+                cls_labels (Tensor): Labels. (B, 1, 37, 37)   0 or 1, 0 means background, 1 means in the box.
+                bbox_targets (Tensor): BBox targets. (B, 4, 37, 37)  only consider the foreground, for the background should set loss as 0!
+                centerness_targets (Tensor): (B, 1, 37, 37)  only consider the foreground, for the background should set loss as 0!
         """
         B, _ = gt_bboxes.shape
         gt_bboxes = F.add_axis(gt_bboxes, axis=-1)
@@ -206,21 +200,21 @@ class SIAMFCPP(M.Module):
         down_bound = points[:, 0, ...] < gt_bboxes[:, 2, ...] - gap
         right_bound = points[:, 1, ...] < gt_bboxes[:, 3, ...] - gap
         cls_labels = up_bound * left_bound * down_bound * right_bound
-        cls_labels = F.add_axis(cls_labels, axis=1)  # (B, 1, 19, 19)
+        cls_labels = F.add_axis(cls_labels, axis=1)  # (B, 1, 37, 37)
         cls_labels.requires_grad = False
 
         # bbox_targets
         # 对于points中的每个坐标，计算偏离情况（这里每个坐标都会计算，所以会有负数）
-        up_left = points - gt_bboxes[:, 0:2, ...]  # (B, 2, 19, 19)
+        up_left = points - gt_bboxes[:, 0:2, ...]  # (B, 2, 37, 37)
         bottom_right = gt_bboxes[:, 2:4, ...] - points
-        bbox_targets = F.concat([up_left, bottom_right], axis = 1)  # (B, 4, 19, 19)
+        bbox_targets = F.concat([up_left, bottom_right], axis = 1)  # (B, 4, 37, 37)
         bbox_targets.requires_grad = False
 
         # centerness_targets
         up_bottom = F.minimum(up_left[:, 0, ...], bottom_right[:, 0, ...]) / F.maximum(up_left[:, 0, ...], bottom_right[:, 0, ...])
         left_right = F.minimum(up_left[:, 1, ...], bottom_right[:, 1, ...]) / F.maximum(up_left[:, 1, ...], bottom_right[:, 1, ...])
         centerness_targets = F.sqrt(F.abs(up_bottom * left_right))
-        centerness_targets = F.add_axis(centerness_targets, axis =1)  # (B,1,19,19)
+        centerness_targets = F.add_axis(centerness_targets, axis =1)  # (B,1,37,37)
         centerness_targets.requires_grad = False
         return cls_labels, bbox_targets, centerness_targets
 
@@ -233,9 +227,9 @@ class SIAMFCPP(M.Module):
         """Compute loss of the head.
 
             Args:
-                cls_scores (Tensor): [B,1,19,19]
-                bbox_preds (Tensor): [B,2,19,19]
-                centernesses (Tensor): [B,1,19,19]
+                cls_scores (Tensor): [B,1,37,37]
+                bbox_preds (Tensor): [B,2,37,37]
+                centernesses (Tensor): [B,1,37,37]
                 gt_bboxes (Tensor): [B,4], in [tl_x, tl_y, br_x, br_y] format.
                 
             Returns:
@@ -243,27 +237,27 @@ class SIAMFCPP(M.Module):
         """
         
         B, _, H, W = cls_scores.shape
-        cls_labels, bbox_targets, centerness_targets = self.get_cls_reg_ctr_targets(self.fm_ctr, gt_bboxes)  # (B, 1, 19, 19), (B, 4, 19, 19), (B,1,19,19)
+        cls_labels, bbox_targets, centerness_targets = self.get_cls_reg_ctr_targets(self.fm_ctr, gt_bboxes)  # (B, 1, 37, 37), (B, 4, 37, 37), (B,1,37,37)
         
         # cls 
-        cls_scores = cls_scores.reshape(B, 1, -1)  # (B, 1, 19*19)
-        cls_scores = F.dimshuffle(cls_scores, (0, 2, 1))  # (B, 19*19, 1)
-        loss_cls = self.loss_cls(cls_scores, cls_labels.reshape(B, -1))
+        cls_scores = cls_scores.reshape(B, 1, -1)  # (B, 1, 37*37)
+        cls_scores = F.dimshuffle(cls_scores, (0, 2, 1))  # (B, 37*37, 1)
+        loss_cls = self.loss_cls(cls_scores, cls_labels.reshape(B, -1)) / (B*H*W)
 
         # reg
-        bbox_preds = F.concat([bbox_preds, self.z_size -1 - bbox_preds], axis = 1)  # [B,4,19,19]
+        bbox_preds = F.concat([bbox_preds, self.z_size -1 - bbox_preds], axis = 1)  # [B,4,37,37]
         bbox_preds = F.dimshuffle(bbox_preds, (0, 2, 3, 1))
-        bbox_preds = bbox_preds.reshape(-1, 4)  # (B*19*19, 4)
+        bbox_preds = bbox_preds.reshape(-1, 4)  # (B*37*37, 4)
        
         bbox_targets = F.dimshuffle(bbox_targets, (0, 2, 3, 1))
-        bbox_targets = bbox_targets.reshape(-1, 4)  # (B*19*19, 4)
-        loss_reg = self.loss_bbox(bbox_preds, bbox_targets, weight = cls_labels.reshape((B*H*W, )))
+        bbox_targets = bbox_targets.reshape(-1, 4)  # (B*37*37, 4)
+        loss_reg = self.loss_bbox(bbox_preds, bbox_targets, weight = cls_labels.reshape((B*H*W, ))) / (B*H*W)
 
         # center
-        loss_ctr = self.loss_centerness(centernesses, centerness_targets, weight = cls_labels)
+        loss_ctr = self.loss_centerness(centernesses, centerness_targets, weight = cls_labels) / (B*H*W)
         
-        loss = (loss_cls + self.lambda1 * loss_reg + self.lambda2 * loss_ctr) / (B*H*W)
-        return loss
+        loss = (loss_cls + self.lambda1 * loss_reg + self.lambda2 * loss_ctr) 
+        return loss, loss_cls, loss_reg, loss_ctr
 
     def init_weights(self, pretrained=None, strict=True):
         # 这里也可以进行参数的load，比如不在之前保存的路径中的模型（预训练好的）
@@ -289,19 +283,19 @@ class AlexNet(M.Module):
         super(AlexNet, self).__init__()
         self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, 24, kernel_size=11, stride=2, padding=5)
         self.pool1 = M.MaxPool2d(3, 2, 1)
-        self.conv2 = M.conv_bn.ConvBnRelu2d(24, 64, 5, 1, 2)
+        self.conv2 = M.conv_bn.ConvBnRelu2d(24, 48, 5, 1, 2)
         self.pool2 = M.MaxPool2d(3, 2, 1)
-        self.conv3 = M.conv_bn.ConvBnRelu2d(64, 128, 3, 1, 1)
-        self.conv4 = M.conv_bn.ConvBnRelu2d(128, 128, 3, 1, 1)
-        self.conv5 = M.conv_bn.ConvBn2d(128, 64, 3, 1, 1)
+        self.conv3 = M.conv_bn.ConvBnRelu2d(48, 96, 3, 1, 1)
+        self.conv4 = M.conv_bn.ConvBnRelu2d(96, 96, 3, 1, 1)
+        self.conv5 = M.conv_bn.ConvBn2d(96, 48, 3, 1, 1)
 
     def forward(self, x):
-        # 400, 256
-        x = self.conv1(x) # 200, 128
-        x = self.pool1(x) # 100, 64
-        x = self.conv2(x) # 100, 64
-        x = self.pool2(x) # 50, 32
-        x = self.conv3(x) # 50, 32
-        x = self.conv4(x) # 50, 32
-        x = self.conv5(x) # 50, 32
+        # 800, 512
+        x = self.conv1(x) # 400, 256
+        x = self.pool1(x) # 200, 128
+        x = self.conv2(x) # 200, 128
+        x = self.pool2(x) # 100, 64
+        x = self.conv3(x) # 100, 64
+        x = self.conv4(x) # 100, 64
+        x = self.conv5(x) # 100, 64
         return x

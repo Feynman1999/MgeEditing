@@ -1,1 +1,1 @@
-python tools/test.py configs/restorers/RSDN/rsdn_test.py
+python tools/test.py configs/matching/siamfcpp/v1_test.py
