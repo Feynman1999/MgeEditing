@@ -1,7 +1,9 @@
 import os.path as osp
 import numpy as np
+import random
 from .base_match_dataset import BaseMatchDataset
 from .registry import DATASETS
+import copy
 
 
 @DATASETS.register_module()
@@ -15,7 +17,8 @@ class MatchFolderDataset(BaseMatchDataset):
                  mode='train',
                  scale = 2,
                  x_size = 800,
-                 z_size = 512
+                 z_size = 512,
+                 balance_flag = "None"  # support None | uniform | test
                  ):
         super(MatchFolderDataset, self).__init__(pipeline, mode)
         self.scale = scale
@@ -25,7 +28,7 @@ class MatchFolderDataset(BaseMatchDataset):
         self.file_list = osp.join(self.data_path, file_list_name)
         self.x_size = x_size
         self.z_size = z_size
-
+        self.balance_flag = balance_flag
         self.data_infos = self.load_annotations()
 
 
@@ -96,6 +99,32 @@ class MatchFolderDataset(BaseMatchDataset):
                 )
             else:
                 raise NotImplementedError("not known mode: {}".format(self.mode))
+        
+        if self.mode == "train":
+            # 按照类别进行分类，分多个列表
+            ans = []
+            for i in range(10):
+                ans.append([])
+            for item in data_infos:
+                ans[item['class_id']].append(copy.deepcopy(item))
+                ans[item['class_id']].append(copy.deepcopy(item))
+                ans[item['class_id']].append(copy.deepcopy(item)) # 加足够的数量，避免数量不够
+
+            if self.balance_flag == "test":
+                test_distribute = [200, 400, 400, 600, 300, 600]  # 2500
+                data_infos = []
+                for i in range(len(test_distribute)):
+                    data_infos = data_infos + random.sample(ans[i+1], test_distribute[i])
+                assert len(data_infos) == sum(test_distribute)
+                
+            elif self.balance_flag == "uniform":
+                uniform_distribute = [313, 313, 313, 314, 313, 314]  # 1880 same to None
+                data_infos = []
+                for i in range(len(uniform_distribute)):
+                    data_infos = data_infos + random.sample(ans[i+1], test_distribute[i])
+                assert len(data_infos) == sum(uniform_distribute)
+            else:
+                pass
 
         self.logger.info("MatchFolder dataset load ok, mode:{} len:{}".format(self.mode, len(data_infos)))
         return data_infos

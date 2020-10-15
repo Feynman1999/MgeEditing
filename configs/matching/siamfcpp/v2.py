@@ -105,7 +105,8 @@ data = dict(
             sar_folder= "sar",
             file_list_name = "train_random.txt",
             pipeline=train_pipeline,
-            scale = 1)),
+            scale = 1,
+            balance_flag = "test")),  # test and uniform and None
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,
@@ -133,7 +134,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.05 * 1e-3, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-3, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 2000 // repeat_times
@@ -148,11 +149,11 @@ log_config = dict(
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=400, save_image=True)
+evaluation = dict(interval=400, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20201013_202244/checkpoints/epoch_400'
+load_from = None
 resume_from = None
 resume_optim = True
 workflow = 'train'
