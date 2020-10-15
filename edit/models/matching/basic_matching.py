@@ -123,7 +123,7 @@ class BasicMatching(BaseModel):
             list: outputs (already gathered from all threads)
         """
         epoch = kwargs.get('epoch', 0)
-        print("now epoch: {}".format(epoch))
+        # print("now epoch: {}".format(epoch))
         optical = batchdata[0]  # [B ,1 , H, W]
         sar = batchdata[1]
         

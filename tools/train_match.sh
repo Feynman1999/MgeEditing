@@ -1,1 +1,1 @@
-python tools/train.py configs/matching/siamfcpp/v2.py
+python tools/train.py configs/matching/siamfcpp/v2.py --gpuid 0

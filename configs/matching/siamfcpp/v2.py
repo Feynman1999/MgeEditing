@@ -14,7 +14,10 @@ model = dict(
         loss_centerness=dict(type='BCELoss'),
         feat_channels = ch,
         z_size = 512,
-        x_size = 800
+        x_size = 800,
+        lambda1 = 2.0,  # reg
+        lambda2 = 0.0,  # center
+        bbox_scale = 0.1
     ))
 
 # model training and testing settings
@@ -130,14 +133,14 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-3, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=0.05 * 1e-3, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 2000 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
-checkpoint_config = dict(interval=total_epochs // 10)
+checkpoint_config = dict(interval=total_epochs // 20)
 log_config = dict(
     interval=20,
     hooks=[
@@ -145,11 +148,11 @@ log_config = dict(
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=1, save_image=True)
+evaluation = dict(interval=400, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20201013_214352/checkpoints/epoch_400'
+load_from = f'./workdirs/{exp_name}/20201013_202244/checkpoints/epoch_400'
 resume_from = None
 resume_optim = True
 workflow = 'train'

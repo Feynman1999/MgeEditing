@@ -56,7 +56,8 @@ class SIAMFCPP(M.Module):
                        z_size = 512,
                        x_size = 800,
                        lambda1=2,
-                       lambda2=0
+                       lambda2=0,
+                       bbox_scale = 0.1
                        ):
         self.in_cha = in_cha
         self.channels = channels
@@ -69,7 +70,8 @@ class SIAMFCPP(M.Module):
         self.x_size = x_size
         self.lambda1 = lambda1
         self.lambda2 = lambda2
-        
+        self.bbox_scale = bbox_scale
+
         self.score_offset = (x_size - 1 - (self.score_size - 1) * self.total_stride) / 2  # /2
 
         self.fm_ctr = get_xy_ctr_np(self.score_size, self.score_offset, self.total_stride)  # [1, 2, 37, 37]
@@ -178,7 +180,7 @@ class SIAMFCPP(M.Module):
         # get result
         return self.head(c_out, r_out)
 
-    def get_cls_reg_ctr_targets(self, points, gt_bboxes, bbox_scale = 0.15):
+    def get_cls_reg_ctr_targets(self, points, gt_bboxes, bbox_scale = 0.1):
         """
             Compute regression, classification targets for points in multiple images.
             Args:
@@ -237,7 +239,7 @@ class SIAMFCPP(M.Module):
         """
         
         B, _, H, W = cls_scores.shape
-        cls_labels, bbox_targets, centerness_targets = self.get_cls_reg_ctr_targets(self.fm_ctr, gt_bboxes)  # (B, 1, 37, 37), (B, 4, 37, 37), (B,1,37,37)
+        cls_labels, bbox_targets, centerness_targets = self.get_cls_reg_ctr_targets(self.fm_ctr, gt_bboxes, self.bbox_scale)  # (B, 1, 37, 37), (B, 4, 37, 37), (B,1,37,37)
         
         # cls 
         cls_scores = cls_scores.reshape(B, 1, -1)  # (B, 1, 37*37)
