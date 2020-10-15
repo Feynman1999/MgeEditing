@@ -101,7 +101,7 @@ class EpochBasedRunner(BaseRunner):
         res_dict = self.load_checkpoint(checkpoint, load_optim=resume_optimizer)
         assert res_dict['epoch_or_iter'] == 'epoch'
 
-        self._epoch = res_dict['nums']
+        self._epoch = res_dict['nums']  # 恢复epoch
         self.logger.info("resumed from epoch: {}".format(res_dict['nums']))
 
         # create optimizers

@@ -62,14 +62,14 @@ def train(model, datasets, cfg, rank):
 
     # resume and create optimizers
     if cfg.resume_from is not None:
-        # 恢复之前的训练（包括模型参数和优化器）
+        # 恢复之前的训练,即epoch数目（包括模型参数和优化器）。若多卡训练则每个进程均对模型加载参数，然后还都会加载当时保存的rank0的optim state。
         runner.resume(cfg.resume_from, cfg.get('resume_optim', False))
     elif cfg.load_from is not None:
-        # 假装从头开始训练， rank0 进程加载参数，然后每个进程创建optim，调用optim init时，模型参数会自动同步
+        # 加载参数，但假装从头开始训练。若多卡训练则每个进程均对模型加载参数，然后每个进程创建optim（均使用配置文件中的config创建optim）。
         runner.load_checkpoint(cfg.load_from, load_optim=False)
         runner.create_optimizers()
     else:
-        # 不加载任何参数，每个进程直接创建optimizers
+        # 不加载任何参数，每个进程直接创建optimizers，这个时候，尽管不加载相同参数，但创建optim时也会同步参数。
         runner.create_optimizers()
 
     # register hooks
