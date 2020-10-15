@@ -2,23 +2,90 @@ import numpy as np
 import cv2
 from megengine import Tensor
 
+def bbox_ensemble_back(bbox, Type = 0, Len = 800):
+    assert len(bbox.shape) == 2 and bbox.shape[-1] == 4
+    bbox_numpy2 = bbox.numpy()
+    bbox_numpy = bbox_numpy2.copy()
+    bbox_ans = np.zeros_like(bbox_numpy)
+    # only change the front 2 now (for hjj)
+    if Type == 0:
+        return bbox.numpy()
+    elif Type == 1:
+        bbox_ans = bbox_numpy[:,2] - bbox_numpy[:,0]
+        bbox_numpy[:, 2] = Len-1-bbox_numpy[:, 0]
+        bbox_numpy[:, 0] = bbox_numpy[:, 2] - bbox_ans
+        # 转置
+        bbox_ans = np.zeros_like(bbox_numpy)
+        bbox_ans[:, 0] = bbox_numpy[:, 1]
+        bbox_ans[:, 1] = bbox_numpy[:, 0]
+        return bbox_ans
+    elif Type == 2:
+        # 左右
+        bbox_ans = (bbox_numpy[:,3] - bbox_numpy[:,1])
+        bbox_numpy[:, 3] = Len-1-bbox_numpy[:, 1]
+        bbox_numpy[:, 1] = bbox_numpy[:, 3] - bbox_ans
+        # 上下
+        bbox_ans = bbox_numpy[:,2] - bbox_numpy[:,0]
+        bbox_numpy[:, 2] = Len-1-bbox_numpy[:, 0]
+        bbox_numpy[:, 0] = bbox_numpy[:, 2] - bbox_ans
+        return bbox_numpy
+    elif Type == 3:
+        bbox_ans = bbox_numpy[:,3] - bbox_numpy[:,1]
+        bbox_numpy[:, 3] = Len-1-bbox_numpy[:, 1]
+        bbox_numpy[:, 1] = bbox_numpy[:, 3] - bbox_ans
+        # 转置
+        bbox_ans = np.zeros_like(bbox_numpy)
+        bbox_ans[:, 0] = bbox_numpy[:, 1]
+        bbox_ans[:, 1] = bbox_numpy[:, 0]
+        return bbox_ans
+    elif Type == 4:
+        bbox_ans = bbox_numpy[:,3] - bbox_numpy[:,1]
+        bbox_numpy[:, 3] = Len-1-bbox_numpy[:, 1]
+        bbox_numpy[:, 1] = bbox_numpy[:, 3] - bbox_ans
+        return bbox_numpy
+    elif Type == 5:
+        # 左右
+        bbox_ans = (bbox_numpy[:,3] - bbox_numpy[:,1])
+        bbox_numpy[:, 3] = Len-1-bbox_numpy[:, 1]
+        bbox_numpy[:, 1] = bbox_numpy[:, 3] - bbox_ans
+        # 上下
+        bbox_ans = bbox_numpy[:,2] - bbox_numpy[:,0]
+        bbox_numpy[:, 2] = Len-1-bbox_numpy[:, 0]
+        bbox_numpy[:, 0] = bbox_numpy[:, 2] - bbox_ans
+        # 转置
+        bbox_ans = np.zeros_like(bbox_numpy)
+        bbox_ans[:, 0] = bbox_numpy[:, 1]
+        bbox_ans[:, 1] = bbox_numpy[:, 0]
+        return bbox_ans
+    elif Type == 6:
+        bbox_ans = bbox_numpy[:,2] - bbox_numpy[:,0]
+        bbox_numpy[:, 2] = Len-1-bbox_numpy[:, 0]
+        bbox_numpy[:, 0] = bbox_numpy[:, 2] - bbox_ans
+        return bbox_numpy
+    elif Type == 7:
+        bbox_ans[:, 0] = bbox_numpy[:, 1]
+        bbox_ans[:, 1] = bbox_numpy[:, 0]
+        return bbox_ans
+    else:
+        raise NotImplementedError("")
+
 def ensemble_for_dim_4(batchdata, Type = 0):
     if Type == 0:
         return batchdata
     elif Type == 1:
         return np.flip(batchdata.transpose(0,1,3,2), axis=2)  # 逆时针旋转90度
     elif Type == 2:
-        return np.flip(np.flip(batchdata, axis=2), axis=3)
+        return np.flip(np.flip(batchdata, axis=2), axis=3)  # 逆时针180
     elif Type == 3:
-        return np.flip(batchdata.transpose(0,1,3,2), axis=3)
+        return np.flip(batchdata.transpose(0,1,3,2), axis=3)  # 逆时针270
     elif Type == 4:
-        return np.flip(batchdata, axis = 3)
+        return np.flip(batchdata, axis = 3)  # 原图左右翻转
     elif Type == 5:
-        return np.flip(np.flip(batchdata.transpose(0,1,3,2), axis=2), axis= 3)
+        return np.flip(np.flip(batchdata.transpose(0,1,3,2), axis=2), axis= 3)  # 
     elif Type == 6:
-        return np.flip(batchdata, axis = 2)
+        return np.flip(batchdata, axis = 2)  # 原图上下翻转
     elif Type == 7:
-        return batchdata.transpose(0,1,3,2)
+        return batchdata.transpose(0,1,3,2)  # 原图转置
     else:
         raise NotImplementedError("")
 

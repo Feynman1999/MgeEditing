@@ -1,6 +1,6 @@
 exp_name = 'sar_opt_v2'
 
-ch = 48
+ch = 64
 
 # model settings
 model = dict(
@@ -85,13 +85,13 @@ test_pipeline = [
     dict(type='Collect', keys=['opt', 'sar', 'class_id', 'file_id'])  
 ]
 
-dataroot = "/opt/data/private/datasets"
+dataroot = "/data/home/songtt/work/datasets"
 repeat_times = 1
 
 data = dict(
     # train
     samples_per_gpu=32,
-    workers_per_gpu=8,
+    workers_per_gpu=32,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
@@ -130,7 +130,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-3, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=1e-3, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 2000 // repeat_times
@@ -145,14 +145,14 @@ log_config = dict(
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=1, save_image=True)
+evaluation = dict(interval=400, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20201013_214352/checkpoints/epoch_400'
+load_from = f'./workdirs/{exp_name}/20201014_234742/checkpoints/epoch_1000'
 resume_from = None
 resume_optim = True
-workflow = 'train'
+workflow = 'test'
 
 # logger
 log_level = 'INFO'

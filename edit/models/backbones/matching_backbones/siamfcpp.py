@@ -82,8 +82,8 @@ class SIAMFCPP(M.Module):
 
     def _init_layers(self):
         """Initialize layers of the head."""
-        self.backbone_sar = AlexNet(self.in_cha)
-        self.backbone_opt = AlexNet(self.in_cha)
+        self.backbone_sar = AlexNet(self.in_cha, self.feat_channels)
+        self.backbone_opt = AlexNet(self.in_cha, self.feat_channels)
         # self.bi = mge.Parameter(value=[0.0])
         # self.si = mge.Parameter(value=[1.0])
 
@@ -279,15 +279,26 @@ class SIAMFCPP(M.Module):
 
 
 class AlexNet(M.Module):
-    def __init__(self, in_cha):
+    def __init__(self, in_cha, ch=48):
         super(AlexNet, self).__init__()
-        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, 24, kernel_size=11, stride=2, padding=5)
-        self.pool1 = M.MaxPool2d(3, 2, 1)
-        self.conv2 = M.conv_bn.ConvBnRelu2d(24, 48, 5, 1, 2)
-        self.pool2 = M.MaxPool2d(3, 2, 1)
-        self.conv3 = M.conv_bn.ConvBnRelu2d(48, 96, 3, 1, 1)
-        self.conv4 = M.conv_bn.ConvBnRelu2d(96, 96, 3, 1, 1)
-        self.conv5 = M.conv_bn.ConvBn2d(96, 48, 3, 1, 1)
+        if ch==48:
+            self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, 24, kernel_size=11, stride=2, padding=5)
+            self.pool1 = M.MaxPool2d(3, 2, 1)
+            self.conv2 = M.conv_bn.ConvBnRelu2d(24, 48, 5, 1, 2)
+            self.pool2 = M.MaxPool2d(3, 2, 1)
+            self.conv3 = M.conv_bn.ConvBnRelu2d(48, 96, 3, 1, 1)
+            self.conv4 = M.conv_bn.ConvBnRelu2d(96, 96, 3, 1, 1)
+            self.conv5 = M.conv_bn.ConvBn2d(96, 48, 3, 1, 1)
+        elif ch==64:
+            self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, 32, kernel_size=11, stride=2, padding=5)
+            self.pool1 = M.MaxPool2d(3, 2, 1)
+            self.conv2 = M.conv_bn.ConvBnRelu2d(32, 64, 5, 1, 2)
+            self.pool2 = M.MaxPool2d(3, 2, 1)
+            self.conv3 = M.conv_bn.ConvBnRelu2d(64, 128, 3, 1, 1)
+            self.conv4 = M.conv_bn.ConvBnRelu2d(128, 128, 3, 1, 1)
+            self.conv5 = M.conv_bn.ConvBn2d(128, 64, 3, 1, 1)
+        else:
+            raise NotImplementedError(" ")
 
     def forward(self, x):
         # 800, 512

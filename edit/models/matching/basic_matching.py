@@ -7,7 +7,7 @@ from megengine.jit import trace, SublinearMemoryConfig
 import megengine.distributed as dist
 import megengine as mge
 import megengine.functional as F
-from edit.utils import imwrite, tensor2img, bgr2ycbcr, imrescale
+from edit.utils import imwrite, tensor2img, bgr2ycbcr, imrescale, ensemble_forward, bbox_ensemble_back
 from ..base import BaseModel
 from ..builder import build_backbone
 from ..registry import MODELS
@@ -122,12 +122,20 @@ class BasicMatching(BaseModel):
         Returns:
             list: outputs (already gathered from all threads)
         """
+        epoch = kwargs.get('epoch', 0)
+        print("now epoch: {}".format(epoch))
         optical = batchdata[0]  # [B ,1 , H, W]
         sar = batchdata[1]
-        class_id = batchdata[2]
-        file_id = batchdata[3]
+        
+        optical = ensemble_forward(optical, Type=epoch)
+        sar = ensemble_forward(sar, Type=epoch)
+
+        class_id = batchdata[-2]
+        file_id = batchdata[-1]
         
         pre_bbox = test_generator_batch(optical, sar, netG=self.generator)  # [B, 4]
+
+        pre_bbox = mge.tensor(bbox_ensemble_back(pre_bbox, Type=epoch))
 
         save_image_flag = kwargs.get('save_image')
         if save_image_flag:
@@ -136,7 +144,7 @@ class BasicMatching(BaseModel):
             if save_path is None or start_id is None:
                 raise RuntimeError("if save image in test_step, please set 'save_path' and 'sample_id' parameters")
             
-            with open(os.path.join(save_path, "result.txt"), 'a+') as f:
+            with open(os.path.join(save_path, "result_epoch_{}.txt".format(epoch)), 'a+') as f:
                 for idx in range(pre_bbox.shape[0]):
                     # imwrite(tensor2img(optical[idx], min_max=(-0.64, 1.36)), file_path=os.path.join(save_path, "idx_{}.png".format(start_id + idx)))
                     # 向txt中加入一行
@@ -152,9 +160,9 @@ class BasicMatching(BaseModel):
                     write_str += "_sar_"
                     write_str += str(file_id[idx]) + suffix
                     write_str += " "
-                    write_str += str(int(pre_bbox[idx][1]*2+0.5))
+                    write_str += str(pre_bbox[idx][1].item())
                     write_str += " "
-                    write_str += str(int(pre_bbox[idx][0]*2+0.5))
+                    write_str += str(pre_bbox[idx][0].item())
                     write_str += "\n"
                     f.write(write_str)
 

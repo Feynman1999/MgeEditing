@@ -5,7 +5,7 @@ from .file_client import FileClient
 from .imageio import imfrombytes, use_backend, imread, imwrite
 from .config import Config
 from .colorspace import bgr2ycbcr, bgr2gray
-from .img import tensor2img, imnormalize, imdenormalize, imflip_, bboxflip_, imrescale, interp_codes, img_multi_padding, img_de_multi_padding, imresize, ensemble_back, ensemble_forward
+from .img import tensor2img, imnormalize, imdenormalize, imflip_, bboxflip_, imrescale, interp_codes, img_multi_padding, img_de_multi_padding, imresize, ensemble_back, ensemble_forward, bbox_ensemble_back
 from .logger import get_root_logger, get_logger
 from .video import images2video
 

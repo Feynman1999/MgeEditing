@@ -22,6 +22,7 @@ def parse_args():
     parser.add_argument('config', help='train config file path')
     parser.add_argument("-d", "--dynamic", default=False, action='store_true', help="enable dygraph mode")
     parser.add_argument("--gpus", type=int, default=1, help="how many gpus for one machine to use, 0 use cpu, default 1")
+    parser.add_argument("--gpuid", type=str, default="9", help="spcefic one gpu")
     parser.add_argument('--work_dir', type=str, default=None, help='the dir to save logs and models')
     parser.add_argument("-e", "--ensemble", default=False, action = 'store_true')
     args = parser.parse_args()
@@ -101,7 +102,8 @@ def main():
     if world_size == 0: # use cpu    
         mge.set_default_device(device='cpux')
     else:
-        pass  # mge默认使用GPU
+        gpuid = args.gpuid
+        mge.set_default_device(device='gpu' + gpuid)
 
     if world_size > 1:
         # start distributed test, dispatch sub-processes

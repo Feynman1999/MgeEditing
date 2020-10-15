@@ -65,6 +65,7 @@ class EvalIterHook(Hook):
 
         self.logger.info("start to eval for iter: {}".format(runner.iter+1))
         save_path = os.path.join(self.save_path, "iter_{}".format(runner.iter+1))
+        mkdir_or_exist(save_path)
         results = []  # list of dict
         sample_nums_all_threads = 0
         for _, data in enumerate(self.dataloader):

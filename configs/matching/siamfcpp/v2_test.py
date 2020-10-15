@@ -145,14 +145,14 @@ log_config = dict(
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=1, save_image=True)
+evaluation = dict(interval=1, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
 load_from = f'./workdirs/{exp_name}/20201013_214352/checkpoints/epoch_400'
 resume_from = None
 resume_optim = True
-workflow = 'train'
+workflow = 'test'
 
 # logger
 log_level = 'INFO'

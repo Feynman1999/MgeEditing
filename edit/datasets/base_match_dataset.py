@@ -71,19 +71,25 @@ class BaseMatchDataset(BaseDataset):
         eval_results = defaultdict(list)  # a dict of list
 
         for res in results:
+            # find on res's id
+            class_id = res['class_id']
+            # 统计
             for metric, val in res.items():
                 if "id" in metric:
-                    continue
+                    continue 
                 eval_results[metric].append(val)
+                eval_results[metric+ "_" + str(class_id)].append(val)
+                if val > 5:
+                    eval_results[metric+ "_" + str(class_id) + "_more_than_5_nums"].append(1)
 
-        for metric, val_list in eval_results.items():
-            assert len(val_list) == len(self), (
-                f'Length of evaluation result of {metric} is {len(val_list)}, '
-                f'should be {len(self)}')
+        # for metric, val_list in eval_results.items():
+        #     assert len(val_list) == len(self), (
+        #         f'Length of evaluation result of {metric} is {len(val_list)}, '
+        #         f'should be {len(self)}')
 
         # average the results
         eval_results = {
-            metric: sum(values) / len(self)
+            metric: (sum(values) / len(values) if "more" not in metric else sum(values))
             for metric, values in eval_results.items()
         }
 
