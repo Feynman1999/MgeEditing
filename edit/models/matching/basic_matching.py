@@ -14,8 +14,8 @@ from ..registry import MODELS
 
 def get_box(xy_ctr, offsets):
     """
-        xy_ctr: [1,2,19,19]
-        offsets: [B,2,19,19]
+        xy_ctr: [1,2,37,37]
+        offsets: [B,2,37,37]
     """
     xy0 = (xy_ctr - offsets)  # top-left
     xy1 = xy0 + 511  # bottom-right
@@ -36,6 +36,7 @@ def train_generator_batch(optical, sar, label, *, opt, netG):
 
     # performance in the training data
     B, _, _, _ = cls_score.shape
+    cls_score = F.sigmoid(cls_score) * ctr_score
     cls_score = cls_score.reshape(B, -1)
     # find the max
     max_id = F.argmax(cls_score, axis = 1)  # (B, )
@@ -45,7 +46,7 @@ def train_generator_batch(optical, sar, label, *, opt, netG):
     for i in range(B):
         output.append(F.add_axis(pred_box[i, :, max_id[i]], axis=0)) # (1, 4)
     output = F.concat(output, axis=0)  # (B, 4)
-    return [loss_cls, loss_reg, F.norm(output[:, 0:2] - label[:, 0:2], p=2, axis = 1).mean()]
+    return [loss_cls, loss_reg, loss_ctr, F.norm(output[:, 0:2] - label[:, 0:2], p=2, axis = 1).mean()]
 
 
 @trace(symbolic=True)
@@ -54,7 +55,7 @@ def test_generator_batch(optical, sar, *, netG):
     cls_score, offsets, ctr_score = netG(sar, optical)  # [B,1,19,19]  [B,2,19,19]  [B,1,19,19]
     B, _, _, _ = cls_score.shape
     # 加权
-    # cls_score = cls_score * ctr_score
+    cls_score = F.sigmoid(cls_score) * ctr_score
     cls_score = cls_score.reshape(B, -1)
     # find the max
     max_id = F.argmax(cls_score, axis = 1)  # (B, )

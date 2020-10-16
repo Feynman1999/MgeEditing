@@ -1,4 +1,4 @@
-exp_name = 'sar_opt_v2'
+exp_name = 'sar_opt_v2_add_shelter_base_v4'
 
 ch = 48
 
@@ -9,14 +9,14 @@ model = dict(
         type='SIAMFCPP',
         in_cha=1,
         channels=ch,
-        loss_cls=dict(type='Focal_loss', alpha = 0.95, gamma = 2),
+        loss_cls=dict(type='Focal_loss', alpha = 0.9, gamma = 2),
         loss_bbox=dict(type='IOULoss', loc_loss_type='giou'),
         loss_centerness=dict(type='BCELoss'),
         feat_channels = ch,
         z_size = 512,
         x_size = 800,
         lambda1 = 2.0,  # reg
-        lambda2 = 1.0,  # center
+        lambda2 = 0,  # center
         bbox_scale = 0.1
     ))
 
@@ -105,10 +105,10 @@ data = dict(
             data_path= dataroot + "/stage1",
             opt_folder= "optical",
             sar_folder= "sar",
-            file_list_name = "train_random.txt",
+            file_list_name = "train_random_2050.txt",
             pipeline=train_pipeline,
             scale = 1,
-            balance_flag = "test")),  # test and uniform and None
+            balance_flag = "None")),  # test and uniform and None
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,
@@ -117,7 +117,7 @@ data = dict(
         data_path= dataroot + "/stage1",
         opt_folder= "optical",
         sar_folder= "sar",
-        file_list_name = "valid_random.txt",
+        file_list_name = "valid_random_300.txt",
         pipeline=eval_pipeline,
         mode="eval",
         scale = 1),

@@ -1,6 +1,56 @@
 import numpy as np
+import random
 import cv2
 from megengine import Tensor
+
+def img_shelter(img, black_ratio):
+    H, W, _ = img.shape
+    S = H * (W / 3) / 2
+    values = [1, 2, 3, 4]
+    a = np.random.choice(values)     # 随机选择顶点
+    x = np.random.randint(W / 3, W)  # 随机选择一个边长
+    y = 2 * S / x
+
+    scale = random.uniform(0.2, 1)   # 随机选择一个系数
+    x = x * scale
+    y = y * scale
+    
+    if a == 1:  # 左上角
+        # print('左上角')
+        p_A = [0, 0]
+        p_B = [x, 0]
+        p_C = [0, y]
+    elif a == 2:  # 右上角
+        # print('右上角')
+        p_A = [W, 0]  # 右上角点
+        p_B = [W - x, 0]
+        p_C = [W, y]
+    elif a == 3:  # 左下角
+        # print('左下角')
+        p_A = [0, H]
+        p_B = [0, H - y]
+        p_C = [x, H]
+    elif a == 4:  # 右下角
+        # print('右下角')
+        p_A = [W, H]
+        p_B = [W - x, H]
+        p_C = [W, H - y]
+
+    # img = cv2.imread('C:\\Users\\76397\\Desktop\\stage1\\optical\\1_1.tif', 0)
+    # print(img.shape)
+    b = np.array([[p_A, p_B, p_C]], dtype=np.int32)  # 左上角点 三个点位置可以随意
+
+    if np.random.random() < black_ratio:
+        c = (0, 0, 0) #黑色
+    else:
+        c = (255, 255, 255) #白色
+
+    cv2.fillPoly(img, b, c) #c是颜色
+    # plt.axis('off')
+    # plt.imshow(img, cmap='gray')
+    # plt.show()
+    return img
+
 
 def bbox_ensemble_back(bbox, Type = 0, Len = 800):
     assert len(bbox.shape) == 2 and bbox.shape[-1] == 4

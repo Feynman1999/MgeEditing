@@ -111,7 +111,7 @@ class MatchFolderDataset(BaseMatchDataset):
                 ans[item['class_id']].append(copy.deepcopy(item)) # 加足够的数量，避免数量不够
 
             if self.balance_flag == "test":
-                test_distribute = [200, 400, 400, 600, 300, 600]  # 2500
+                test_distribute = [400, 400, 400, 600, 300, 600]  # 2500
                 data_infos = []
                 for i in range(len(test_distribute)):
                     data_infos = data_infos + random.sample(ans[i+1], test_distribute[i])
@@ -121,7 +121,7 @@ class MatchFolderDataset(BaseMatchDataset):
                 uniform_distribute = [313, 313, 313, 314, 313, 314]  # 1880 same to None
                 data_infos = []
                 for i in range(len(uniform_distribute)):
-                    data_infos = data_infos + random.sample(ans[i+1], test_distribute[i])
+                    data_infos = data_infos + random.sample(ans[i+1], uniform_distribute[i])
                 assert len(data_infos) == sum(uniform_distribute)
             else:
                 pass

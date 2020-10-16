@@ -1,8 +1,32 @@
 import numpy as np
 import os.path as osp
 from ..registry import PIPELINES
-from edit.utils import imflip_, bboxflip_
+from edit.utils import imflip_, bboxflip_, img_shelter
 
+
+@PIPELINES.register_module()
+class Corner_Shelter(object):
+    def __init__(self, keys, shelter_ratio=0.1, black_ratio = 0.75):
+        self.keys = keys
+        self.shelter_ratio = shelter_ratio
+        self.black_ratio = black_ratio
+
+    def __call__(self, results):
+        shelter = np.random.random() < self.shelter_ratio
+
+        if shelter:
+            for key in self.keys:
+                if isinstance(results[key], list):
+                    raise NotImplementedError("")
+                else:
+                    results[key] = img_shelter(results[key], self.black_ratio)
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += (
+            f'(keys={self.keys}, transpose_ratio={self.transpose_ratio})')
+        return repr_str
 
 @PIPELINES.register_module()
 class RandomTransposeHW(object):

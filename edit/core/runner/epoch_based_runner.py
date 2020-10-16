@@ -17,7 +17,7 @@ class EpochBasedRunner(BaseRunner):
         self.data_loader = data_loader
         self._max_iters = self._max_epochs * len(data_loader)
         self.call_hook('before_train_epoch')
-        time.sleep(0.5)  # Prevent possible deadlock during epoch transition
+        time.sleep(0.1)  # Prevent possible deadlock during epoch transition
         for i, data_batch in enumerate(data_loader):
             self._inner_iter = i
             self.call_hook('before_train_iter')
@@ -32,7 +32,7 @@ class EpochBasedRunner(BaseRunner):
         self.mode = 'test'
         self.data_loader = data_loader
         self.call_hook('before_test_epoch')
-        time.sleep(0.5)
+        time.sleep(0.2)
         sample_nums_all_threads = 0
         save_path = osp.join(self.work_dir, "test_results")
         mkdir_or_exist(save_path)
