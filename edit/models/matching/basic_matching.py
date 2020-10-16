@@ -46,6 +46,7 @@ def train_generator_batch(optical, sar, label, *, opt, netG):
     for i in range(B):
         output.append(F.add_axis(pred_box[i, :, max_id[i]], axis=0)) # (1, 4)
     output = F.concat(output, axis=0)  # (B, 4)
+
     return [loss_cls, loss_reg, loss_ctr, F.norm(output[:, 0:2] - label[:, 0:2], p=2, axis = 1).mean()]
 
 

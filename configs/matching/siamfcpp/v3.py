@@ -1,6 +1,6 @@
-exp_name = 'sar_opt_v2'
+exp_name = 'sar_opt_v3'
 
-ch = 48
+ch = 24
 
 # model settings
 model = dict(
@@ -10,14 +10,15 @@ model = dict(
         in_cha=1,
         channels=ch,
         loss_cls=dict(type='Focal_loss', alpha = 0.9, gamma = 2),
-        loss_bbox=dict(type='IOULoss', loc_loss_type='iou'),
+        loss_bbox=dict(type='IOULoss', loc_loss_type='giou'),
         loss_centerness=dict(type='BCELoss'),
         feat_channels = ch,
         z_size = 512,
         x_size = 800,
-        lambda1 = 1.0,  # reg
+        lambda1 = 2.0,  # reg
         lambda2 = 1.0,  # center
-        bbox_scale = 0.15
+        bbox_scale = 0.1,
+        stride = 4
     ))
 
 # model training and testing settings
@@ -95,7 +96,7 @@ repeat_times = 1
 
 data = dict(
     # train
-    samples_per_gpu=32,
+    samples_per_gpu=8,
     workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
@@ -136,7 +137,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=1e-3, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-3, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 2000 // repeat_times

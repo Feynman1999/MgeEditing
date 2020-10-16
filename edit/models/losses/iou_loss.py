@@ -25,19 +25,19 @@ class IOULoss(M.Module):
         target_right = target[:, 3]
         target_bottom = target[:, 2]
 
-        target_aera = (target_left + target_right) * (target_top + target_bottom)
-        pred_aera = (pred_left + pred_right) * (pred_top + pred_bottom)
+        target_aera = (target_left + target_right + 1) * (target_top + target_bottom + 1)
+        pred_aera = (pred_left + pred_right + 1) * (pred_top + pred_bottom + 1)
                                 
-        w_intersect = F.minimum(pred_left, target_left) + F.minimum(pred_right, target_right)
-        h_intersect = F.minimum(pred_bottom, target_bottom) + F.minimum(pred_top, target_top)
-        g_w_intersect = F.maximum(pred_left, target_left) + F.maximum(pred_right, target_right)
-        g_h_intersect = F.maximum(pred_bottom, target_bottom) + F.maximum(pred_top, target_top)
+        w_intersect = F.minimum(pred_left, target_left) + F.minimum(pred_right, target_right) + 1
+        h_intersect = F.minimum(pred_bottom, target_bottom) + F.minimum(pred_top, target_top) + 1
+        g_w_intersect = F.maximum(pred_left, target_left) + F.maximum(pred_right, target_right) + 1
+        g_h_intersect = F.maximum(pred_bottom, target_bottom) + F.maximum(pred_top, target_top) + 1
         ac_uion = g_w_intersect * g_h_intersect
 
         area_intersect = w_intersect * h_intersect
         area_union = target_aera + pred_aera - area_intersect
 
-        ious = (area_intersect + 1.0) / (area_union + 1.0)
+        ious = F.maximum(area_intersect / area_union, 1e-10) 
         gious = ious - (ac_uion - area_union) / ac_uion
         if self.loc_loss_type == 'iou':
             losses = -F.log(ious)

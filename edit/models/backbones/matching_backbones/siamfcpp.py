@@ -57,15 +57,16 @@ class SIAMFCPP(M.Module):
                        x_size = 800,
                        lambda1=2,
                        lambda2=0,
-                       bbox_scale = 0.1
+                       bbox_scale = 0.1,
+                       stride = 8
                        ):
         self.in_cha = in_cha
         self.channels = channels
         self.cls_out_channels = 1
         self.stacked_convs = stacked_convs  # should > 1
         self.feat_channels = feat_channels
-        self.total_stride = 8
-        self.score_size = 37
+        self.total_stride = stride
+        self.score_size = x_size // stride - z_size // stride + 1
         self.z_size = z_size
         self.x_size = x_size
         self.lambda1 = lambda1
@@ -84,8 +85,14 @@ class SIAMFCPP(M.Module):
 
     def _init_layers(self):
         """Initialize layers of the head."""
-        self.backbone_sar = AlexNet(self.in_cha, self.feat_channels)
-        self.backbone_opt = AlexNet(self.in_cha, self.feat_channels)
+        if self.total_stride == 4:
+            self.backbone_sar = AlexNet_stride4(self.in_cha, self.feat_channels)
+            self.backbone_opt = AlexNet_stride4(self.in_cha, self.feat_channels)
+        elif self.total_stride == 8:
+            self.backbone_sar = AlexNet_stride8(self.in_cha, self.feat_channels)
+            self.backbone_opt = AlexNet_stride8(self.in_cha, self.feat_channels)
+        else:
+            pass
         # self.bi = mge.Parameter(value=[0.0])
         # self.si = mge.Parameter(value=[1.0])
 
@@ -280,9 +287,9 @@ class SIAMFCPP(M.Module):
         #                     f'But received {type(pretrained)}.')
 
 
-class AlexNet(M.Module):
+class AlexNet_stride8(M.Module):
     def __init__(self, in_cha, ch=48):
-        super(AlexNet, self).__init__()
+        super(AlexNet_stride8, self).__init__()
         assert ch % 2 ==0, "channel nums should % 2 = 0"
         
         self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=11, stride=2, padding=5)
@@ -303,4 +310,28 @@ class AlexNet(M.Module):
         x = self.conv3(x) # 100, 64
         x = self.conv4(x) # 100, 64
         x = self.conv5(x) # 100, 64
+        return x
+
+
+class AlexNet_stride4(M.Module):
+    def __init__(self, in_cha, ch=48):
+        super(AlexNet_stride4, self).__init__()
+        assert ch % 2 ==0, "channel nums should % 2 = 0"
+        
+        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=11, stride=2, padding=5)
+        self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 5, 1, 2)
+        self.pool1 = M.MaxPool2d(3, 2, 1)
+        self.conv3 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
+        self.conv4 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
+        self.conv5 = M.conv_bn.ConvBn2d(ch, ch, 3, 1, 1)
+        
+
+    def forward(self, x):
+        # 800, 512
+        x = self.conv1(x) # 400, 256
+        x = self.conv2(x) # 400, 256
+        x = self.pool1(x) # 200, 128
+        x = self.conv3(x) # 200, 128
+        x = self.conv4(x) # 200, 128
+        x = self.conv5(x) # 200, 128
         return x
