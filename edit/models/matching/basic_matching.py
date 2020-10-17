@@ -36,7 +36,7 @@ def train_generator_batch(optical, sar, label, *, opt, netG):
 
     # performance in the training data
     B, _, _, _ = cls_score.shape
-    cls_score = F.sigmoid(cls_score) * ctr_score
+    cls_score = F.sigmoid(cls_score)  #  * ctr_score
     cls_score = cls_score.reshape(B, -1)
     # find the max
     max_id = F.argmax(cls_score, axis = 1)  # (B, )
@@ -56,7 +56,7 @@ def test_generator_batch(optical, sar, *, netG):
     cls_score, offsets, ctr_score = netG(sar, optical)  # [B,1,19,19]  [B,2,19,19]  [B,1,19,19]
     B, _, _, _ = cls_score.shape
     # 加权
-    cls_score = F.sigmoid(cls_score) * ctr_score
+    cls_score = F.sigmoid(cls_score) # * ctr_score
     cls_score = cls_score.reshape(B, -1)
     # find the max
     max_id = F.argmax(cls_score, axis = 1)  # (B, )

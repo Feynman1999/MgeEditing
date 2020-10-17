@@ -21,7 +21,8 @@ class BaseMatchDataset(BaseDataset):
 
     def __init__(self, pipeline, mode="train"):
         super(BaseMatchDataset, self).__init__(pipeline, mode)
-        pass
+        self.moving_average_len = 10
+        self.pooling = defaultdict(list)  # key -> value list (less than or equal moving_average_len)
 
     @staticmethod
     def scan_folder(path):
@@ -80,7 +81,7 @@ class BaseMatchDataset(BaseDataset):
                 eval_results[metric].append(val)
                 eval_results[metric+ "_" + str(class_id)].append(val)
                 if val > 5:
-                    eval_results[metric+ "_" + str(class_id) + "_more_than_5_nums"].append(1)
+                    eval_results[metric+ "_" + str(class_id) + "_more_than_5_nums"].append(1.0)
 
         # for metric, val_list in eval_results.items():
         #     assert len(val_list) == len(self), (
@@ -93,4 +94,16 @@ class BaseMatchDataset(BaseDataset):
             for metric, values in eval_results.items()
         }
 
+        # update pooling 
+        for metric, value in eval_results.items():
+            self.pooling[metric].append(value)
+            if len(self.pooling[metric]) > self.moving_average_len:
+                # remove the first one
+                self.pooling[metric].pop(0)
+
+        # eval_results
+        eval_results = {
+            metric: sum(values) / len(values)
+            for metric, values in self.pooling.items()
+        }
         return eval_results

@@ -1,4 +1,4 @@
-exp_name = 'sar_opt_v2'
+exp_name = 'sar_opt_v2_v14'
 
 ch = 48
 
@@ -15,7 +15,7 @@ model = dict(
         feat_channels = ch,
         z_size = 512,
         x_size = 800,
-        lambda1 = 1.0,  # reg
+        lambda1 = 0.25,  # reg
         lambda2 = 0.0,  # center
         bbox_scale = 0.1
     ))
@@ -42,8 +42,8 @@ train_pipeline = [
         key='sar',
         flag='color'),  # H,W,3  BGR
     dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.4, contrast=0.4, saturation=0.4, hue=0.0),
-    dict(type='Corner_Shelter', keys=['opt'], shelter_ratio = 0, black_ratio=0.75),
-    dict(type='Corner_Shelter', keys=['sar'], shelter_ratio = 0, black_ratio=0.75),
+    dict(type='Corner_Shelter', keys=['opt'], shelter_ratio = 0.2, black_ratio=0.75),
+    dict(type='Corner_Shelter', keys=['sar'], shelter_ratio = 0.2, black_ratio=0.75),
     dict(type='Bgr2Gray', keys=['opt', 'sar']),  # H, W, 1
     dict(type='RescaleToZeroOne', keys=['opt', 'sar']),
     dict(type='Normalize', keys=['opt', 'sar'], to_rgb=False, **img_norm_cfg),
@@ -108,7 +108,7 @@ data = dict(
             file_list_name = "train_random.txt",
             pipeline=train_pipeline,
             scale = 1,
-            balance_flag = "test")),  # test and uniform and None
+            balance_flag = "None")),  # test and uniform and None
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,
@@ -136,7 +136,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-3, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=0.1 * 1e-3, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 2000 // repeat_times
@@ -156,7 +156,7 @@ evaluation = dict(interval=400, save_image=False)
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
 load_from = None
-resume_from = None
+resume_from = None 
 resume_optim = True
 workflow = 'train'
 
