@@ -260,10 +260,10 @@ class SIAMFCPP(M.Module):
        
         bbox_targets = F.dimshuffle(bbox_targets, (0, 2, 3, 1))
         bbox_targets = bbox_targets.reshape(-1, 4)  # (B*37*37, 4)
-        loss_reg = self.loss_bbox(bbox_preds, bbox_targets, weight = cls_labels.reshape((B*H*W, ))) / (B*H*W)
+        loss_reg = self.loss_bbox(bbox_preds, bbox_targets, weight = cls_labels.reshape((B*H*W, ))) / cls_labels.sum()
 
         # center
-        loss_ctr = self.loss_centerness(centernesses, centerness_targets, weight = cls_labels) / (B*H*W)
+        loss_ctr = self.loss_centerness(centernesses, centerness_targets, weight = cls_labels) / cls_labels.sum()
         
         loss = (loss_cls + self.lambda1 * loss_reg + self.lambda2 * loss_ctr) 
         return loss, loss_cls, loss_reg, loss_ctr

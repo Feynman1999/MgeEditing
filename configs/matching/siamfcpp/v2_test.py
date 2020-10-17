@@ -149,7 +149,7 @@ evaluation = dict(interval=1, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20201016_181036/checkpoints/epoch_400'
+load_from = f'./workdirs/{exp_name}/20201017_005855/checkpoints/epoch_400'
 resume_from = None
 resume_optim = True
 workflow = 'test'
