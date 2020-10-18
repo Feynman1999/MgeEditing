@@ -5,6 +5,45 @@ from edit.utils import imresize
 
 
 @PIPELINES.register_module()
+class Random_Crop_Opt_Sar(object):
+    def __init__(self, keys, size):
+        self.keys = keys
+        self.size = size # 500, 320
+
+    def __call__(self, results):
+        # 首先随机一个512内的size[1]大小的图片作为sar
+        gap = 512 - self.size[1]  # 192
+        # 随机两个数 在0~192之间
+        sar_h = random.randint(0, gap)
+        sar_w = random.randint(0, gap)
+        # 获得sar图像
+        results['sar'] = results['sar'][sar_h:sar_h+self.size[1], sar_w:sar_w+self.size[1], :]  # h,w,1
+
+        # 所以我们可以得到320图在800中的左上角
+        sar_h = results['bbox'][0] + sar_h
+        sar_w = results['bbox'][1] + sar_w
+        # 随机一个包含sar的optical 大小 500
+        up = 800 - self.size[0]  # 300
+        optical_h = random.randint(max(sar_h - (self.size[0]-self.size[1]), 0), min(sar_h, up))
+        optical_w = random.randint(max(sar_w - (self.size[0]-self.size[1]), 0), min(sar_w, up))
+        # 截取optical
+        results['opt'] = results['opt'][optical_h:optical_h+self.size[0], optical_w:optical_w+self.size[0], :]  # h,w,1
+
+        # 更改bbox
+        results['bbox'][0] = sar_h - optical_h
+        results['bbox'][1] = sar_w - optical_w
+        results['bbox'][2] = results['bbox'][0] + self.size[1] - 1
+        results['bbox'][3] = results['bbox'][1] + self.size[1] - 1
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += (
+            f'(keys={self.keys})')
+        return repr_str
+
+
+@PIPELINES.register_module()
 class PairedRandomCrop(object):
     """Paried random crop.
 

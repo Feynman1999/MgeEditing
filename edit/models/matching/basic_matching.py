@@ -53,6 +53,8 @@ def train_generator_batch(optical, sar, label, *, opt, netG):
 @trace(symbolic=True)
 def test_generator_batch(optical, sar, *, netG):
     netG.eval()
+    tmp = netG.z_size
+    netG.z_size = netG.test_z_size
     cls_score, offsets, ctr_score = netG(sar, optical)  # [B,1,19,19]  [B,2,19,19]  [B,1,19,19]
     B, _, _, _ = cls_score.shape
     # 加权
@@ -60,11 +62,12 @@ def test_generator_batch(optical, sar, *, netG):
     cls_score = cls_score.reshape(B, -1)
     # find the max
     max_id = F.argmax(cls_score, axis = 1)  # (B, )
-    pred_box = get_box(netG.fm_ctr, offsets)  # (B,4,H,W)
+    pred_box = get_box(netG.test_fm_ctr, offsets)  # (B,4,H,W)
     pred_box = pred_box.reshape(B, 4, -1)
     output = []
     for i in range(B):
         output.append(F.add_axis(pred_box[i, :, max_id[i]], axis=0)) # (1, 4)
+    netG.z_size = tmp
     return F.concat(output, axis=0)  # [B,4]
 
 def eval_distance(pred, gt):  # (4, )

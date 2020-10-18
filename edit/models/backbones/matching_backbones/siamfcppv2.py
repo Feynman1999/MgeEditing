@@ -84,7 +84,7 @@ class CARBBlocks(M.Module):
 
 
 @BACKBONES.register_module()
-class SIAMFCPP(M.Module):
+class SIAMFCPPV2(M.Module):
     """
         channels (int): Number of channels in the input feature map.
         centerness_on_reg (bool): If true, position centerness on the
@@ -110,7 +110,7 @@ class SIAMFCPP(M.Module):
                        bbox_scale = 0.1,
                        stride = 8
                        ):
-        super(SIAMFCPP, self).__init__()
+        super(SIAMFCPPV2, self).__init__()
         self.in_cha = in_cha
         self.channels = channels
         self.cls_out_channels = 1
@@ -149,8 +149,8 @@ class SIAMFCPP(M.Module):
             self.backbone_opt = AlexNet_stride8(self.in_cha, self.feat_channels)
         else:
             pass
-        # self.bi = mge.Parameter(value=[0.0])
-        # self.si = mge.Parameter(value=[1.0])
+        self.bi = mge.Parameter(value=[0.0])
+        self.si = mge.Parameter(value=[1.0])
 
         self._init_feature_adjust()
         self._init_cls_convs()
@@ -223,8 +223,8 @@ class SIAMFCPP(M.Module):
 
         # regression
         offsets = self.conv_reg(r_out)
-        offsets = F.relu(offsets*self.total_stride + (self.z_size-1)/2)  # [B,2,37,37]
-        
+        offsets = F.relu(2*offsets*self.total_stride + (self.z_size-1)/2)  # [B,2,37,37]
+        # offsets = torch.exp(self.si * offsets + self.bi) * self.total_stride
         # bbox decoding
         # bbox = get_box(self.fm_ctr, offsets)  # (B, 2, 37, 37)
 
