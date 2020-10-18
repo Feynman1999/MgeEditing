@@ -1,12 +1,12 @@
 exp_name = 'sar_opt_v4'
 
-ch = 64
+ch = 48
 
 # model settings
 model = dict(
     type='BasicMatching',
     generator=dict(
-        type='SIAMFCPPV2',
+        type='SIAMFCPP',
         in_cha=1,
         channels=ch,
         loss_cls=dict(type='Focal_loss', alpha = 0.95, gamma = 2),
@@ -157,10 +157,10 @@ evaluation = dict(interval=400, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = None
+load_from = f'./workdirs/{exp_name}/20201018_171504/checkpoints/epoch_100'
 resume_from = None 
 resume_optim = True
-workflow = 'train'
+workflow = 'test'
 
 # logger
 log_level = 'INFO'

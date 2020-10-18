@@ -1,1 +1,1 @@
-python tools/test.py configs/matching/siamfcpp/v2_test.py -e --gpuid 0
+python tools/test.py configs/matching/siamfcpp/v4_test.py -e --gpuid 0

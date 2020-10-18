@@ -388,7 +388,7 @@ class AlexNet_stride4(M.Module):
         x = self.conv1(x) # 400, 256
         x = self.conv2(x) # 400, 256
         x = self.pool1(x) # 200, 128
-        y = self.conv3(x)
-        y = self.conv4(y)
-        x = self.conv5(x+y) # 200, 128
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.conv5(x) # 200, 128
         return x
