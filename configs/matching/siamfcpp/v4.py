@@ -6,10 +6,10 @@ ch = 64
 model = dict(
     type='BasicMatching',
     generator=dict(
-        type='SIAMFCPPV2',
+        type='SIAMFCPP',
         in_cha=1,
         channels=ch,
-        loss_cls=dict(type='Focal_loss', alpha = 0.95, gamma = 2),
+        loss_cls=dict(type='Focal_loss', alpha = 0.9, gamma = 2),
         loss_bbox=dict(type='IOULoss', loc_loss_type='giou'),
         loss_centerness=dict(type='BCELoss'),
         feat_channels = ch,
@@ -17,7 +17,7 @@ model = dict(
         x_size = 500,
         lambda1 = 0.25,  # reg
         lambda2 = 0.0,  # center
-        bbox_scale = 0.05,
+        bbox_scale = 0.1,
         stride = 4
     ))
 
@@ -42,7 +42,7 @@ train_pipeline = [
         io_backend='disk',
         key='sar',
         flag='color'),  # H,W,3  BGR
-    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.3, contrast=0.3, saturation=0.3, hue=0.0),
+    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.2, contrast=0.2, saturation=0.2, hue=0.0),
     dict(type='Corner_Shelter', keys=['opt'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Corner_Shelter', keys=['sar'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Bgr2Gray', keys=['opt', 'sar']),  # H, W, 1
@@ -138,7 +138,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.1 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-4))
+optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6))
 
 # learning policy
 total_epochs = 2000 // repeat_times
