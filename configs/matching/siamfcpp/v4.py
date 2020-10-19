@@ -1,6 +1,6 @@
 exp_name = 'sar_opt_v4'
 
-ch = 64
+ch = 48
 
 # model settings
 model = dict(
@@ -9,7 +9,7 @@ model = dict(
         type='SIAMFCPP',
         in_cha=1,
         channels=ch,
-        loss_cls=dict(type='Focal_loss', alpha = 0.9, gamma = 2),
+        loss_cls=dict(type='Focal_loss', alpha = 0.95, gamma = 2),
         loss_bbox=dict(type='IOULoss', loc_loss_type='giou'),
         loss_centerness=dict(type='BCELoss'),
         feat_channels = ch,
@@ -17,7 +17,7 @@ model = dict(
         x_size = 500,
         lambda1 = 0.25,  # reg
         lambda2 = 0.0,  # center
-        bbox_scale = 0.1,
+        bbox_scale = 0.05,
         stride = 4
     ))
 
@@ -110,7 +110,7 @@ data = dict(
             file_list_name = "train_random.txt",
             pipeline=train_pipeline,
             scale = 1,
-            balance_flag = "None")),  # test and uniform and None
+            balance_flag = "uniform")),  # test and uniform and None
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,

@@ -1,4 +1,4 @@
-exp_name = 'sar_opt_v4'
+exp_name = 'sar_opt_v5'
 
 ch = 48
 
@@ -6,7 +6,7 @@ ch = 48
 model = dict(
     type='BasicMatching',
     generator=dict(
-        type='SIAMFCPP',
+        type='SIAMFCPPV2',
         in_cha=1,
         channels=ch,
         loss_cls=dict(type='Focal_loss', alpha = 0.95, gamma = 2),
@@ -18,7 +18,7 @@ model = dict(
         lambda1 = 0.25,  # reg
         lambda2 = 0.0,  # center
         bbox_scale = 0.05,
-        stride = 4
+        stride = 2
     ))
 
 # model training and testing settings
@@ -42,7 +42,7 @@ train_pipeline = [
         io_backend='disk',
         key='sar',
         flag='color'),  # H,W,3  BGR
-    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.3, contrast=0.3, saturation=0.3, hue=0.0),
+    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.2, contrast=0.2, saturation=0.2, hue=0.0),
     dict(type='Corner_Shelter', keys=['opt'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Corner_Shelter', keys=['sar'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Bgr2Gray', keys=['opt', 'sar']),  # H, W, 1
@@ -110,7 +110,7 @@ data = dict(
             file_list_name = "train_random.txt",
             pipeline=train_pipeline,
             scale = 1,
-            balance_flag = "None")),  # test and uniform and None
+            balance_flag = "uniform")),  # test and uniform and None
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,
@@ -138,7 +138,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.1 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-4))
+optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6))
 
 # learning policy
 total_epochs = 2000 // repeat_times
@@ -157,10 +157,10 @@ evaluation = dict(interval=400, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/zeng_1.2/epoch_400'
+load_from = None
 resume_from = None 
 resume_optim = True
-workflow = 'test'
+workflow = 'train'
 
 # logger
 log_level = 'INFO'

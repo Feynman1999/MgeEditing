@@ -8,16 +8,26 @@ from edit.models.builder import BACKBONES, build_component, COMPONENTS, build_lo
 
 def xcorr_depthwise(x, kernel):
     """
-        x: [B,C,H,W]
-        kernel: [B,C,h,w]
+        x: [B,C,H,W]   250
+        kernel: [B,C,h,w]   160
     """    
-    batch = int(kernel.shape[0])
-    channel = int(kernel.shape[1])
+    batch, channel, kH, kW = kernel.shape
+    _, _, xH, xW = x.shape
     bc = batch*channel
-    x = x.reshape(1, bc, x.shape[2], x.shape[3])
-    kernel = kernel.reshape(bc, 1, 1, kernel.shape[2], kernel.shape[3])
-    out = F.conv2d(x, kernel, groups=bc)
-    out = out.reshape(batch, channel, out.shape[2], out.shape[3])
+    x = x.reshape(1, bc, xH, xW)
+    kernel = kernel.reshape(bc, 1, 1, kH, kW)
+    # divide by 2 * 2
+    kernel_lt = kernel[:, :, :, 0:kH//2, 0:kW//2]
+    kernel_rb = kernel[:, :, :, kH//2:kH, kW//2:kW] 
+    kernel_rt = kernel[:, :, :, 0:kH//2, kW//2:kW]
+    kernel_lb = kernel[:, :, :, kH//2:kH, 0:kW//2]
+    # cal result
+    out_lt = F.conv2d(x[:, :, 0:(xH-kH//2), 0:(xW - kW//2)], kernel_lt, groups=bc)
+    out_rb = F.conv2d(x[:, :, (kH//2):xH, (kW//2):xW], kernel_rb, groups=bc)
+    out_rt = F.conv2d(x[:, :, 0:(xH-kH//2), (kW//2):xW], kernel_rt, groups=bc)
+    out_lb = F.conv2d(x[:, :, (kH//2):xH, 0:(xW - kW//2)], kernel_lb, groups=bc)
+    oH, oW = out_lt.shape[2], out_lt.shape[3] 
+    out = (out_lt + out_rb + out_rt + out_lb).reshape(batch, channel, oH, oW)
     return out
 
 
@@ -147,10 +157,13 @@ class SIAMFCPPV2(M.Module):
         elif self.total_stride == 8:
             self.backbone_sar = AlexNet_stride8(self.in_cha, self.feat_channels)
             self.backbone_opt = AlexNet_stride8(self.in_cha, self.feat_channels)
+        elif self.total_stride == 2:
+            self.backbone_sar = AlexNet_stride2(self.in_cha, self.feat_channels)
+            self.backbone_opt = AlexNet_stride2(self.in_cha, self.feat_channels)
         else:
             pass
-        self.bi = mge.Parameter(value=[0.0])
-        self.si = mge.Parameter(value=[1.0])
+        # self.bi = mge.Parameter(value=[0.0])
+        # self.si = mge.Parameter(value=[1.0])
 
         self._init_feature_adjust()
         self._init_cls_convs()
@@ -223,8 +236,8 @@ class SIAMFCPPV2(M.Module):
 
         # regression
         offsets = self.conv_reg(r_out)
-        offsets = F.relu(2*offsets*self.total_stride + (self.z_size-1)/2)  # [B,2,37,37]
-        # offsets = torch.exp(self.si * offsets + self.bi) * self.total_stride
+        offsets = F.relu(offsets*self.total_stride + (self.z_size-1)/2)  # [B,2,37,37]
+        
         # bbox decoding
         # bbox = get_box(self.fm_ctr, offsets)  # (B, 2, 37, 37)
 
@@ -388,7 +401,26 @@ class AlexNet_stride4(M.Module):
         x = self.conv1(x) # 400, 256
         x = self.conv2(x) # 400, 256
         x = self.pool1(x) # 200, 128
-        y = self.conv3(x)
-        y = self.conv4(y)
-        x = self.conv5(x+y) # 200, 128
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.conv5(x) # 200, 128
+        return x
+
+
+class AlexNet_stride2(M.Module):
+    def __init__(self, in_cha, ch=48):
+        super(AlexNet_stride2, self).__init__()
+        assert ch % 2 ==0, "channel nums should % 2 = 0"
+        
+        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=11, stride=2, padding=5)
+        self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 5, 1, 2)
+        self.conv3 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
+        self.conv4 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
+        
+    def forward(self, x):
+        # 800, 512
+        x = self.conv1(x) # 400, 256
+        x = self.conv2(x) # 400, 256
+        x = self.conv3(x)
+        x = self.conv4(x)
         return x
