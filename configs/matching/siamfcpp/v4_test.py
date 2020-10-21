@@ -157,7 +157,7 @@ evaluation = dict(interval=400, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/zeng_1.2/epoch_400'
+load_from = f'./workdirs/epoch_110'
 resume_from = None 
 resume_optim = True
 workflow = 'test'

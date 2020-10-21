@@ -1,6 +1,8 @@
 exp_name = 'sar_opt_v5'
 
-ch = 48
+ch = 36
+z_size = 256
+x_size = 400
 
 # model settings
 model = dict(
@@ -13,8 +15,8 @@ model = dict(
         loss_bbox=dict(type='IOULoss', loc_loss_type='giou'),
         loss_centerness=dict(type='BCELoss'),
         feat_channels = ch,
-        z_size = 320,
-        x_size = 500,
+        z_size = z_size,
+        x_size = x_size,
         lambda1 = 0.25,  # reg
         lambda2 = 0.0,  # center
         bbox_scale = 0.05,
@@ -46,11 +48,11 @@ train_pipeline = [
     dict(type='Corner_Shelter', keys=['opt'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Corner_Shelter', keys=['sar'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Bgr2Gray', keys=['opt', 'sar']),  # H, W, 1
-    dict(type='Random_Crop_Opt_Sar', keys=['opt', 'sar'], size=[500, 320]),
+    dict(type='Random_Crop_Opt_Sar', keys=['opt', 'sar'], size=[x_size, z_size]),
     dict(type='RescaleToZeroOne', keys=['opt', 'sar']),
     dict(type='Normalize', keys=['opt', 'sar'], to_rgb=False, **img_norm_cfg),
-    dict(type='Flip', keys=['opt', 'sar', 'bbox'], flip_ratio=0.5, direction='horizontal', Len = 500),
-    dict(type='Flip', keys=['opt', 'sar', 'bbox'], flip_ratio=0.5, direction='vertical', Len = 500),
+    dict(type='Flip', keys=['opt', 'sar', 'bbox'], flip_ratio=0.5, direction='horizontal', Len = x_size),
+    dict(type='Flip', keys=['opt', 'sar', 'bbox'], flip_ratio=0.5, direction='vertical', Len = x_size),
     dict(type='RandomTransposeHW', keys=['opt', 'sar', 'bbox'], transpose_ratio=0.5),
     dict(type='ImageToTensor', keys=['opt', 'sar']),  # [H,W,C] -> [C,H,W]
     dict(type='Collect', keys=['opt', 'sar', 'bbox'])
@@ -110,7 +112,7 @@ data = dict(
             file_list_name = "train_random.txt",
             pipeline=train_pipeline,
             scale = 1,
-            balance_flag = "uniform")),  # test and uniform and None
+            balance_flag = "None")),  # test and uniform and None
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,
