@@ -31,7 +31,6 @@ class MatchFolderDataset(BaseMatchDataset):
         self.balance_flag = balance_flag
         self.data_infos = self.load_annotations()
 
-
     def load_annotations(self):
         data_infos = []
         # 获得所有的成对信息，从file_list_name中
@@ -58,9 +57,15 @@ class MatchFolderDataset(BaseMatchDataset):
                 top_left_y.append(float(infos[2])/self.scale)
         f.close()
 
+        ban_dict=[(5,95), (5,19), (5,20), (5,10), (5 ,44), (5 ,9), (3 ,193), (3 ,61), (1 ,187), (1 ,185), (1 ,179), (1 ,30), (1 ,95), (1 ,59), (1 ,52), (1 ,94), (1 ,26),(1 ,24), (1 ,23), (1, 43), (1, 3), (1,82),(2,455), (6,375), (6,329)]
+        
         for i in range(len(opt_list)):
             if self.mode == "train":
                 assert opt_list[i][-4] == '.'
+                aaa = int(opt_list[i][0])
+                bbb = int(opt_list[i][:-4].split("_")[-1])
+                if (aaa, bbb) in ban_dict:
+                    continue
                 data_infos.append(
                     dict(
                         opt_path=osp.join(self.opt_folder, opt_list[i]),
@@ -70,8 +75,8 @@ class MatchFolderDataset(BaseMatchDataset):
                                          top_left_x[i] + self.z_size/self.scale - 1, 
                                          top_left_y[i] + self.z_size/self.scale - 1]).astype(np.float32),
                         scale = self.scale,
-                        class_id = int(opt_list[i][0]),
-                        file_id = int(opt_list[i][:-4].split("_")[-1])
+                        class_id = np.array(aaa).astype(np.int32),
+                        file_id = np.array(bbb).astype(np.int32)
                     )
                 )
             elif self.mode == "eval":
