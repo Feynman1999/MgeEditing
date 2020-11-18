@@ -81,7 +81,11 @@ class BaseMatchDataset(BaseDataset):
                 eval_results[metric].append(val)
                 eval_results[metric+ "_" + str(class_id)].append(val)
                 if val > 5:
+                    print("value: {}".format(val))
                     eval_results[metric+ "_" + str(class_id) + "_more_than_5_nums"].append(1.0)
+                else:
+                    val = int(val+0.5)
+                    eval_results[metric+ "_" + str(val) + "_nums"].append(1.0)
 
         # for metric, val_list in eval_results.items():
         #     assert len(val_list) == len(self), (
@@ -90,7 +94,7 @@ class BaseMatchDataset(BaseDataset):
 
         # average the results
         eval_results = {
-            metric: (sum(values) / len(values) if "more" not in metric else sum(values))
+            metric: (sum(values) / len(values) if "nums" not in metric else sum(values))
             for metric, values in eval_results.items()
         }
 

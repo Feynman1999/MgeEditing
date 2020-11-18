@@ -12,116 +12,79 @@ from ..base import BaseModel
 from ..builder import build_backbone
 from ..registry import MODELS
 
-def add_H_W_Padding(x, margin=1):
-    shape = x.shape
-    padding_shape = list(shape)[:-2] + [ shape[-2] + 2*margin, shape[-1] + 2*margin ]
-    res = mge.ones(padding_shape, dtype=x.dtype) * 10000
-    res = res.set_subtensor(x)[:, :, margin:margin + shape[-2],  margin: margin + shape[-1]]
-    return res
-
-def get_box(xy_ctr, offsets):
-    """
-        xy_ctr: [1,2,37,37]
-        offsets: [B,2,37,37]
-    """
-    xy0 = (xy_ctr - offsets)  # top-left
-    xy1 = xy0 + 511  # bottom-right
-    bboxes_pred = F.concat([xy0, xy1], axis=1)  # (B,4,H,W)
-    return bboxes_pred
-
 config = SublinearMemoryConfig()
 
 @trace(symbolic=True)
 def train_generator_batch(optical, sar, label, cls_id, file_id, *, opt, netG):
     netG.train()
-    cls_score, offsets, ctr_score = netG(sar, optical)
-    loss, loss_cls, loss_reg, loss_ctr, cls_labels = netG.loss(cls_score, offsets, ctr_score, label)
+    cls_score = netG(sar, optical)
+    loss, cls_labels = netG.loss(cls_score, label)
     opt.backward(loss)
     if dist.is_distributed():
-        # do all reduce mean
         pass
 
     # performance in the training data
     B, _, H, W = cls_score.shape
     cls_score = cls_score.reshape(B, -1)
     times = 1
-    pred_box = get_box(netG.fm_ctr, offsets)  # (B,4,H,W)
-    # margin = 1
-    # offsets = add_H_W_Padding(offsets, margin=margin) - (netG.z_size-1)/2
-    # cls_score = add_H_W_Padding(cls_score, margin=margin)
-    # cls_labels = add_H_W_Padding(cls_labels, margin=margin)
-
+    # print(cls_score)
+    # print(label)
+    # print(cls_score.reshape(B, H, H))
+    # print(cls_labels)
     res = []
     for t in range(times):
         output = []
         max_id = F.argmax(cls_score, axis = 1)  # (B, )
         for i in range(B):
-            H_id = max_id[i] // H
-            W_id = max_id[i] % H
-            output.append(F.add_axis(pred_box[i, :, H_id, W_id], axis=0))  # (1,4)
+            H_id = max_id[i] // W
+            W_id = max_id[i] % W
+            output.append(F.add_axis(netG.fm_ctr[0, :, H_id, W_id], axis=0))  # (1,2)
+            # print(output)
+            # print(label[i, :])
             x = mge.tensor(-100000.0)
             cls_score = cls_score.set_subtensor(x)[i, max_id[i]]
-            # min_id = F.argmin((offsets[i, 0, H_id:H_id+(margin*2+1), W_id:W_id+(margin*2+1)]**2 + offsets[i, 1, H_id:H_id+(margin*2+1), W_id:W_id+(margin*2+1)]**2).reshape((margin*2+1)**2), axis = 0)
-            # H_min_id = min_id // (margin*2+1)
-            # W_min_id = min_id % (margin*2+1)
-            # H_min_id = margin
-            # W_min_id = margin   
-            # output.append(F.add_axis(pred_box[i, :, H_id+H_min_id-margin, W_id+W_min_id-margin], axis=0)) # (1, 4)
-        output = F.concat(output, axis=0)  # (B, 4)
+        output = F.concat(output, axis=0)  # (B, 2)
         res.append(output)
     output = sum(res) / len(res)
 
-    dis = F.norm(F.floor(output[:, 0:2]+0.5) - label[:, 0:2], p=2, axis = 1)  # (B, )
-    # if F.max(dis).item() > 20:
-    #     Id = F.argmax(dis)
-    #     print(cls_id[Id], file_id[Id])
-    #     print(dis)
-    return [loss_cls*1000, loss_reg, loss_ctr, dis.mean()]
+    dis = F.norm(output[:, 0:2] - label[:, 0:2], p=2, axis = 1)  # (B, )
+    return [loss, dis.mean()]
 
 
 @trace(symbolic=True)
 def test_generator_batch(optical, sar, *, netG):
     netG.eval()
-    tmp = netG.z_size
-    netG.z_size = netG.test_z_size
-    cls_score, offsets, ctr_score = netG(sar, optical)  # [B,1,19,19]  [B,2,19,19]  [B,1,19,19]
+    cls_score = netG(sar, optical)  # [B,1,19,19]  [B,2,19,19]  [B,1,19,19]
     B, _, H, W = cls_score.shape
     cls_score = cls_score.reshape(B, -1)
     times = 1
-    pred_box = get_box(netG.test_fm_ctr, offsets)  # (B,4,H,W)
 
     res = []
     for t in range(times):
         output = []
         max_id = F.argmax(cls_score, axis = 1)  # (B, )
         for i in range(B):
-            H_id = max_id[i] // H
-            W_id = max_id[i] % H
-            output.append(F.add_axis(pred_box[i, :, H_id, W_id], axis=0))  # (1,4)
+            H_id = max_id[i] // W
+            W_id = max_id[i] % W
+            output.append(F.add_axis(netG.test_fm_ctr[0, :, H_id, W_id], axis=0))  # (1,2)
             x = mge.tensor(-100000.0)
             cls_score = cls_score.set_subtensor(x)[i, max_id[i]]
-            # min_id = F.argmin((offsets[i, 0, H_id:H_id+(margin*2+1), W_id:W_id+(margin*2+1)]**2 + offsets[i, 1, H_id:H_id+(margin*2+1), W_id:W_id+(margin*2+1)]**2).reshape((margin*2+1)**2), axis = 0)
-            # H_min_id = min_id // (margin*2+1)
-            # W_min_id = min_id % (margin*2+1)
-            # H_min_id = margin
-            # W_min_id = margin   
-            # output.append(F.add_axis(pred_box[i, :, H_id+H_min_id-margin, W_id+W_min_id-margin], axis=0)) # (1, 4)
-        output = F.concat(output, axis=0)  # (B, 4)
+        output = F.concat(output, axis=0)  # (B, 2)
         res.append(output)
     output = sum(res) / len(res)
-    netG.z_size = tmp
-    return output  # [B,4]
+
+    return F.concat([output, output], axis= 1) # [B,4]
 
 def eval_distance(pred, gt):  # (4, )
     assert len(pred.shape) == 1
     return np.linalg.norm(pred[0:2]-gt[0:2], ord=2)
 
 @MODELS.register_module()
-class BasicMatching(BaseModel):
+class PreciseMatching(BaseModel):
     allowed_metrics = {'dis': eval_distance}
 
     def __init__(self, generator, train_cfg=None, eval_cfg=None, pretrained=None):
-        super(BasicMatching, self).__init__()
+        super(PreciseMatching, self).__init__()
 
         self.train_cfg = train_cfg
         self.eval_cfg = eval_cfg
@@ -150,11 +113,14 @@ class BasicMatching(BaseModel):
             list: loss
         """
         optical, sar, label, cls_id, file_id = batchdata
+        
         # 保存optical 和 sar，看下对不对
         # name = random.sample('zyxwvutsrqponmlkjihgfedcba', 3)
         # name = "".join(name) + "_" + str(label[0][0]) + "_" + str(label[0][1]) + "_" + str(label[0][2]) + "_" + str(label[0][3])
-        # imwrite(cv2.rectangle(tensor2img(optical[0, ...], min_max=(-0.64, 1.36)), (label[0][1], label[0][0]), (label[0][3], label[0][2]), (0,0,255), 2), file_path="./workdirs/" + name + "_opt.png") 
-        # imwrite(tensor2img(sar[0, ...], min_max=(-0.64, 1.36)), file_path="./workdirs/" + name + "_sar.png")
+        # print(name)
+        # imwrite(cv2.rectangle(tensor2img(optical[0, ...], min_max=(-0.8, 1.2)), (label[0][1], label[0][0]), (label[0][3], label[0][2]), (0,0,255), 1), file_path="./workdirs/test_256_260" + name + "_opt.png") 
+        # imwrite(tensor2img(sar[0, ...], min_max=(-0.8, 1.2)), file_path="./workdirs/test_256_260" + name + "_sar.png")
+        
         self.optimizers['generator'].zero_grad()
         loss = train_generator_batch(optical, sar, label, cls_id, file_id, opt=self.optimizers['generator'], netG=self.generator)
         self.optimizers['generator'].step()
@@ -222,7 +188,7 @@ class BasicMatching(BaseModel):
         :param gathered_batchdata: list of numpy, [optical, sar, bbox_gt, class_id, file_id]
         :return: eval result
         """
-        pre_bbox = F.floor(gathered_outputs[0]+0.5)
+        pre_bbox = gathered_outputs[0]
         bbox_gt = gathered_batchdata[2]
         class_id = gathered_batchdata[-2]
         file_id = gathered_batchdata[-1]

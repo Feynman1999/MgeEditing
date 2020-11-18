@@ -233,7 +233,7 @@ class SIAMFCPP(M.Module):
 
         # regression
         offsets = self.conv_reg(r_out)
-        offsets = F.relu(offsets*self.total_stride*2 + (self.z_size-1)/2)  # [B,2,37,37]
+        offsets = F.relu(offsets*self.total_stride + (self.z_size-1)/2)  # [B,2,37,37]
         
         # bbox decoding
         # bbox = get_box(self.fm_ctr, offsets)  # (B, 2, 37, 37)

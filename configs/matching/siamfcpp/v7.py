@@ -10,18 +10,18 @@ model = dict(
     generator=dict(
         type='SIAMFCPP',
         in_cha=1,
-        channels=30,
-        loss_cls=dict(type='Focal_loss', alpha = 0.999, gamma = 2),
+        channels=20,
+        loss_cls=dict(type='Focal_loss', alpha = 0.95, gamma = 2),
         loss_bbox=dict(type='IOULoss', loc_loss_type='giou'),
         loss_centerness=dict(type='BCELoss'),
         stacked_convs = 3,
-        feat_channels = 30,
+        feat_channels = 20,
         z_size = z_size,
         x_size = x_size,
         test_z_size = test_z_size,
-        lambda1 = 0.0000002,  # reg
+        lambda1 = 0.0,  # reg
         lambda2 = 0.0,  # center
-        bbox_scale = 0.1,
+        bbox_scale = 0.2,
         stride = 2,
         backbone_type = "alexnet"
     ))
@@ -47,7 +47,7 @@ train_pipeline = [
         io_backend='disk',
         key='sar',
         flag='color'),  # H,W,3  BGR
-    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.5, contrast=0.5, saturation=0.0, hue=0.0),
+    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.5, contrast=0.8, saturation=0.0, hue=0.0),
     dict(type='Corner_Shelter', keys=['opt'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Corner_Shelter', keys=['sar'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Bgr2Gray', keys=['opt', 'sar']),  # H, W, 1
@@ -102,7 +102,7 @@ repeat_times = 1
 
 data = dict(
     # train
-    samples_per_gpu=64,
+    samples_per_gpu=32,
     workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
@@ -143,14 +143,14 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=20 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-7))
+optimizers = dict(generator=dict(type='Adam', lr=1 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-7))
 
 # learning policy
 total_epochs = 2000 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
-checkpoint_config = dict(interval=40)
+checkpoint_config = dict(interval=4)
 log_config = dict(
     interval=10,
     hooks=[

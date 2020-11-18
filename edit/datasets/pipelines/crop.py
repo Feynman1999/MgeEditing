@@ -1,16 +1,20 @@
 import random
 import math
+import numpy as np
 from ..registry import PIPELINES
 from edit.utils import imresize
 
 
 @PIPELINES.register_module()
 class Random_Crop_Opt_Sar(object):
-    def __init__(self, keys, size):
+    def __init__(self, keys, size, have_seed = False):
         self.keys = keys
         self.size = size # 500, 320
+        self.have_seed = have_seed
 
     def __call__(self, results):
+        if self.have_seed:  # 用于测试时
+            random.seed(np.sum(results['sar']))
         # 首先随机一个512内的size[1]大小的图片作为sar
         gap = 512 - self.size[1]  # 192
         # 随机两个数 在0~192之间

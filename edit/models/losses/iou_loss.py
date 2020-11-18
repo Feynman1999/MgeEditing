@@ -1,8 +1,9 @@
 import megengine.functional as F
 import megengine.module as M
+import megengine
 from megengine.core import Tensor
+import numpy as np
 from ..builder import LOSSES
-
 
 @LOSSES.register_module()
 class IOULoss(M.Module):
@@ -37,7 +38,7 @@ class IOULoss(M.Module):
         area_intersect = w_intersect * h_intersect
         area_union = target_aera + pred_aera - area_intersect
 
-        ious = (area_intersect + 1.0) / (area_union + 1.0)
+        ious = area_intersect / area_union
         gious = ious - (ac_uion - area_union) / ac_uion
         if self.loc_loss_type == 'iou':
             losses = -F.log(ious)
@@ -52,3 +53,11 @@ class IOULoss(M.Module):
             return (losses * weight).sum()
         else:
             return losses.sum()
+
+if __name__ == "__main__":
+    iou = IOULoss()
+    zsize = 320
+    x  = 159.5
+    pred = F.add_axis(megengine.tensor(np.array([x, x, zsize - 1 - x, zsize - 1 - x], dtype=np.float32)), 0)
+    target = F.add_axis(megengine.tensor(np.array([x+5, x+5, zsize - 1- (x+5), zsize-1-x-5], dtype=np.float32)),0)
+    print(iou(pred, target))

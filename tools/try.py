@@ -4,6 +4,17 @@ import megengine.module as M
 import megengine.functional as F
 np.set_printoptions(threshold=np.inf) # 加上这一句
 
+def get_xy_ctr_np2(score_size):
+    fm_height, fm_width = score_size, score_size
+
+    y_list = np.linspace(0., fm_height - 1., fm_height).reshape(1, 1, fm_height, 1)
+    y_list = y_list.repeat(fm_width, axis=3)
+    x_list = np.linspace(0., fm_width - 1., fm_width).reshape(1, 1, 1, fm_width)
+    x_list = x_list.repeat(fm_height, axis=2)
+    xy_list = np.concatenate((y_list, x_list), 1)
+    xy_ctr = mge.tensor(xy_list.astype(np.float32), requires_grad=False)
+    return xy_ctr
+
 def get_xy_ctr_np(score_size, score_offset, total_stride):
     """ generate coordinates on image plane for score map pixels (in numpy)
     """
@@ -52,9 +63,8 @@ def get_cls_reg_ctr_targets(points, gt_bboxes, bbox_scale = 0.25):
     centerness_targets = F.sqrt(F.abs(up_bottom * left_right))
     return cls_labels, bbox_targets, centerness_targets
 
-a = get_xy_ctr_np(500-320+1, (500-181)/2, 1)
-ll = [a,a]
-print(sum(ll))
+a = get_xy_ctr_np2(5)
+print(a[0,:, 3,4])
 # gt_bboxes = mge.tensor(np.array([[0,0,255,255], [100,100,355,355]]).astype(np.float32))
 
 # cls_labels, bbox_targets, centerness_targets = get_cls_reg_ctr_targets(a, gt_bboxes)
