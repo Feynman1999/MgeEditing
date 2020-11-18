@@ -3,6 +3,7 @@ import megengine.module as M
 from megengine.module.conv import Conv2d, ConvTranspose2d
 import megengine.functional as F
 import numpy as np
+from edit.models.common import WeightNet
 from edit.models.builder import BACKBONES, build_component, COMPONENTS, build_loss
 
 def xcorr_depthwise(x, kernel):
@@ -227,4 +228,50 @@ class AlexNet(M.Module):
         x = self.conv2(x)
         x = self.conv3(x)
         x = self.conv4(x)
+        return x
+
+
+class ResBlock(M.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3, conv_mode="weightnet", usebn=True):
+        super(ResBlock, self).__init__()
+        self.act = M.PReLU(num_parameters=1, init=0.25)
+
+        m = []
+        if conv_mode=="normal":
+            m.append(M.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=1, padding=(kernel_size//2)))
+            if usebn:
+                m.append(M.BatchNorm2d(out_channels))
+            m.append(M.PReLU(num_parameters=1, init=0.25))
+            m.append(M.Conv2d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=(kernel_size//2)))
+            if usebn:
+                m.append(M.BatchNorm2d(out_channels))
+        elif conv_mode=="weightnet":
+            m.append(WeightNet(in_channels, out_channels, kernel_size, 1))
+            if usebn:
+                m.append(M.BatchNorm2d(out_channels))
+            m.append(M.PReLU(num_parameters=1, init=0.25))
+            m.append(WeightNet(out_channels, out_channels, kernel_size, 1))
+            if usebn:
+                m.append(M.BatchNorm2d(out_channels))
+        else:
+            raise NotImplementedError("???")
+        self.body = M.Sequential(*m)
+
+    def forward(self, x):
+        res = self.body(x)
+        res += x
+        return self.act(res)
+
+class Resnet_weightnet(M.Module):
+    def __init__(self, in_cha, ch=48):
+        super(Resnet_weightnet, self).__init__()
+        assert ch % 2 ==0, "channel nums should % 2 = 0"
+        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=3, stride=1, padding=1)
+        self.conv2 = ResBlock(ch//2, ch, 3)
+        self.conv3 = ResBlock(ch, ch, 3)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
         return x
