@@ -12,14 +12,14 @@ model = dict(
         type='SIAMFCPP_P',
         in_cha=1,
         channels=56,
-        loss_cls=dict(type='Focal_loss', alpha = 0.95, gamma = 2),
-        stacked_convs = 3,
+        loss_cls=dict(type='Focal_loss', alpha = 0.9, gamma = 2),
+        stacked_convs = 2,
         feat_channels = 48,
         z_size = z_size,
         x_size = x_size,
         test_z_size = test_z_size,
         test_x_size = test_x_size,
-        backbone_type = "alexnet"
+        backbone_type = "alexnet"  # alexnet  Shuffle_weightnet
     ))
 
 # model training and testing settings
@@ -99,7 +99,7 @@ repeat_times = 1
 
 data = dict(
     # train
-    samples_per_gpu=8,
+    samples_per_gpu=12,
     workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
@@ -112,10 +112,10 @@ data = dict(
             file_list_name = "train_random.txt",
             pipeline=train_pipeline,
             scale = 1,
-            balance_flag = "uniform")),  # test and uniform and None
+            balance_flag = "None")),  # test and uniform and None
     # eval
     eval_samples_per_gpu=1,
-    eval_workers_per_gpu=4,
+    eval_workers_per_gpu=8,
     eval=dict(
         type=eval_dataset_type,
         data_path= dataroot + "/stage1",
@@ -140,14 +140,14 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.4 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6))
+optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-5))
 
 # learning policy
 total_epochs = 2000 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
-checkpoint_config = dict(interval=10)
+checkpoint_config = dict(interval=20)
 log_config = dict(
     interval=20,
     hooks=[
@@ -159,7 +159,7 @@ evaluation = dict(interval=800, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = None
+load_from = None # f'./workdirs/{exp_name}/20201202_205020/checkpoints/epoch_20' # f'./workdirs/{exp_name}/epoch_70' # f'./workdirs/{exp_name}/20201121_002958/checkpoints/epoch_100'
 resume_from = None
 resume_optim = True
 workflow = 'train'

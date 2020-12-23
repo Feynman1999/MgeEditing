@@ -2,6 +2,7 @@ import megengine as mge
 import megengine.module as M
 from megengine.module.conv import Conv2d, ConvTranspose2d
 import megengine.functional as F
+from edit.models.common import WeightNet, WeightNet_DW, FilterResponseNorm2d
 import numpy as np
 from edit.models.builder import BACKBONES, build_component, COMPONENTS, build_loss
 
@@ -32,54 +33,6 @@ def get_xy_ctr_np(score_size, score_offset, total_stride):
     xy_list = score_offset + np.concatenate((y_list, x_list), 1) * total_stride
     xy_ctr = mge.tensor(xy_list.astype(np.float32), requires_grad=False)
     return xy_ctr
-
-
-class CARBBlock(M.Module):
-    def __init__(self, channel_num):
-        super(CARBBlock, self).__init__()
-        self.conv1 = M.Sequential(
-            M.Conv2d(channel_num, channel_num, kernel_size=3, padding=1, stride=1),
-            M.ReLU(),
-            M.Conv2d(channel_num, channel_num, kernel_size=3, padding=1, stride=1),
-        )
-        # self.global_average_pooling = nn.AdaptiveAvgPool2d((1,1))  # B,C,H,W -> B,C,1,1
-        self.linear = M.Sequential(
-            M.Linear(channel_num, channel_num // 2),
-            M.ReLU(),
-            M.Linear(channel_num // 2, channel_num),
-            M.Sigmoid()
-        )
-        self.conv2 = M.Conv2d(channel_num*2, channel_num, kernel_size=1, padding=0, stride=1)
-        self.lrelu = M.LeakyReLU()
-
-    def forward(self, x):
-        x1 = self.conv1(x)  # [B, C, H, W]
-        w = F.mean(x1, axis = -1, keepdims = False) # [B,C,H]
-        w = F.mean(w, axis = -1, keepdims = False) # [B,C]
-        w = self.linear(w)
-        w = F.add_axis(w, axis = -1)
-        w = F.add_axis(w, axis = -1)  # [B,C,1,1]
-        x1 = F.concat((x1, F.multiply(x1, w)), axis = 1)  # [B, 2C, H, W]
-        del w
-        x1 = self.conv2(x1)  # [B, C, H, W]
-        return self.lrelu(x + x1)
-
-
-class CARBBlocks(M.Module):
-    def __init__(self, channel_num, block_num):
-        super(CARBBlocks, self).__init__()
-        self.model = M.Sequential(
-            self.make_layer(CARBBlock, channel_num, block_num),
-        )
-
-    def make_layer(self, block, channel_num, num_blocks):
-        layers = []
-        for _ in range(num_blocks):
-            layers.append(block(channel_num))
-        return M.Sequential(*layers)
-
-    def forward(self, x):
-        return self.model(x)
 
 
 @BACKBONES.register_module()
@@ -155,8 +108,14 @@ class SIAMFCPP(M.Module):
             self.backbone_sar = AlexNet_stride8(self.in_cha, self.channels)
             self.backbone_opt = AlexNet_stride8(self.in_cha, self.channels)
         elif self.total_stride == 2:
-            self.backbone_sar = AlexNet_stride2(self.in_cha, self.channels)
-            self.backbone_opt = AlexNet_stride2(self.in_cha, self.channels)
+            if self.backbone_type == "alexnet":
+                self.backbone_sar = AlexNet_stride2(self.in_cha, self.channels)
+                self.backbone_opt = AlexNet_stride2(self.in_cha, self.channels)
+            elif self.backbone_type == "Shuffle_weight_frn_stride2":
+                self.backbone_sar = Shuffle_weight_frn_stride2(self.in_cha, self.channels)
+                self.backbone_opt = Shuffle_weight_frn_stride2(self.in_cha, self.channels)
+            else:
+                raise NotImplementedError("not implement!")
         else:
             pass
         # self.bi = mge.Parameter(value=[0.0])
@@ -169,10 +128,29 @@ class SIAMFCPP(M.Module):
 
     def _init_feature_adjust(self):
         # feature adjustment
-        self.r_z_k = M.ConvBn2d(self.channels, self.feat_channels, 3, 1, 1, momentum=0.9, affine=True, track_running_stats=True)
-        self.c_z_k = M.ConvBn2d(self.channels, self.feat_channels, 3, 1, 1, momentum=0.9, affine=True, track_running_stats=True)
-        self.r_x = M.ConvBn2d(self.channels, self.feat_channels, 3, 1, 1, momentum=0.9, affine=True, track_running_stats=True)
-        self.c_x = M.ConvBn2d(self.channels, self.feat_channels, 3, 1, 1, momentum=0.9, affine=True, track_running_stats=True)
+        if "frn" in self.backbone_type:
+            self.c_z_k = M.Sequential(
+                M.Conv2d(self.channels, self.feat_channels, 3,1,1),
+                FilterResponseNorm2d(self.feat_channels)
+            )
+            # self.c_x = M.ConvBn2d(self.channels, self.feat_channels, 3, 1, 1, momentum=0.9, affine=True, track_running_stats=True)
+            self.c_x = M.Sequential(
+                M.Conv2d(self.channels, self.feat_channels, 3,1,1),
+                FilterResponseNorm2d(self.feat_channels)
+            )
+            self.r_z_k = M.Sequential(
+                M.Conv2d(self.channels, self.feat_channels, 3,1,1),
+                FilterResponseNorm2d(self.feat_channels)
+            )
+            self.r_x = M.Sequential(
+                M.Conv2d(self.channels, self.feat_channels, 3,1,1),
+                FilterResponseNorm2d(self.feat_channels)
+            )
+        else:
+            self.r_z_k = M.ConvBn2d(self.channels, self.feat_channels, 3, 1, 1, momentum=0.9, affine=True, track_running_stats=True)
+            self.c_z_k = M.ConvBn2d(self.channels, self.feat_channels, 3, 1, 1, momentum=0.9, affine=True, track_running_stats=True)
+            self.r_x = M.ConvBn2d(self.channels, self.feat_channels, 3, 1, 1, momentum=0.9, affine=True, track_running_stats=True)
+            self.c_x = M.ConvBn2d(self.channels, self.feat_channels, 3, 1, 1, momentum=0.9, affine=True, track_running_stats=True)
 
     def _init_cls_convs(self):
         """Initialize classification conv layers of the head."""
@@ -181,17 +159,26 @@ class SIAMFCPP(M.Module):
             self.cls_convs.append(
                 M.ConvRelu2d(self.feat_channels, self.feat_channels, 3, 1, 1)
             )
-        self.cls_convs.append(
-            M.ConvBnRelu2d( self.feat_channels, 
-                            self.feat_channels,
-                            kernel_size=3,
-                            stride=1,
-                            padding=1, 
-                            bias=True,
-                            momentum=0.9,
-                            affine=True,
-                            track_running_stats=True)
-        )   
+        if "frn" in self.backbone_type:
+            self.cls_convs.append(
+                M.Sequential(
+                    M.Conv2d(self.feat_channels, self.feat_channels, 3, 1 ,1),
+                    FilterResponseNorm2d(self.feat_channels),
+                    M.LeakyReLU()
+                )
+            )  
+        else:
+            self.cls_convs.append(
+                M.ConvBnRelu2d( self.feat_channels, 
+                                self.feat_channels,
+                                kernel_size=3,
+                                stride=1,
+                                padding=1, 
+                                bias=True,
+                                momentum=0.9,
+                                affine=True,
+                                track_running_stats=True)
+            )   
         self.cls_convs = M.Sequential(*self.cls_convs)
 
     def _init_reg_convs(self):
@@ -201,25 +188,39 @@ class SIAMFCPP(M.Module):
             self.reg_convs.append(
                 M.ConvRelu2d(self.feat_channels, self.feat_channels, 3, 1, 1)
             )
-        self.reg_convs.append(
-            M.ConvBnRelu2d( self.feat_channels,
-                            self.feat_channels,
-                            kernel_size=3, 
-                            stride=1, 
-                            padding=1, 
-                            bias=True,
-                            momentum=0.9,
-                            affine=True,
-                            track_running_stats=True)
-        )
+        if "frn" in self.backbone_type:
+            self.reg_convs.append(
+                M.Sequential(
+                    M.Conv2d(self.feat_channels, self.feat_channels, 3, 1 ,1),
+                    FilterResponseNorm2d(self.feat_channels),
+                    M.LeakyReLU()
+                )
+            )
+        else:
+            self.reg_convs.append(
+                M.ConvBnRelu2d( self.feat_channels,
+                                self.feat_channels,
+                                kernel_size=3, 
+                                stride=1, 
+                                padding=1, 
+                                bias=True,
+                                momentum=0.9,
+                                affine=True,
+                                track_running_stats=True)
+            )
         self.reg_convs = M.Sequential(*self.reg_convs)
 
     def _init_predictor(self):
         """Initialize predictor layers of the head."""
-        self.conv_cls = M.ConvBn2d(self.feat_channels, self.cls_out_channels, kernel_size=1, stride=1, padding=0)
-        self.conv_reg = M.ConvBn2d(self.feat_channels, 2, kernel_size=1, stride=1, padding=0)
-        self.conv_centerness = M.ConvBn2d(self.feat_channels, 1, kernel_size=1, stride=1, padding=0)
-
+        if "frn" in self.backbone_type:
+            self.conv_cls = M.Conv2d(self.feat_channels, self.cls_out_channels, 1, 1 ,0)
+            self.conv_reg = M.Conv2d(self.feat_channels, 2, kernel_size=3, stride=1, padding=1)
+            self.conv_centerness = M.Conv2d(self.feat_channels, self.cls_out_channels, 1, 1 ,0)
+        else:
+            self.conv_cls = M.ConvBn2d(self.feat_channels, self.cls_out_channels, kernel_size=1, stride=1, padding=0)
+            self.conv_reg = M.ConvBn2d(self.feat_channels, 2, kernel_size=1, stride=1, padding=0)
+            self.conv_centerness = M.ConvBn2d(self.feat_channels, 1, kernel_size=1, stride=1, padding=0)
+        
     def head(self, c_out, r_out):
         c_out = self.cls_convs(c_out)
         r_out = self.reg_convs(r_out)
@@ -388,7 +389,6 @@ class AlexNet_stride4(M.Module):
         self.pool1 = M.MaxPool2d(3, 2, 1)
         self.conv3 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
         self.conv4 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
-        # self.carbs = CARBBlocks(ch, 2)
         self.conv5 = M.conv_bn.ConvBn2d(ch, ch, 3, 1, 1)
         
 
@@ -400,6 +400,95 @@ class AlexNet_stride4(M.Module):
         x = self.conv3(x)
         x = self.conv4(x)
         x = self.conv5(x) # 200, 128
+        return x
+
+
+class ShuffleV2Block(M.Module):
+    def __init__(self, inp, oup, mid_channels, *, ksize, stride):
+        super(ShuffleV2Block, self).__init__()
+        self.stride = stride
+        assert stride in [1, 2]
+
+        self.mid_channels = mid_channels
+        self.ksize = ksize
+        pad = ksize // 2
+        self.pad = pad
+        self.inp = inp
+        outputs = oup - inp
+        self.reduce = M.Conv2d(inp, max(16, inp//16), 1, 1, 0, bias=True)
+        self.wnet1 = WeightNet(inp, mid_channels, 1, 1)
+        # self.bn1 = M.BatchNorm2d(mid_channels)
+        self.bn1 = FilterResponseNorm2d(mid_channels)
+        self.wnet2 = WeightNet_DW(mid_channels, ksize, stride)
+        # self.bn2 =M.BatchNorm2d(mid_channels)
+        self.bn2 = FilterResponseNorm2d(mid_channels)
+        self.wnet3 = WeightNet(mid_channels, outputs, 1, 1)
+        # self.bn3 = M.BatchNorm2d(outputs)
+        self.bn3 = FilterResponseNorm2d(outputs)
+        if stride == 2:
+            self.wnet_proj_1 = WeightNet_DW(inp, ksize, stride)
+            self.bn_proj_1 = M.BatchNorm2d(inp)
+
+            self.wnet_proj_2 = WeightNet(inp, inp, 1, 1)
+            self.bn_proj_2 = M.BatchNorm2d(inp)
+
+    def forward(self, old_x):
+        if self.stride == 1:
+            x_proj, x = self.channel_shuffle(old_x)
+        elif self.stride == 2:
+            x_proj = old_x
+            x = old_x
+
+        x_gap = x.mean(axis=2,keepdims=True).mean(axis=3,keepdims=True)
+        x_gap = self.reduce(x_gap)
+
+        x = self.wnet1(x, x_gap)
+        x = self.bn1(x)
+        x = F.relu(x)
+
+        x = self.wnet2(x, x_gap)
+        x = self.bn2(x)
+
+        x = self.wnet3(x, x_gap)
+        x = self.bn3(x)
+        x = F.relu(x)
+
+        if self.stride == 2:
+            x_proj = self.wnet_proj_1(x_proj, x_gap)
+            x_proj = self.bn_proj_1(x_proj)
+            x_proj = self.wnet_proj_2(x_proj, x_gap)
+            x_proj = self.bn_proj_2(x_proj)
+            x_proj = F.relu(x_proj)
+
+        return F.concat((x_proj, x), 1)
+
+    def channel_shuffle(self, x):
+        batchsize, num_channels, height, width = x.shape
+        # assert (num_channels % 4 == 0)
+        x = x.reshape(batchsize * num_channels // 2, 2, height * width)
+        x = x.dimshuffle(1, 0, 2)
+        x = x.reshape(2, -1, num_channels // 2, height, width)
+        return x[0], x[1]
+
+
+class Shuffle_weight_frn_stride2(M.Module):
+    def __init__(self, in_cha, ch=48):
+        super(Shuffle_weight_frn_stride2, self).__init__()
+        assert ch % 2 ==0, "channel nums should % 2 = 0"
+        self.conv1 = M.Sequential(
+            M.Conv2d(in_cha, ch//2, kernel_size=5, stride=2, padding=2),
+            M.LeakyReLU(),
+            FilterResponseNorm2d(num_features=ch//2)
+        )
+        self.conv2 = ShuffleV2Block(ch//4, ch, ch//2, ksize = 3, stride=1)
+        self.conv3 = ShuffleV2Block(ch//2, ch, ch//2, ksize = 3, stride=1)
+        self.conv4 = ShuffleV2Block(ch//2, ch, ch//2, ksize = 3, stride=1)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
         return x
 
 
