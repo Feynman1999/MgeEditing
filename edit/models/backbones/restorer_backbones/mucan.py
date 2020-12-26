@@ -70,8 +70,8 @@ class CARBBlock(M.Module):
         w = F.mean(x1, axis = -1, keepdims = False) # [B,C,H]
         w = F.mean(w, axis = -1, keepdims = False) # [B,C]
         w = self.linear(w)
-        w = F.add_axis(w, axis = -1)
-        w = F.add_axis(w, axis = -1)
+        w = F.expand_dims(w, axis = -1)
+        w = F.expand_dims(w, axis = -1)
         x1 = F.concat((x1, F.multiply(x1, w)), axis = 1)  # [B, 2C, H, W]
         del w
         x1 = self.conv2(x1)  # [B, C, H, W]
@@ -149,7 +149,7 @@ class AU_CV(M.Module):
             index = index_i * W + index_j  # [B, H*W]
             index = index.astype('int32')
             # add axis
-            index=  F.add_axis(index, axis = 1) # [B, 1, H*W]
+            index=  F.expand_dims(index, axis = 1) # [B, 1, H*W]
             # broadcast
             index = F.broadcast_to(index, (B, C, H*W))
             # gather

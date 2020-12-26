@@ -12,7 +12,7 @@ def get_xy_ctr_np2(score_size):
     x_list = np.linspace(0., fm_width - 1., fm_width).reshape(1, 1, 1, fm_width)
     x_list = x_list.repeat(fm_height, axis=2)
     xy_list = np.concatenate((y_list, x_list), 1)
-    xy_ctr = mge.tensor(xy_list.astype(np.float32), requires_grad=False)
+    xy_ctr = mge.tensor(xy_list.astype(np.float32))
     return xy_ctr
 
 def get_xy_ctr_np(score_size, score_offset, total_stride):
@@ -39,8 +39,8 @@ def get_cls_reg_ctr_targets(points, gt_bboxes, bbox_scale = 0.25):
             bbox_targets (Tensor): BBox targets. (B, 4, 19, 19)  only consider the foreground, for the background should set loss as 0!
             centerness_targets (Tensor): (B, 1, 19, 19)  only consider the foreground, for the background should set loss as 0!
     """
-    gt_bboxes = F.add_axis(gt_bboxes, axis=-1)
-    gt_bboxes = F.add_axis(gt_bboxes, axis=-1)  # (B,4,1,1)
+    gt_bboxes = F.expand_dims(gt_bboxes, axis=-1)
+    gt_bboxes = F.expand_dims(gt_bboxes, axis=-1)  # (B,4,1,1)
     # cls_labels
     # 计算四个值以确定是否在内部，由于template比较大，于是缩小bbox为之前的1/2
     gap = (gt_bboxes[:, 2, ...] - gt_bboxes[:, 0, ...]) * (1-bbox_scale) / 2
@@ -49,7 +49,7 @@ def get_cls_reg_ctr_targets(points, gt_bboxes, bbox_scale = 0.25):
     down_bound = points[:, 0, ...] < gt_bboxes[:, 2, ...] - gap
     right_bound = points[:, 1, ...] < gt_bboxes[:, 3, ...] - gap
     cls_labels = up_bound * left_bound * down_bound * right_bound
-    cls_labels = F.add_axis(cls_labels, axis=1)  # (B,1,19,19)
+    cls_labels = F.expand_dims(cls_labels, axis=1)  # (B,1,19,19)
 
     # bbox_targets
     # 对于points中的每个坐标，计算偏离情况（这里每个坐标都会计算，所以会有负数）
@@ -64,7 +64,7 @@ def get_cls_reg_ctr_targets(points, gt_bboxes, bbox_scale = 0.25):
     return cls_labels, bbox_targets, centerness_targets
 
 a = get_xy_ctr_np2(5)
-print(a[0,:, 3,4])
+print(F.expand_dims(a, axis=-1).shape)
 # gt_bboxes = mge.tensor(np.array([[0,0,255,255], [100,100,355,355]]).astype(np.float32))
 
 # cls_labels, bbox_targets, centerness_targets = get_cls_reg_ctr_targets(a, gt_bboxes)

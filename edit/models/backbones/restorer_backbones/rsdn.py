@@ -58,7 +58,7 @@ class HSA(M.Module):
             for j in range(self.K):
                 # 做点乘
                 kernel = kernels[:, i*self.K + j, :, :] # [B, H, W]
-                kernel = F.add_axis(kernel, axis = 1)  # [B, 1 ,H, W]
+                kernel = F.expand_dims(kernel, axis = 1)  # [B, 1 ,H, W]
                 kernel = F.broadcast_to(kernel, [batch, C, H, W])
                 corr = kernel * pre_h_SD[:, :, i:(H+i), j:(W + j)]
                 similarity_matrix = similarity_matrix + corr # [B, C, H, W]

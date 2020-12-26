@@ -1,6 +1,6 @@
 from abc import abstractmethod
 import megengine.module as M
-from megengine.distributed.util import get_rank
+from megengine.distributed.group import get_rank
 from edit.core.optimizer import build_optimizers
 
 

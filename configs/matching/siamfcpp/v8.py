@@ -1,26 +1,28 @@
-# stage 2
-exp_name = 'sar_opt_precise_v1'
+# stage 1  use just one backbone both for opt and sar
+exp_name = 'sar_opt_v8'
 
-test_z_size = 512
-test_x_size = 520
-z_size = 256
-x_size = 260
+z_size = 320
+x_size = 500
 
 # model settings
 model = dict(
-    type='PreciseMatching',
+    type='BasicMatching', # for just one backbone
     generator=dict(
-        type='SIAMFCPP_P',
+        type='SIAMFCPP_one_backbone',
         in_cha=1,
         channels=56,
-        loss_cls=dict(type='Focal_loss', alpha = 0.9, gamma = 2),
-        stacked_convs = 2,
-        feat_channels = 48,
+        loss_cls=dict(type='Focal_loss', alpha = 0.95, gamma = 2),
+        loss_bbox=dict(type='IOULoss', loc_loss_type='giou'),
+        loss_centerness=dict(type='BCELoss'),
+        stacked_convs = 3,
+        feat_channels = 56,
         z_size = z_size,
         x_size = x_size,
-        test_z_size = test_z_size,
-        test_x_size = test_x_size,
-        backbone_type = "alexnet"  # alexnet  Shuffle_weightnet
+        lambda1 = 0.25,  # reg
+        lambda2 = 0.0,  # center
+        bbox_scale = 0.05,
+        stride = 4,
+        backbone_type = "alexnet"
     ))
 
 # model training and testing settings
@@ -44,7 +46,7 @@ train_pipeline = [
         io_backend='disk',
         key='sar',
         flag='color'),  # H,W,3  BGR
-    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.5, contrast=0.5, saturation=0.0, hue=0.0),
+    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.2, contrast=0.2, saturation=0.2, hue=0.0),
     dict(type='Corner_Shelter', keys=['opt'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Corner_Shelter', keys=['sar'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Bgr2Gray', keys=['opt', 'sar']),  # H, W, 1
@@ -70,7 +72,6 @@ eval_pipeline = [
         key='sar',
         flag='color'),  # H,W,3  BGR
     dict(type='Bgr2Gray', keys=['opt', 'sar']),  # H, W, 1
-    dict(type='Random_Crop_Opt_Sar', keys=['opt', 'sar'], size=[test_x_size, test_z_size], have_seed=True),
     dict(type='RescaleToZeroOne', keys=['opt', 'sar']),
     dict(type='Normalize', keys=['opt', 'sar'], to_rgb=False, **img_norm_cfg),  
     dict(type='ImageToTensor', keys=['opt', 'sar']),  # [H,W,C] -> [C,H,W]
@@ -100,7 +101,7 @@ repeat_times = 1
 
 data = dict(
     # train
-    samples_per_gpu=12,
+    samples_per_gpu=32,
     workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
@@ -116,7 +117,7 @@ data = dict(
             balance_flag = "None")),  # test and uniform and None
     # eval
     eval_samples_per_gpu=1,
-    eval_workers_per_gpu=8,
+    eval_workers_per_gpu=4,
     eval=dict(
         type=eval_dataset_type,
         data_path= dataroot + "/stage1",
@@ -141,26 +142,26 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-5))
+optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6))
 
 # learning policy
 total_epochs = 2000 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
-checkpoint_config = dict(interval=20)
+checkpoint_config = dict(interval=40)
 log_config = dict(
-    interval=20,
+    interval=10,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=800, save_image=False)
+evaluation = dict(interval=400, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = None # f'./workdirs/{exp_name}/20201202_205020/checkpoints/epoch_20' # f'./workdirs/{exp_name}/epoch_70' # f'./workdirs/{exp_name}/20201121_002958/checkpoints/epoch_100'
+load_from = None
 resume_from = None
 resume_optim = True
 workflow = 'train'

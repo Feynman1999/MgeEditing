@@ -1,6 +1,8 @@
 import megengine.functional as F
 from megengine.core import Tensor
+import megengine
 import megengine.module as M
+import numpy as np
 from ..builder import LOSSES
 
 def softplus(x: Tensor) -> Tensor:
@@ -56,15 +58,14 @@ def get_focal_loss(
         the calculated focal loss.
     """
     class_range = F.arange(1, logits.shape[2] + 1)  # [1, ]  0 is background
-
-    labels = F.add_axis(labels, axis=2)  # [B, A, 1]
+    labels = F.expand_dims(labels, axis=2)  # [B, A, 1]
     scores = F.sigmoid(logits)
     pos_part = -(1 - scores) ** gamma * logsigmoid(logits)  # logits越大 loss越小
     neg_part = -scores ** gamma * logsigmoid(-logits)  # logits越小 loss 越小
 
-    pos_loss = (labels == class_range) * pos_part * alpha
+    pos_loss = (labels == class_range).astype("float32") * pos_part * alpha
     neg_loss = (
-        (labels != class_range) * (labels != ignore_label) * neg_part * (1 - alpha)
+        (labels != class_range).astype("float32") * (labels != ignore_label).astype("float32") * neg_part * (1 - alpha)
     )
     loss = (pos_loss + neg_loss).sum()
 

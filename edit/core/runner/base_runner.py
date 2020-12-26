@@ -1,7 +1,7 @@
 import os.path as osp
 from abc import ABCMeta, abstractmethod
 import megengine as mge
-from megengine.distributed.util import get_rank, get_world_size, is_distributed
+from megengine.distributed.group import get_rank, get_world_size, is_distributed
 from megengine.optimizer.optimizer import Optimizer
 from megengine.module import Module
 from edit.utils import mkdir_or_exist, build_from_cfg, get_root_logger

@@ -23,32 +23,32 @@ def train_generator_batch(image, label, *, opt, netG, netloss):
 
     # first frame
     pre_SD = mge.tensor(np.zeros((B, hidden_channels, H, W), dtype=np.float32))
-    LR = F.concat([F.add_axis(image[:, 2, ...], axis=1), F.add_axis(image[:, 1, ...], axis=1), image[:, 0:3, ...]], axis = 1)
+    LR = F.concat([F.expand_dims(image[:, 2, ...], axis=1), F.expand_dims(image[:, 1, ...], axis=1), image[:, 0:3, ...]], axis = 1)
     imgHR, pre_SD = netG(LR, pre_SD)
     # first frame result
-    HR_G.append(F.add_axis(imgHR, axis = 1))
+    HR_G.append(F.expand_dims(imgHR, axis = 1))
     
     # second frame
-    LR = F.concat([F.add_axis(image[:, 1, ...], axis=1), image[:, 0:4, ...]], axis = 1)
+    LR = F.concat([F.expand_dims(image[:, 1, ...], axis=1), image[:, 0:4, ...]], axis = 1)
     imgHR, pre_SD = netG(LR, pre_SD)
     # second frame result
-    HR_G.append(F.add_axis(imgHR, axis = 1))
+    HR_G.append(F.expand_dims(imgHR, axis = 1))
 
     for t in range(2, T-2):
         imgHR, pre_SD = netG(image[:, t-2:t+3, ...], pre_SD)
-        HR_G.append(F.add_axis(imgHR, axis = 1))
+        HR_G.append(F.expand_dims(imgHR, axis = 1))
 
     # T-2 frame
-    LR = F.concat([image[:, T-4:T, ...], F.add_axis(image[:, -2, ...], axis=1)], axis = 1)
+    LR = F.concat([image[:, T-4:T, ...], F.expand_dims(image[:, -2, ...], axis=1)], axis = 1)
     imgHR, pre_SD= netG(LR, pre_SD)
     # T-2 frame result
-    HR_G.append(F.add_axis(imgHR, axis = 1))
+    HR_G.append(F.expand_dims(imgHR, axis = 1))
 
     # T-1 frame
-    LR = F.concat([image[:, T-3:T, ...], F.add_axis(image[:, -2, ...], axis=1), F.add_axis(image[:, -3, ...], axis=1)], axis = 1)
+    LR = F.concat([image[:, T-3:T, ...], F.expand_dims(image[:, -2, ...], axis=1), F.expand_dims(image[:, -3, ...], axis=1)], axis = 1)
     imgHR, pre_SD = netG(LR, pre_SD)
     # T-1 frame result
-    HR_G.append(F.add_axis(imgHR, axis = 1))
+    HR_G.append(F.expand_dims(imgHR, axis = 1))
 
     HR_G = F.concat(HR_G, axis = 1)
     # assert HR_G.shape == HR_D.shape and HR_D.shape == HR_S.shape # [B,T,C,H,W]

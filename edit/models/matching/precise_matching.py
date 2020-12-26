@@ -38,7 +38,7 @@ def train_generator_batch(optical, sar, label, cls_id, file_id, *, opt, netG):
         for i in range(B):
             H_id = max_id[i] // W
             W_id = max_id[i] % W
-            output.append(F.add_axis(netG.fm_ctr[0, :, H_id, W_id], axis=0))  # (1,2)
+            output.append(F.expand_dims(netG.fm_ctr[0, :, H_id, W_id], axis=0))  # (1,2)
             # print(output)
             # print(label[i, :])
             x = mge.tensor(-100000.0)
@@ -66,7 +66,7 @@ def test_generator_batch(optical, sar, *, netG):
         for i in range(B):
             H_id = max_id[i] // W
             W_id = max_id[i] % W
-            output.append(F.add_axis(netG.test_fm_ctr[0, :, H_id, W_id], axis=0))  # (1,2)
+            output.append(F.expand_dims(netG.test_fm_ctr[0, :, H_id, W_id], axis=0))  # (1,2)
             x = mge.tensor(-100000.0)
             cls_score = cls_score.set_subtensor(x)[i, max_id[i]]
         output = F.concat(output, axis=0)  # (B, 2)

@@ -59,8 +59,8 @@ class CARBBlock(M.Module):
         w = F.mean(x1, axis = -1, keepdims = False) # [B,C,H]
         w = F.mean(w, axis = -1, keepdims = False) # [B,C]
         w = self.linear(w)
-        w = F.add_axis(w, axis = -1)
-        w = F.add_axis(w, axis = -1)  # [B,C,1,1]
+        w = F.expand_dims(w, axis = -1)
+        w = F.expand_dims(w, axis = -1)  # [B,C,1,1]
         x1 = F.concat((x1, F.multiply(x1, w)), axis = 1)  # [B, 2C, H, W]
         del w
         x1 = self.conv2(x1)  # [B, C, H, W]
@@ -193,8 +193,8 @@ class SIAMFCPP_P(M.Module):
 
     def get_cls_targets(self, gt_bboxes):
         B, _ = gt_bboxes.shape
-        gt_bboxes = F.add_axis(gt_bboxes, axis=-1)
-        gt_bboxes = F.add_axis(gt_bboxes, axis=-1)  # (B,4,1,1)    关注左上角坐标即可  范围0~4
+        gt_bboxes = F.expand_dims(gt_bboxes, axis=-1)
+        gt_bboxes = F.expand_dims(gt_bboxes, axis=-1)  # (B,4,1,1)    关注左上角坐标即可  范围0~4
         dist = F.sqrt(
             (self.fm_ctr[:, 0, :, :] - gt_bboxes[:, 0, :, :]) ** 2 + (
                         self.fm_ctr[:, 1, :, :] - gt_bboxes[:, 1, :, :]) ** 2)
@@ -206,7 +206,7 @@ class SIAMFCPP_P(M.Module):
                         F.zeros_like(dist))
         # print(labels[0])
         # print(labels.shape) #8,5,5
-        labels = F.add_axis(labels, axis=1)
+        labels = F.expand_dims(labels, axis=1)
         labels.requires_grad = False
         return labels
 

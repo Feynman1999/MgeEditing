@@ -1,6 +1,6 @@
 import os
 import time
-from megengine.distributed.util import get_rank, get_world_size, is_distributed
+from megengine.distributed.group import get_rank, get_world_size, is_distributed
 from megengine.data.dataloader import DataLoader
 from edit.core.hook import Hook
 from edit.utils import to_list, is_list_of, get_logger, mkdir_or_exist

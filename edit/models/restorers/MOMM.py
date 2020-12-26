@@ -40,52 +40,52 @@ def train_generator_batch(image, label, *, opt, netG, netloss):
     pre_S_hat = mge.tensor(np.zeros((B, hidden_channels, H, W), dtype=np.float32))
     pre_D_hat = F.zeros_like(pre_S_hat)
     pre_SD = F.zeros_like(pre_S_hat)
-    LR = F.concat([F.add_axis(image[:, 2, ...], axis=1), F.add_axis(image[:, 1, ...], axis=1), image[:, 0:3, ...]], axis = 1)
-    LR_S = F.concat([F.add_axis(image_S[:, 2, ...], axis=1), F.add_axis(image_S[:, 1, ...], axis=1), image_S[:, 0:3, ...]], axis = 1)
-    LR_D = F.concat([F.add_axis(image_D[:, 2, ...], axis=1), F.add_axis(image_D[:, 1, ...], axis=1), image_D[:, 0:3, ...]], axis = 1)
+    LR = F.concat([F.expand_dims(image[:, 2, ...], axis=1), F.expand_dims(image[:, 1, ...], axis=1), image[:, 0:3, ...]], axis = 1)
+    LR_S = F.concat([F.expand_dims(image_S[:, 2, ...], axis=1), F.expand_dims(image_S[:, 1, ...], axis=1), image_S[:, 0:3, ...]], axis = 1)
+    LR_D = F.concat([F.expand_dims(image_D[:, 2, ...], axis=1), F.expand_dims(image_D[:, 1, ...], axis=1), image_D[:, 0:3, ...]], axis = 1)
     imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(LR, LR_S, LR_D, pre_S_hat, pre_D_hat, pre_SD)
     # first frame result
-    HR_G.append(F.add_axis(imgHR, axis = 1))
-    HR_D.append(F.add_axis(img_D, axis = 1))
-    HR_S.append(F.add_axis(img_S, axis = 1))
+    HR_G.append(F.expand_dims(imgHR, axis = 1))
+    HR_D.append(F.expand_dims(img_D, axis = 1))
+    HR_S.append(F.expand_dims(img_S, axis = 1))
 
     # second frame
-    LR = F.concat([F.add_axis(image[:, 1, ...], axis=1), image[:, 0:4, ...]], axis = 1)
-    LR_S = F.concat([F.add_axis(image_S[:, 1, ...], axis=1), image_S[:, 0:4, ...]], axis = 1)
-    LR_D = F.concat([F.add_axis(image_D[:, 1, ...], axis=1), image_D[:, 0:4, ...]], axis = 1)
+    LR = F.concat([F.expand_dims(image[:, 1, ...], axis=1), image[:, 0:4, ...]], axis = 1)
+    LR_S = F.concat([F.expand_dims(image_S[:, 1, ...], axis=1), image_S[:, 0:4, ...]], axis = 1)
+    LR_D = F.concat([F.expand_dims(image_D[:, 1, ...], axis=1), image_D[:, 0:4, ...]], axis = 1)
     imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(LR, LR_S, LR_D, pre_S_hat, pre_D_hat, pre_SD)
     # second frame result
-    HR_G.append(F.add_axis(imgHR, axis = 1))
-    HR_D.append(F.add_axis(img_D, axis = 1))
-    HR_S.append(F.add_axis(img_S, axis = 1))
+    HR_G.append(F.expand_dims(imgHR, axis = 1))
+    HR_D.append(F.expand_dims(img_D, axis = 1))
+    HR_S.append(F.expand_dims(img_S, axis = 1))
 
     for t in range(2, T-2):
         imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(image[:, t-2:t+3, ...], image_S[:, t-2:t+3, ...], 
                                                                  image_D[:, t-2:t+3, ...], pre_S_hat, pre_D_hat, pre_SD)
-        HR_G.append(F.add_axis(imgHR, axis = 1))
-        HR_D.append(F.add_axis(img_D, axis = 1))
-        HR_S.append(F.add_axis(img_S, axis = 1))
+        HR_G.append(F.expand_dims(imgHR, axis = 1))
+        HR_D.append(F.expand_dims(img_D, axis = 1))
+        HR_S.append(F.expand_dims(img_S, axis = 1))
 
     # T-2 frame
-    LR = F.concat([image[:, T-4:T, ...], F.add_axis(image[:, -2, ...], axis=1)], axis = 1)
-    LR_S = F.concat([image_S[:, T-4:T, ...], F.add_axis(image_S[:, -2, ...], axis=1)], axis = 1)
-    LR_D = F.concat([image_D[:, T-4:T, ...], F.add_axis(image_D[:, -2, ...], axis=1)], axis = 1)
+    LR = F.concat([image[:, T-4:T, ...], F.expand_dims(image[:, -2, ...], axis=1)], axis = 1)
+    LR_S = F.concat([image_S[:, T-4:T, ...], F.expand_dims(image_S[:, -2, ...], axis=1)], axis = 1)
+    LR_D = F.concat([image_D[:, T-4:T, ...], F.expand_dims(image_D[:, -2, ...], axis=1)], axis = 1)
     imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(LR, LR_S, LR_D, pre_S_hat, pre_D_hat, pre_SD)
     # T-2 frame result
-    HR_G.append(F.add_axis(imgHR, axis = 1))
-    HR_D.append(F.add_axis(img_D, axis = 1))
-    HR_S.append(F.add_axis(img_S, axis = 1))
+    HR_G.append(F.expand_dims(imgHR, axis = 1))
+    HR_D.append(F.expand_dims(img_D, axis = 1))
+    HR_S.append(F.expand_dims(img_S, axis = 1))
 
 
     # T-1 frame
-    LR = F.concat([image[:, T-3:T, ...], F.add_axis(image[:, -2, ...], axis=1), F.add_axis(image[:, -3, ...], axis=1)], axis = 1)
-    LR_S = F.concat([image_S[:, T-3:T, ...], F.add_axis(image_S[:, -2, ...], axis=1), F.add_axis(image_S[:, -3, ...], axis=1)], axis = 1)
-    LR_D = F.concat([image_D[:, T-3:T, ...], F.add_axis(image_D[:, -2, ...], axis=1), F.add_axis(image_D[:, -3, ...], axis=1)], axis = 1)
+    LR = F.concat([image[:, T-3:T, ...], F.expand_dims(image[:, -2, ...], axis=1), F.expand_dims(image[:, -3, ...], axis=1)], axis = 1)
+    LR_S = F.concat([image_S[:, T-3:T, ...], F.expand_dims(image_S[:, -2, ...], axis=1), F.expand_dims(image_S[:, -3, ...], axis=1)], axis = 1)
+    LR_D = F.concat([image_D[:, T-3:T, ...], F.expand_dims(image_D[:, -2, ...], axis=1), F.expand_dims(image_D[:, -3, ...], axis=1)], axis = 1)
     imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(LR, LR_S, LR_D, pre_S_hat, pre_D_hat, pre_SD)
     # T-1 frame result
-    HR_G.append(F.add_axis(imgHR, axis = 1))
-    HR_D.append(F.add_axis(img_D, axis = 1))
-    HR_S.append(F.add_axis(img_S, axis = 1))
+    HR_G.append(F.expand_dims(imgHR, axis = 1))
+    HR_D.append(F.expand_dims(img_D, axis = 1))
+    HR_S.append(F.expand_dims(img_S, axis = 1))
 
 
     HR_G = F.concat(HR_G, axis = 1)

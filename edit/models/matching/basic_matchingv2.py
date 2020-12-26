@@ -53,7 +53,7 @@ def train_generator_batch(optical, sar, label, *, opt, netG):
         # img = img[:, :, np.newaxis]
         # img[label_H-1:label_H+2, label_W-1:label_W+2, :] = 0
         # imwrite(img=img, file_path = "./test4/"+name+"_{}.png".format(i))
-        output.append(F.add_axis(pred_box[0, :, H_id, W_id]-(netG.z_size-1)/2, axis=0)) # (1, 2)
+        output.append(F.expand_dims(pred_box[0, :, H_id, W_id]-(netG.z_size-1)/2, axis=0)) # (1, 2)
     output = F.concat(output, axis=0)  # (B, 2)
 
     return [loss*1000, F.norm(output[:, 0:2] - label[:, 0:2], p=2, axis = 1).mean()]
@@ -73,7 +73,7 @@ def test_generator_batch(optical, sar, *, netG):
     for i in range(B):
         H_id = max_id[i] // H
         W_id = max_id[i] % H
-        output.append(F.add_axis(pred_box[0, :, H_id, W_id]-(netG.z_size-1)/2, axis=0)) # (1, 2)
+        output.append(F.expand_dims(pred_box[0, :, H_id, W_id]-(netG.z_size-1)/2, axis=0)) # (1, 2)
     netG.z_size = tmp
     ans = F.concat(output, axis=0)  # [B,2]
     ans1 = ans + 511  # bottom-right

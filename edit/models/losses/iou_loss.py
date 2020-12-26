@@ -58,6 +58,6 @@ if __name__ == "__main__":
     iou = IOULoss()
     zsize = 320
     x  = 159.5
-    pred = F.add_axis(megengine.tensor(np.array([x, x, zsize - 1 - x, zsize - 1 - x], dtype=np.float32)), 0)
-    target = F.add_axis(megengine.tensor(np.array([x+5, x+5, zsize - 1- (x+5), zsize-1-x-5], dtype=np.float32)),0)
+    pred = F.expand_dims(megengine.tensor(np.array([x, x, zsize - 1 - x, zsize - 1 - x], dtype=np.float32)), 0)
+    target = F.expand_dims(megengine.tensor(np.array([x+5, x+5, zsize - 1- (x+5), zsize-1-x-5], dtype=np.float32)),0)
     print(iou(pred, target))

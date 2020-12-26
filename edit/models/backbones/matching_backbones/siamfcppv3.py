@@ -181,8 +181,8 @@ class SIAMFCPPV3(M.Module):
                 centerness_targets (Tensor): (B, 1, 37, 37)  only consider the foreground, for the background should set loss as 0!
         """
         B, _ = gt_bboxes.shape
-        gt_bboxes = F.add_axis(gt_bboxes, axis=-1)
-        gt_bboxes = F.add_axis(gt_bboxes, axis=-1)  # (B,4,1,1)
+        gt_bboxes = F.expand_dims(gt_bboxes, axis=-1)
+        gt_bboxes = F.expand_dims(gt_bboxes, axis=-1)  # (B,4,1,1)
         # cls_labels
         # 计算四个值以确定是否在内部，由于template比较大，于是缩小bbox为之前的1/4
         gap = (gt_bboxes[:, 2, ...] - gt_bboxes[:, 0, ...]) * (1-bbox_scale) / 2
@@ -191,7 +191,7 @@ class SIAMFCPPV3(M.Module):
         down_bound = points[:, 0, ...] < gt_bboxes[:, 2, ...] - gap
         right_bound = points[:, 1, ...] < gt_bboxes[:, 3, ...] - gap
         cls_labels = up_bound * left_bound * down_bound * right_bound
-        cls_labels = F.add_axis(cls_labels, axis=1)  # (B, 1, 37, 37)
+        cls_labels = F.expand_dims(cls_labels, axis=1)  # (B, 1, 37, 37)
         cls_labels.requires_grad = False
 
         return cls_labels

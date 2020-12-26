@@ -1,5 +1,5 @@
 import os
-from megengine.distributed.util import get_rank, get_world_size
+from megengine.distributed.group import get_rank, get_world_size
 from .hook import HOOKS, Hook
 
 

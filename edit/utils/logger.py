@@ -1,5 +1,5 @@
 import logging
-from megengine.distributed.util import get_rank
+from megengine.distributed.group import get_rank
 
 logger_initialized = {}
 

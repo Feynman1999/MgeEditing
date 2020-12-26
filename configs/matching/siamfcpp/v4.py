@@ -1,4 +1,8 @@
+# stage 1
 exp_name = 'sar_opt_v4'
+
+z_size = 320
+x_size = 500
 
 # model settings
 model = dict(
@@ -6,19 +10,19 @@ model = dict(
     generator=dict(
         type='SIAMFCPP',
         in_cha=1,
-        channels=64,
+        channels=48,
         loss_cls=dict(type='Focal_loss', alpha = 0.95, gamma = 2),
         loss_bbox=dict(type='IOULoss', loc_loss_type='giou'),
         loss_centerness=dict(type='BCELoss'),
         stacked_convs = 3,
         feat_channels = 48,
-        z_size = 192,
-        x_size = 300,
-        lambda1 = 1,  # reg
+        z_size = z_size,
+        x_size = x_size,
+        lambda1 = 0.25,  # reg
         lambda2 = 0.0,  # center
-        bbox_scale = 0.04,
-        stride = 2,
-        backbone_type = "Shuffle_weight_frn_stride2"
+        bbox_scale = 0.05,
+        stride = 4,
+        backbone_type = "alexnet"
     ))
 
 # model training and testing settings
@@ -42,15 +46,15 @@ train_pipeline = [
         io_backend='disk',
         key='sar',
         flag='color'),  # H,W,3  BGR
-    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.2, contrast=0.2, saturation=0.0, hue=0.0),
+    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.2, contrast=0.2, saturation=0.2, hue=0.0),
     dict(type='Corner_Shelter', keys=['opt'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Corner_Shelter', keys=['sar'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Bgr2Gray', keys=['opt', 'sar']),  # H, W, 1
-    dict(type='Random_Crop_Opt_Sar', keys=['opt', 'sar'], size=[300, 192]),
+    dict(type='Random_Crop_Opt_Sar', keys=['opt', 'sar'], size=[x_size, z_size]),
     dict(type='RescaleToZeroOne', keys=['opt', 'sar']),
     dict(type='Normalize', keys=['opt', 'sar'], to_rgb=False, **img_norm_cfg),
-    dict(type='Flip', keys=['opt', 'sar', 'bbox'], flip_ratio=0.5, direction='horizontal', Len = 300),
-    dict(type='Flip', keys=['opt', 'sar', 'bbox'], flip_ratio=0.5, direction='vertical', Len = 300),
+    dict(type='Flip', keys=['opt', 'sar', 'bbox'], flip_ratio=0.5, direction='horizontal', Len = x_size),
+    dict(type='Flip', keys=['opt', 'sar', 'bbox'], flip_ratio=0.5, direction='vertical', Len = x_size),
     dict(type='RandomTransposeHW', keys=['opt', 'sar', 'bbox'], transpose_ratio=0.5),
     dict(type='ImageToTensor', keys=['opt', 'sar']),  # [H,W,C] -> [C,H,W]
     dict(type='Collect', keys=['opt', 'sar', 'bbox', 'class_id', 'file_id'])
@@ -97,7 +101,7 @@ repeat_times = 1
 
 data = dict(
     # train
-    samples_per_gpu=22,
+    samples_per_gpu=32,
     workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
@@ -110,7 +114,7 @@ data = dict(
             file_list_name = "train_random.txt",
             pipeline=train_pipeline,
             scale = 1,
-            balance_flag = "uniform")),  # test and uniform and None
+            balance_flag = "None")),  # test and uniform and None
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,
@@ -138,14 +142,14 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.1 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6))
+optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6))
 
 # learning policy
 total_epochs = 2000 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
-checkpoint_config = dict(interval=10)
+checkpoint_config = dict(interval=40)
 log_config = dict(
     interval=20,
     hooks=[
@@ -157,7 +161,7 @@ evaluation = dict(interval=400, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20201120_123731/checkpoints/epoch_50' # f'./workdirs/delete/epoch_5'
+load_from = None
 resume_from = None
 resume_optim = True
 workflow = 'train'

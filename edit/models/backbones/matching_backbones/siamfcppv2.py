@@ -68,8 +68,8 @@ class CARBBlock(M.Module):
         w = F.mean(x1, axis = -1, keepdims = False) # [B,C,H]
         w = F.mean(w, axis = -1, keepdims = False) # [B,C]
         w = self.linear(w)
-        w = F.add_axis(w, axis = -1)
-        w = F.add_axis(w, axis = -1)  # [B,C,1,1]
+        w = F.expand_dims(w, axis = -1)
+        w = F.expand_dims(w, axis = -1)  # [B,C,1,1]
         x1 = F.concat((x1, F.multiply(x1, w)), axis = 1)  # [B, 2C, H, W]
         del w
         x1 = self.conv2(x1)  # [B, C, H, W]
@@ -268,8 +268,8 @@ class SIAMFCPPV2(M.Module):
                 centerness_targets (Tensor): (B, 1, 37, 37)  only consider the foreground, for the background should set loss as 0!
         """
         B, _ = gt_bboxes.shape
-        gt_bboxes = F.add_axis(gt_bboxes, axis=-1)
-        gt_bboxes = F.add_axis(gt_bboxes, axis=-1)  # (B,4,1,1)
+        gt_bboxes = F.expand_dims(gt_bboxes, axis=-1)
+        gt_bboxes = F.expand_dims(gt_bboxes, axis=-1)  # (B,4,1,1)
         # cls_labels
         # 计算四个值以确定是否在内部，由于template比较大，于是缩小bbox为之前的1/4
         gap = (gt_bboxes[:, 2, ...] - gt_bboxes[:, 0, ...]) * (1-bbox_scale) / 2
@@ -278,7 +278,7 @@ class SIAMFCPPV2(M.Module):
         down_bound = points[:, 0, ...] < gt_bboxes[:, 2, ...] - gap
         right_bound = points[:, 1, ...] < gt_bboxes[:, 3, ...] - gap
         cls_labels = up_bound * left_bound * down_bound * right_bound
-        cls_labels = F.add_axis(cls_labels, axis=1)  # (B, 1, 37, 37)
+        cls_labels = F.expand_dims(cls_labels, axis=1)  # (B, 1, 37, 37)
         cls_labels.requires_grad = False
 
         # bbox_targets
@@ -292,7 +292,7 @@ class SIAMFCPPV2(M.Module):
         up_bottom = F.minimum(up_left[:, 0, ...], bottom_right[:, 0, ...]) / F.maximum(up_left[:, 0, ...], bottom_right[:, 0, ...])
         left_right = F.minimum(up_left[:, 1, ...], bottom_right[:, 1, ...]) / F.maximum(up_left[:, 1, ...], bottom_right[:, 1, ...])
         centerness_targets = F.sqrt(F.abs(up_bottom * left_right))
-        centerness_targets = F.add_axis(centerness_targets, axis =1)  # (B,1,37,37)
+        centerness_targets = F.expand_dims(centerness_targets, axis =1)  # (B,1,37,37)
         centerness_targets.requires_grad = False
         return cls_labels, bbox_targets, centerness_targets
 
