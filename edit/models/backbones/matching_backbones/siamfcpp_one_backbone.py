@@ -10,12 +10,11 @@ def xcorr_depthwise(x, kernel):
     """
         x: [B,C,H,W]
         kernel: [B,C,h,w]
-    """    
+    """
     batch = int(kernel.shape[0])
     channel = int(kernel.shape[1])
     bc = batch*channel
-    if batch != 1:
-        x = x.reshape((1, bc, int(x.shape[2]), int(x.shape[3])))
+    x = x.reshape((1, bc, int(x.shape[2]), int(x.shape[3])))
     kernel = kernel.reshape(bc, 1, 1, int(kernel.shape[2]), int(kernel.shape[3]))
     out = F.conv2d(x, kernel, groups=bc)
     out = out.reshape(batch, channel, int(out.shape[2]), int(out.shape[3]))

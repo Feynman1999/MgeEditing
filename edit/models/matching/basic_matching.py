@@ -78,8 +78,6 @@ def train_generator_batch(optical, sar, label, cls_id, file_id, *, gm, netG):
     #     print(dis)
     return [loss_cls*1000, loss_reg, dis.mean()]
 
-
-@trace(symbolic=True)
 def test_generator_batch(optical, sar, *, netG):
     netG.eval()
     tmp = netG.z_size

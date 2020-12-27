@@ -10,12 +10,12 @@ model = dict(
     generator=dict(
         type='SIAMFCPP_one_backbone',
         in_cha=1,
-        channels=56,
+        channels=48,
         loss_cls=dict(type='Focal_loss', alpha = 0.95, gamma = 2),
         loss_bbox=dict(type='IOULoss', loc_loss_type='giou'),
         loss_centerness=dict(type='BCELoss'),
         stacked_convs = 3,
-        feat_channels = 56,
+        feat_channels = 48,
         z_size = z_size,
         x_size = x_size,
         lambda1 = 0.25,  # reg
@@ -157,7 +157,7 @@ log_config = dict(
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=400, save_image=False)
+evaluation = dict(interval=800, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'

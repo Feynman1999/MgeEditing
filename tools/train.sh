@@ -1,1 +1,0 @@
-python tools/train.py configs/restorers/RSDN/rsdn_v3.py
