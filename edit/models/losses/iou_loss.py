@@ -38,7 +38,7 @@ class IOULoss(M.Module):
         area_intersect = w_intersect * h_intersect
         area_union = target_aera + pred_aera - area_intersect
 
-        ious = area_intersect / area_union
+        ious = (area_intersect+1.0) / (area_union+1.0)
         gious = ious - (ac_uion - area_union) / ac_uion
         if self.loc_loss_type == 'iou':
             losses = -F.log(ious)
