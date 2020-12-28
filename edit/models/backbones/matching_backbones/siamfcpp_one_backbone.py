@@ -265,10 +265,10 @@ class SIAMFCPP_one_backbone(M.Module):
         # cls_labels
         # 计算四个值以确定是否在内部，由于template比较大，于是缩小bbox为之前的1/4
         gap = (gt_bboxes[:, 2, ...] - gt_bboxes[:, 0, ...]) * (1-bbox_scale) / 2
-        up_bound = (points[:, 0, ...] > gt_bboxes[:, 0, ...]).astype("float32") + gap
-        left_bound = (points[:, 1, ...] > gt_bboxes[:, 1, ...]).astype("float32") + gap
-        down_bound = (points[:, 0, ...] < gt_bboxes[:, 2, ...]).astype("float32") - gap
-        right_bound = (points[:, 1, ...] < gt_bboxes[:, 3, ...]).astype("float32") - gap
+        up_bound = (points[:, 0, ...] > gt_bboxes[:, 0, ...] + gap).astype("float32")
+        left_bound = (points[:, 1, ...] > gt_bboxes[:, 1, ...] + gap).astype("float32")
+        down_bound = (points[:, 0, ...] < gt_bboxes[:, 2, ...] - gap).astype("float32")
+        right_bound = (points[:, 1, ...] < gt_bboxes[:, 3, ...] - gap).astype("float32")
         cls_labels = up_bound * left_bound * down_bound * right_bound
         cls_labels = F.expand_dims(cls_labels, axis=1)  # (B, 1, 37, 37)
         # cls_labels.requires_grad = False

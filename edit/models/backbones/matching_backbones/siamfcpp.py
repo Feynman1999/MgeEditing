@@ -211,9 +211,7 @@ class SIAMFCPP(M.Module):
     def head(self, c_out, r_out):
         c_out = self.cls_convs(c_out)
         r_out = self.reg_convs(r_out)
-        # classification score
         cls_score = self.conv_cls(c_out)  # [B,1,37,37]
-        # regression
         offsets = self.conv_reg(r_out)
         offsets = F.relu(offsets*self.total_stride + (self.z_size-1)/2)  # [B,2,37,37]
         return [cls_score, offsets]
@@ -247,10 +245,10 @@ class SIAMFCPP(M.Module):
         # cls_labels
         # 计算四个值以确定是否在内部，由于template比较大，于是缩小bbox为之前的1/4
         gap = (gt_bboxes[:, 2, ...] - gt_bboxes[:, 0, ...]) * (1-bbox_scale) / 2
-        up_bound = (points[:, 0, ...] > gt_bboxes[:, 0, ...]).astype("float32") + gap
-        left_bound = (points[:, 1, ...] > gt_bboxes[:, 1, ...]).astype("float32") + gap
-        down_bound = (points[:, 0, ...] < gt_bboxes[:, 2, ...]).astype("float32") - gap
-        right_bound = (points[:, 1, ...] < gt_bboxes[:, 3, ...]).astype("float32") - gap
+        up_bound = (points[:, 0, ...] > gt_bboxes[:, 0, ...] + gap).astype("float32")
+        left_bound = (points[:, 1, ...] > gt_bboxes[:, 1, ...] + gap).astype("float32")
+        down_bound = (points[:, 0, ...] < gt_bboxes[:, 2, ...] - gap).astype("float32")
+        right_bound = (points[:, 1, ...] < gt_bboxes[:, 3, ...] - gap).astype("float32")
         cls_labels = up_bound * left_bound * down_bound * right_bound
         cls_labels = F.expand_dims(cls_labels, axis=1)  # (B, 1, 37, 37)
 
@@ -347,8 +345,8 @@ class AlexNet_stride4(M.Module):
         super(AlexNet_stride4, self).__init__()
         assert ch % 2 ==0, "channel nums should % 2 = 0"
         
-        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=11, stride=2, padding=5)
-        self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 5, 1, 2)
+        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=5, stride=2, padding=2)
+        self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 3, 1, 1)
         self.pool1 = M.MaxPool2d(3, 2, 1)
         self.conv3 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
         self.conv4 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
