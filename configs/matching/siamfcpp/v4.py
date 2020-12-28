@@ -13,7 +13,6 @@ model = dict(
         channels=48,
         loss_cls=dict(type='Focal_loss', alpha = 0.95, gamma = 2),
         loss_bbox=dict(type='IOULoss', loc_loss_type='giou'),
-        loss_centerness=dict(type='BCELoss'),
         stacked_convs = 3,
         feat_channels = 48,
         z_size = z_size,

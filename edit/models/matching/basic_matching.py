@@ -34,8 +34,8 @@ config = SublinearMemoryConfig()
 @trace(symbolic=True)
 def train_generator_batch(optical, sar, label, cls_id, file_id, *, opt, netG):
     netG.train()
-    cls_score, offsets, ctr_score = netG(sar, optical)
-    loss, loss_cls, loss_reg, loss_ctr, cls_labels = netG.loss(cls_score, offsets, ctr_score, label)
+    cls_score, offsets = netG(sar, optical)
+    loss, loss_cls, loss_reg, cls_labels = netG.loss(cls_score, offsets, label)
     opt.backward(loss)
     if dist.is_distributed():
         # do all reduce mean
@@ -76,7 +76,7 @@ def train_generator_batch(optical, sar, label, cls_id, file_id, *, opt, netG):
     #     Id = F.argmax(dis)
     #     print(cls_id[Id], file_id[Id])
     #     print(dis)
-    return [loss_cls*1000, loss_reg, loss_ctr, dis.mean()]
+    return [loss_cls*1000, loss_reg, dis.mean()]
 
 
 @trace(symbolic=True)

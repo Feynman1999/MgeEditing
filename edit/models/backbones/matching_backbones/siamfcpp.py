@@ -50,7 +50,6 @@ class SIAMFCPP(M.Module):
                        channels,
                        loss_cls,
                        loss_bbox,
-                       loss_centerness,
                        stacked_convs = 3,
                        feat_channels = 24,
                        z_size = 512,
@@ -91,7 +90,6 @@ class SIAMFCPP(M.Module):
 
         self.loss_cls = build_loss(loss_cls)
         self.loss_bbox = build_loss(loss_bbox)
-        self.loss_centerness = build_loss(loss_centerness)
 
     def _init_layers(self):
         """Initialize layers of the head."""
@@ -215,11 +213,9 @@ class SIAMFCPP(M.Module):
         if "frn" in self.backbone_type:
             self.conv_cls = M.Conv2d(self.feat_channels, self.cls_out_channels, 1, 1 ,0)
             self.conv_reg = M.Conv2d(self.feat_channels, 2, kernel_size=3, stride=1, padding=1)
-            self.conv_centerness = M.Conv2d(self.feat_channels, self.cls_out_channels, 1, 1 ,0)
         else:
             self.conv_cls = M.ConvBn2d(self.feat_channels, self.cls_out_channels, kernel_size=1, stride=1, padding=0)
             self.conv_reg = M.ConvBn2d(self.feat_channels, 2, kernel_size=1, stride=1, padding=0)
-            self.conv_centerness = M.ConvBn2d(self.feat_channels, 1, kernel_size=1, stride=1, padding=0)
         
     def head(self, c_out, r_out):
         c_out = self.cls_convs(c_out)
@@ -228,10 +224,6 @@ class SIAMFCPP(M.Module):
         # classification score
         cls_score = self.conv_cls(c_out)  # [B,1,37,37]
         
-        # center-ness score
-        ctr_score = self.conv_centerness(r_out)
-        ctr_score = F.sigmoid(ctr_score)
-
         # regression
         offsets = self.conv_reg(r_out)
         offsets = F.relu(offsets*self.total_stride + (self.z_size-1)/2)  # [B,2,37,37]
@@ -239,7 +231,7 @@ class SIAMFCPP(M.Module):
         # bbox decoding
         # bbox = get_box(self.fm_ctr, offsets)  # (B, 2, 37, 37)
 
-        return [cls_score, offsets, ctr_score]
+        return [cls_score, offsets]
 
     def forward(self, sar, optical):
         feat1 = self.backbone_sar(sar)
@@ -286,18 +278,11 @@ class SIAMFCPP(M.Module):
         bbox_targets = F.concat([up_left, bottom_right], axis = 1)  # (B, 4, 37, 37)
         bbox_targets.requires_grad = False
 
-        # centerness_targets
-        up_bottom = F.minimum(up_left[:, 0, ...], bottom_right[:, 0, ...]) / F.maximum(up_left[:, 0, ...], bottom_right[:, 0, ...])
-        left_right = F.minimum(up_left[:, 1, ...], bottom_right[:, 1, ...]) / F.maximum(up_left[:, 1, ...], bottom_right[:, 1, ...])
-        centerness_targets = F.sqrt(F.abs(up_bottom * left_right))
-        centerness_targets = F.add_axis(centerness_targets, axis =1)  # (B,1,37,37)
-        centerness_targets.requires_grad = False
-        return cls_labels, bbox_targets, centerness_targets
+        return cls_labels, bbox_targets
 
     def loss(self,
              cls_scores,
              bbox_preds,
-             centernesses,
              gt_bboxes
             ):
         """Compute loss of the head.
@@ -313,7 +298,7 @@ class SIAMFCPP(M.Module):
         """
         
         B, _, H, W = cls_scores.shape
-        cls_labels, bbox_targets, centerness_targets = self.get_cls_reg_ctr_targets(self.fm_ctr, gt_bboxes, self.bbox_scale)  # (B, 1, 37, 37), (B, 4, 37, 37), (B,1,37,37)
+        cls_labels, bbox_targets = self.get_cls_reg_ctr_targets(self.fm_ctr, gt_bboxes, self.bbox_scale)  # (B, 1, 37, 37), (B, 4, 37, 37), (B,1,37,37)
         
         # cls 
         cls_scores = cls_scores.reshape(B, 1, -1)  # (B, 1, 37*37)
@@ -329,11 +314,8 @@ class SIAMFCPP(M.Module):
         bbox_targets = bbox_targets.reshape(-1, 4)  # (B*37*37, 4)
         loss_reg = self.loss_bbox(bbox_preds, bbox_targets, weight = cls_labels.reshape((B*H*W, ))) / cls_labels.sum()
 
-        # center
-        loss_ctr = self.loss_centerness(centernesses, centerness_targets, weight = cls_labels) / cls_labels.sum()
-        
-        loss = (loss_cls + self.lambda1 * loss_reg + self.lambda2 * loss_ctr) 
-        return loss, loss_cls, loss_reg, loss_ctr, cls_labels
+        loss = (loss_cls + self.lambda1 * loss_reg) 
+        return loss, loss_cls, loss_reg, cls_labels
 
     def init_weights(self, pretrained=None, strict=True):
         # 这里也可以进行参数的load，比如不在之前保存的路径中的模型（预训练好的）
