@@ -18,7 +18,7 @@ model = dict(
         feat_channels = 48,
         z_size = z_size,
         x_size = x_size,
-        lambda1 = 0.25,  # reg
+        lambda1 = 30,  # reg
         lambda2 = 0.0,  # center
         bbox_scale = 0.05,
         stride = 4,
@@ -142,7 +142,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6))
+optimizers = dict(generator=dict(type='Adam', lr=5 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6))
 
 # learning policy
 total_epochs = 2000 // repeat_times

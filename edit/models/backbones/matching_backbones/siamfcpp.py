@@ -10,14 +10,14 @@ def xcorr_depthwise(x, kernel):
     """
         x: [B,C,H,W]
         kernel: [B,C,h,w]
-    """    
+    """
     batch = int(kernel.shape[0])
     channel = int(kernel.shape[1])
     bc = batch*channel
-    x = x.reshape(1, bc, x.shape[2], x.shape[3])
-    kernel = kernel.reshape(bc, 1, 1, kernel.shape[2], kernel.shape[3])
+    x = x.reshape((1, bc, int(x.shape[2]), int(x.shape[3])))
+    kernel = kernel.reshape(bc, 1, 1, int(kernel.shape[2]), int(kernel.shape[3]))
     out = F.conv2d(x, kernel, groups=bc)
-    out = out.reshape(batch, channel, out.shape[2], out.shape[3])
+    out = out.reshape(batch, channel, int(out.shape[2]), int(out.shape[3]))
     return out
 
 
@@ -31,26 +31,16 @@ def get_xy_ctr_np(score_size, score_offset, total_stride):
     x_list = np.linspace(0., fm_width - 1., fm_width).reshape(1, 1, 1, fm_width)
     x_list = x_list.repeat(fm_height, axis=2)
     xy_list = score_offset + np.concatenate((y_list, x_list), 1) * total_stride
-    xy_ctr = mge.tensor(xy_list.astype(np.float32), requires_grad=False)
+    xy_ctr = mge.tensor(xy_list.astype(np.float32))
     return xy_ctr
 
 
 @BACKBONES.register_module()
 class SIAMFCPP(M.Module):
-    """
-        channels (int): Number of channels in the input feature map.
-        centerness_on_reg (bool): If true, position centerness on the
-            regress branch. Please refer to https://github.com/tianzhi0549/FCOS/issues/89#issuecomment-516877042.
-            Default: False.
-        loss_cls (dict): Config of classification loss.
-        loss_bbox (dict): Config of localization loss.
-        loss_centerness (dict): Config of centerness loss.
-    """
     def __init__(self, in_cha,
                        channels,
                        loss_cls,
                        loss_bbox,
-                       loss_centerness,
                        stacked_convs = 3,
                        feat_channels = 24,
                        z_size = 512,
@@ -91,7 +81,6 @@ class SIAMFCPP(M.Module):
 
         self.loss_cls = build_loss(loss_cls)
         self.loss_bbox = build_loss(loss_bbox)
-        self.loss_centerness = build_loss(loss_centerness)
 
     def _init_layers(self):
         """Initialize layers of the head."""
@@ -215,31 +204,19 @@ class SIAMFCPP(M.Module):
         if "frn" in self.backbone_type:
             self.conv_cls = M.Conv2d(self.feat_channels, self.cls_out_channels, 1, 1 ,0)
             self.conv_reg = M.Conv2d(self.feat_channels, 2, kernel_size=3, stride=1, padding=1)
-            self.conv_centerness = M.Conv2d(self.feat_channels, self.cls_out_channels, 1, 1 ,0)
         else:
             self.conv_cls = M.ConvBn2d(self.feat_channels, self.cls_out_channels, kernel_size=1, stride=1, padding=0)
             self.conv_reg = M.ConvBn2d(self.feat_channels, 2, kernel_size=1, stride=1, padding=0)
-            self.conv_centerness = M.ConvBn2d(self.feat_channels, 1, kernel_size=1, stride=1, padding=0)
         
     def head(self, c_out, r_out):
         c_out = self.cls_convs(c_out)
         r_out = self.reg_convs(r_out)
-
         # classification score
         cls_score = self.conv_cls(c_out)  # [B,1,37,37]
-        
-        # center-ness score
-        ctr_score = self.conv_centerness(r_out)
-        ctr_score = F.sigmoid(ctr_score)
-
         # regression
         offsets = self.conv_reg(r_out)
         offsets = F.relu(offsets*self.total_stride + (self.z_size-1)/2)  # [B,2,37,37]
-        
-        # bbox decoding
-        # bbox = get_box(self.fm_ctr, offsets)  # (B, 2, 37, 37)
-
-        return [cls_score, offsets, ctr_score]
+        return [cls_score, offsets]
 
     def forward(self, sar, optical):
         feat1 = self.backbone_sar(sar)
@@ -263,41 +240,31 @@ class SIAMFCPP(M.Module):
             Returns:
                 cls_labels (Tensor): Labels. (B, 1, 37, 37)   0 or 1, 0 means background, 1 means in the box.
                 bbox_targets (Tensor): BBox targets. (B, 4, 37, 37)  only consider the foreground, for the background should set loss as 0!
-                centerness_targets (Tensor): (B, 1, 37, 37)  only consider the foreground, for the background should set loss as 0!
         """
         B, _ = gt_bboxes.shape
-        gt_bboxes = F.expand_dims(gt_bboxes, axis=-1)
-        gt_bboxes = F.expand_dims(gt_bboxes, axis=-1)  # (B,4,1,1)
+        gt_bboxes = F.expand_dims(gt_bboxes, axis=2)
+        gt_bboxes = F.expand_dims(gt_bboxes, axis=3)  # (B,4,1,1)
         # cls_labels
         # 计算四个值以确定是否在内部，由于template比较大，于是缩小bbox为之前的1/4
         gap = (gt_bboxes[:, 2, ...] - gt_bboxes[:, 0, ...]) * (1-bbox_scale) / 2
-        up_bound = points[:, 0, ...] > gt_bboxes[:, 0, ...] + gap
-        left_bound = points[:, 1, ...] > gt_bboxes[:, 1, ...] + gap
-        down_bound = points[:, 0, ...] < gt_bboxes[:, 2, ...] - gap
-        right_bound = points[:, 1, ...] < gt_bboxes[:, 3, ...] - gap
+        up_bound = (points[:, 0, ...] > gt_bboxes[:, 0, ...]).astype("float32") + gap
+        left_bound = (points[:, 1, ...] > gt_bboxes[:, 1, ...]).astype("float32") + gap
+        down_bound = (points[:, 0, ...] < gt_bboxes[:, 2, ...]).astype("float32") - gap
+        right_bound = (points[:, 1, ...] < gt_bboxes[:, 3, ...]).astype("float32") - gap
         cls_labels = up_bound * left_bound * down_bound * right_bound
         cls_labels = F.expand_dims(cls_labels, axis=1)  # (B, 1, 37, 37)
-        cls_labels.requires_grad = False
 
         # bbox_targets
         # 对于points中的每个坐标，计算偏离情况（这里每个坐标都会计算，所以会有负数）
         up_left = points - gt_bboxes[:, 0:2, ...]  # (B, 2, 37, 37)
         bottom_right = gt_bboxes[:, 2:4, ...] - points
         bbox_targets = F.concat([up_left, bottom_right], axis = 1)  # (B, 4, 37, 37)
-        bbox_targets.requires_grad = False
 
-        # centerness_targets
-        up_bottom = F.minimum(up_left[:, 0, ...], bottom_right[:, 0, ...]) / F.maximum(up_left[:, 0, ...], bottom_right[:, 0, ...])
-        left_right = F.minimum(up_left[:, 1, ...], bottom_right[:, 1, ...]) / F.maximum(up_left[:, 1, ...], bottom_right[:, 1, ...])
-        centerness_targets = F.sqrt(F.abs(up_bottom * left_right))
-        centerness_targets = F.expand_dims(centerness_targets, axis =1)  # (B,1,37,37)
-        centerness_targets.requires_grad = False
-        return cls_labels, bbox_targets, centerness_targets
+        return cls_labels, bbox_targets
 
     def loss(self,
              cls_scores,
              bbox_preds,
-             centernesses,
              gt_bboxes
             ):
         """Compute loss of the head.
@@ -305,7 +272,6 @@ class SIAMFCPP(M.Module):
             Args:
                 cls_scores (Tensor): [B,1,37,37]
                 bbox_preds (Tensor): [B,2,37,37]
-                centernesses (Tensor): [B,1,37,37]
                 gt_bboxes (Tensor): [B,4], in [tl_x, tl_y, br_x, br_y] format.
                 
             Returns:
@@ -313,27 +279,24 @@ class SIAMFCPP(M.Module):
         """
         
         B, _, H, W = cls_scores.shape
-        cls_labels, bbox_targets, centerness_targets = self.get_cls_reg_ctr_targets(self.fm_ctr, gt_bboxes, self.bbox_scale)  # (B, 1, 37, 37), (B, 4, 37, 37), (B,1,37,37)
+        cls_labels, bbox_targets = self.get_cls_reg_ctr_targets(self.fm_ctr, gt_bboxes, self.bbox_scale)  # (B, 1, 37, 37), (B, 4, 37, 37), (B,1,37,37)
 
         # cls 
         cls_scores = cls_scores.reshape(B, 1, -1)  # (B, 1, 37*37)
-        cls_scores = F.dimshuffle(cls_scores, (0, 2, 1))  # (B, 37*37, 1)
+        cls_scores = F.transpose(cls_scores, (0, 2, 1))  # (B, 37*37, 1)
         loss_cls = self.loss_cls(cls_scores, cls_labels.reshape(B, -1)) / (B*H*W)
 
         # reg
         bbox_preds = F.concat([bbox_preds, self.z_size -1 - bbox_preds], axis = 1)  # [B,4,37,37]
-        bbox_preds = F.dimshuffle(bbox_preds, (0, 2, 3, 1))
+        bbox_preds = F.transpose(bbox_preds, (0, 2, 3, 1))
         bbox_preds = bbox_preds.reshape(-1, 4)  # (B*37*37, 4)
-       
-        bbox_targets = F.dimshuffle(bbox_targets, (0, 2, 3, 1))
+        
+        bbox_targets = F.transpose(bbox_targets, (0, 2, 3, 1))
         bbox_targets = bbox_targets.reshape(-1, 4)  # (B*37*37, 4)
         loss_reg = self.loss_bbox(bbox_preds, bbox_targets, weight = cls_labels.reshape((B*H*W, ))) / cls_labels.sum()
 
-        # center
-        loss_ctr = self.loss_centerness(centernesses, centerness_targets, weight = cls_labels) / cls_labels.sum()
-        
-        loss = (loss_cls + self.lambda1 * loss_reg + self.lambda2 * loss_ctr) 
-        return loss, loss_cls, loss_reg, loss_ctr, cls_labels
+        loss = (loss_cls + self.lambda1 * loss_reg) 
+        return loss, loss_cls, loss_reg, cls_labels
 
     def init_weights(self, pretrained=None, strict=True):
         # 这里也可以进行参数的load，比如不在之前保存的路径中的模型（预训练好的）
@@ -391,7 +354,6 @@ class AlexNet_stride4(M.Module):
         self.conv4 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
         self.conv5 = M.conv_bn.ConvBn2d(ch, ch, 3, 1, 1)
         
-
     def forward(self, x):
         # 800, 512
         x = self.conv1(x) # 400, 256
@@ -466,7 +428,7 @@ class ShuffleV2Block(M.Module):
         batchsize, num_channels, height, width = x.shape
         # assert (num_channels % 4 == 0)
         x = x.reshape(batchsize * num_channels // 2, 2, height * width)
-        x = x.dimshuffle(1, 0, 2)
+        x = x.transpose(1, 0, 2)
         x = x.reshape(2, -1, num_channels // 2, height, width)
         return x[0], x[1]
 
@@ -571,7 +533,7 @@ class PixelReverseShuffle(M.Module):
         oW = iW // self.scale
         oC = C * (self.scale ** 2)
         output = inputs.reshape(N, C, self.scale, oH, self.scale, oW)
-        output = F.dimshuffle(output, (0, 1, 4, 2, 3, 5))
+        output = F.transpose(output, (0, 1, 4, 2, 3, 5))
         # N C oH oW
         output = output.reshape(N, oC, oH, oW)
         return output

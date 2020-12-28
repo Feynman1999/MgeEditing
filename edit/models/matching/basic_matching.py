@@ -129,7 +129,8 @@ class BasicMatching(BaseModel):
         
         # load pretrained
         self.init_weights(pretrained)
-
+        for item,p in list(self.generator.named_parameters()):
+            print(item, p.shape)
         self.generator_gm = GradManager().attach(self.generator.parameters()) # 定义一个求导器，将指定参数与求导器绑定 
 
     def init_weights(self, pretrained=None):
