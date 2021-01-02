@@ -5,7 +5,6 @@ from megengine.data.dataloader import DataLoader
 from edit.core.hook import Hook
 from edit.utils import to_list, is_list_of, get_logger, mkdir_or_exist
 
-
 def gpu_gather(v):
     raise NotImplementedError("gather for gpu tensor is not implement now")
     # if v is not None:

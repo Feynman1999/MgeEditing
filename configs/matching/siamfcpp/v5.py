@@ -1,3 +1,4 @@
+# 使用stride2
 exp_name = 'sar_opt_v5'
 
 ch = 36

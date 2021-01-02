@@ -15,13 +15,11 @@ class MatchFolderDataset(BaseMatchDataset):
                  file_list_name,  # txt file
                  pipeline,
                  mode='train',
-                 scale = 2,
                  x_size = 800,
                  z_size = 512,
                  balance_flag = "None"  # support None | uniform | test
                  ):
         super(MatchFolderDataset, self).__init__(pipeline, mode)
-        self.scale = scale
         self.data_path = str(data_path)
         self.opt_folder = osp.join(self.data_path, opt_folder)
         self.sar_folder = osp.join(self.data_path, sar_folder)
@@ -53,8 +51,8 @@ class MatchFolderDataset(BaseMatchDataset):
                 assert len(infos) == 4
                 opt_list.append(infos[0])
                 sar_list.append(infos[1])
-                top_left_x.append(float(infos[3])/self.scale)
-                top_left_y.append(float(infos[2])/self.scale)
+                top_left_x.append(float(infos[3]))
+                top_left_y.append(float(infos[2]))
         f.close()
 
         ban_dict=[(5,95), (5,19), (5,20), (5,10), (5 ,44), (5 ,9), (3 ,193), (3 ,61), (1 ,187), (1 ,185), (1 ,179), (1 ,30), (1 ,95), (1 ,59), (1 ,52), (1 ,94), (1 ,26),(1 ,24), (1 ,23), (1, 43), (1, 3), (1,82),(2,455), (6,375), (6,329)]
@@ -72,9 +70,8 @@ class MatchFolderDataset(BaseMatchDataset):
                         sar_path=osp.join(self.sar_folder, sar_list[i]),
                         bbox = np.array([top_left_x[i], 
                                          top_left_y[i], 
-                                         top_left_x[i] + self.z_size/self.scale - 1, 
-                                         top_left_y[i] + self.z_size/self.scale - 1]).astype(np.float32),
-                        scale = self.scale,
+                                         top_left_x[i] + self.z_size - 1, 
+                                         top_left_y[i] + self.z_size - 1]).astype(np.float32),
                         class_id = np.array(aaa).astype(np.int32),
                         file_id = np.array(bbb).astype(np.int32)
                     )
@@ -86,9 +83,8 @@ class MatchFolderDataset(BaseMatchDataset):
                         sar_path=osp.join(self.sar_folder, sar_list[i]),
                         bbox = np.array([top_left_x[i], 
                                          top_left_y[i], 
-                                         top_left_x[i] + self.z_size/self.scale - 1, 
-                                         top_left_y[i] + self.z_size/self.scale - 1]).astype(np.float32),
-                        scale = self.scale,
+                                         top_left_x[i] + self.z_size - 1, 
+                                         top_left_y[i] + self.z_size - 1]).astype(np.float32),
                         class_id = int(opt_list[i][0]),
                         file_id = int(opt_list[i][:-4].split("_")[-1])
                     )

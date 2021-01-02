@@ -5,6 +5,27 @@ import megengine.functional as F
 import numpy as np
 from edit.models.common import WeightNet, WeightNet_DW, FilterResponseNorm2d
 from edit.models.builder import BACKBONES, build_component, COMPONENTS, build_loss
+from megengine.module.normalization import GroupNorm
+
+
+def xcorr_depthwise(x, kernel):
+    """
+        x: [B,C,H,W]
+        kernel: [B,C,h,w]
+    """    
+    b,c,h,w = kernel.shape
+    gapH = x.shape[2] - h + 1
+    gapW = x.shape[3] - w + 1
+    res = []
+    for i in range(gapH):
+        for j in range(gapW):
+            # 取x中对应的点乘
+            result = x[:, :, i:i+h, j:j+w] * kernel # [B,C,h,w]
+            result = result.reshape(b, c, -1)
+            res.append(F.sum(result, axis=2, keepdims=True)) # [B, C, 1]
+    res = F.concat(res, axis= 2)  # [B,C,5*5]
+    return res.reshape(b,c,gapH, gapW)
+
 
 def xcorr_depthwise(x, kernel):
     """
@@ -27,61 +48,13 @@ def xcorr_depthwise(x, kernel):
 
 def get_xy_ctr_np(score_size):
     fm_height, fm_width = score_size, score_size
-
     y_list = np.linspace(0., fm_height - 1., fm_height).reshape(1, 1, fm_height, 1)
     y_list = y_list.repeat(fm_width, axis=3)
     x_list = np.linspace(0., fm_width - 1., fm_width).reshape(1, 1, 1, fm_width)
     x_list = x_list.repeat(fm_height, axis=2)
     xy_list = np.concatenate((y_list, x_list), 1)
-    xy_ctr = mge.tensor(xy_list.astype(np.float32), requires_grad=False)
+    xy_ctr = mge.tensor(xy_list.astype(np.float32))
     return xy_ctr
-
-
-class CARBBlock(M.Module):
-    def __init__(self, channel_num):
-        super(CARBBlock, self).__init__()
-        self.conv1 = M.Sequential(
-            M.conv_bn.ConvBnRelu2d(channel_num, channel_num, kernel_size=3, stride=1, padding=1),
-            M.Conv2d(channel_num, channel_num, kernel_size=3, padding=1, stride=1),
-        )
-        # self.global_average_pooling = nn.AdaptiveAvgPool2d((1,1))  # B,C,H,W -> B,C,1,1
-        self.linear = M.Sequential(
-            M.Linear(channel_num, channel_num // 2),
-            M.ReLU(),
-            M.Linear(channel_num // 2, channel_num),
-            M.Sigmoid()
-        )
-        self.conv2 = M.conv_bn.ConvBnRelu2d(channel_num*2, channel_num, kernel_size=1, stride=1, padding=0)
-        self.lrelu = M.LeakyReLU()
-
-    def forward(self, x):
-        x1 = self.conv1(x)  # [B, C, H, W]
-        w = F.mean(x1, axis = -1, keepdims = False) # [B,C,H]
-        w = F.mean(w, axis = -1, keepdims = False) # [B,C]
-        w = self.linear(w)
-        w = F.expand_dims(w, axis = -1)
-        w = F.expand_dims(w, axis = -1)  # [B,C,1,1]
-        x1 = F.concat((x1, F.multiply(x1, w)), axis = 1)  # [B, 2C, H, W]
-        del w
-        x1 = self.conv2(x1)  # [B, C, H, W]
-        return self.lrelu(x + x1)
-
-
-class CARBBlocks(M.Module):
-    def __init__(self, channel_num, block_num):
-        super(CARBBlocks, self).__init__()
-        self.model = M.Sequential(
-            self.make_layer(CARBBlock, channel_num, block_num),
-        )
-
-    def make_layer(self, block, channel_num, num_blocks):
-        layers = []
-        for _ in range(num_blocks):
-            layers.append(block(channel_num))
-        return M.Sequential(*layers)
-
-    def forward(self, x):
-        return self.model(x)
 
 
 @BACKBONES.register_module()
@@ -134,53 +107,40 @@ class SIAMFCPP_P(M.Module):
         self._init_predictor()
 
     def _init_feature_adjust(self):
-        # feature adjustment
-        self.c_z_k = M.ConvBn2d(self.channels, self.feat_channels, 3, 1, 1, momentum=0.9, affine=True, track_running_stats=True)
-        # self.c_z_k = M.Sequential(
-        #     M.Conv2d(self.channels, self.feat_channels, 3,1,1),
-        #     FilterResponseNorm2d(self.feat_channels)
-        # )
-        self.c_x = M.ConvBn2d(self.channels, self.feat_channels, 3, 1, 1, momentum=0.9, affine=True, track_running_stats=True)
-        # self.c_x = M.Sequential(
-        #     M.Conv2d(self.channels, self.feat_channels, 3,1,1),
-        #     FilterResponseNorm2d(self.feat_channels)
-        # )
+        self.c_z_k = M.Sequential(
+            M.Conv2d(self.channels, self.feat_channels, kernel_size=1, stride=1, padding=0),
+            GroupNorm(num_groups=4, num_channels=self.feat_channels)
+        )
+        self.c_x = M.Sequential(
+            M.Conv2d(self.channels, self.feat_channels, kernel_size=1, stride=1, padding=0),
+            GroupNorm(num_groups=4, num_channels=self.feat_channels)
+        )
 
     def _init_cls_convs(self):
-        """Initialize classification conv layers of the head."""
         self.cls_convs = []
+        self.cls_convs.append(
+            M.Sequential(
+                M.Conv2d(self.feat_channels, self.feat_channels, kernel_size=3, stride=1, padding=1),
+                GroupNorm(num_groups=4, num_channels=self.feat_channels),
+                M.LeakyReLU(negative_slope=0.05)
+            )
+        )
         for i in range(self.stacked_convs-1):
             self.cls_convs.append(
-                M.ConvRelu2d(self.feat_channels, self.feat_channels, 3, 1, 1)
+                M.Sequential(
+                    M.Conv2d(self.feat_channels, self.feat_channels, kernel_size=1, stride=1, padding=0),
+                    GroupNorm(num_groups=4, num_channels=self.feat_channels),
+                    M.LeakyReLU(negative_slope=0.05)
+                )
             )
-        self.cls_convs.append(
-            M.ConvBnRelu2d( self.feat_channels, 
-                            self.feat_channels,
-                            kernel_size=3,
-                            stride=1,
-                            padding=1, 
-                            bias=True,
-                            momentum=0.9,
-                            affine=True,
-                            track_running_stats=True)
-        )
-        # self.cls_convs.append(
-        #     M.Sequential(
-        #         M.Conv2d(self.feat_channels, self.feat_channels, 3, 1 ,1),
-        #         FilterResponseNorm2d(self.feat_channels),
-        #         M.LeakyReLU()
-        #     )
-        # )
         self.cls_convs = M.Sequential(*self.cls_convs)
 
     def _init_predictor(self):
-        """Initialize predictor layers of the head."""
-        # self.conv_cls = M.Conv2d(self.feat_channels, self.cls_out_channels, kernel_size = 1, stride=1, padding=0)
-        self.conv_cls = M.ConvBn2d(self.feat_channels, self.cls_out_channels, kernel_size=1, stride=1, padding=0)
+        self.conv_cls = M.Conv2d(self.feat_channels, self.cls_out_channels, kernel_size=1, stride=1, padding=0)
 
     def head(self, c_out):
         c_out = self.cls_convs(c_out)
-        cls_score = self.conv_cls(c_out)  # [B,1,37,37]
+        cls_score = self.conv_cls(c_out)
         return cls_score
 
     def forward(self, sar, optical):
@@ -192,33 +152,19 @@ class SIAMFCPP_P(M.Module):
         return self.head(c_out)
 
     def get_cls_targets(self, gt_bboxes):
-        B, _ = gt_bboxes.shape
-        gt_bboxes = F.expand_dims(gt_bboxes, axis=-1)
-        gt_bboxes = F.expand_dims(gt_bboxes, axis=-1)  # (B,4,1,1)    关注左上角坐标即可  范围0~4
-        dist = F.sqrt(
-            (self.fm_ctr[:, 0, :, :] - gt_bboxes[:, 0, :, :]) ** 2 + (
-                        self.fm_ctr[:, 1, :, :] - gt_bboxes[:, 1, :, :]) ** 2)
-
-        # print(dist.shape) #8,5,5
-
-        labels = F.where(dist <= 3,  # np.where(condition, x, y) 条件为真就返回x 为假则返回y
-                        ((-dist / 6) + 1),
-                        F.zeros_like(dist))
-        # print(labels[0])
-        # print(labels.shape) #8,5,5
-        labels = F.expand_dims(labels, axis=1)
-        labels.requires_grad = False
-        return labels
+        gt_bboxes = F.expand_dims(gt_bboxes, axis=[2,3])  # (B,4,1,1)    关注左上角坐标即可  范围0~4
+        dist = F.sqrt((self.fm_ctr[:, 0, :, :] - gt_bboxes[:, 0, :, :]) ** 2 + (self.fm_ctr[:, 1, :, :] - gt_bboxes[:, 1, :, :]) ** 2)
+        label = F.where(dist <= 3,  ((-dist / 6) + 1), F.zeros_like(dist))
+        label = F.expand_dims(label, axis=1) # (B, 1, 5 , 5)
+        return label
 
     def loss(self, cls_scores, gt_bboxes):
-        B, _, H, W = cls_scores.shape
-        cls_labels = self.get_cls_targets(gt_bboxes)  # (B, 1, 5, 5)
-
-        cls_scores = F.sigmoid(cls_scores).reshape(B, -1)
-        cls_labels = cls_labels.reshape(B, -1)
-        loss_cls = - 1.0 * (cls_labels* F.log(cls_scores) + (1.0 - cls_labels) * F.log(1 - cls_scores)).mean()
-        loss = loss_cls
-        return loss, cls_labels
+        cls_scores = F.sigmoid(cls_scores)
+        cls_label = self.get_cls_targets(gt_bboxes)  # (B, 1, 5, 5)
+        quan = (cls_label > 0.99).astype("float32") * 4.0 + 1
+        print(quan[0])
+        loss1 = - 1.0 * ((cls_label* F.log(cls_scores) + (1.0 - cls_label) * F.log(1 - cls_scores))*quan).mean()
+        return loss1, cls_label
 
     def init_weights(self, pretrained=None, strict=True):
         # 这里也可以进行参数的load，比如不在之前保存的路径中的模型（预训练好的）
@@ -242,9 +188,19 @@ class SIAMFCPP_P(M.Module):
 class AlexNet(M.Module):
     def __init__(self, in_cha, ch=48):
         super(AlexNet, self).__init__()
-        assert ch % 2 ==0, "channel nums should % 2 = 0"
-        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=3, stride=1, padding=1)
-        self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 3, 1, 1)
+        assert ch % 4 ==0, "channel nums should % 2 = 0"
+        # self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=3, stride=1, padding=1)
+        # self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 3, 1, 1)
+        self.conv1 = M.Sequential(
+            M.Conv2d(in_cha, ch//2, kernel_size=3, stride=1, padding=1),
+            GroupNorm(num_groups=2, num_channels=ch//2),
+            M.PReLU()
+        )
+        self.conv2 = M.Sequential(
+            M.Conv2d(ch//2, ch, kernel_size=3, stride=1, padding=1),
+            GroupNorm(num_groups=4, num_channels=ch),
+            M.PReLU()
+        )
 
     def forward(self, x):
         x = self.conv1(x)

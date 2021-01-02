@@ -7,6 +7,7 @@ from megengine.jit import trace, SublinearMemoryConfig
 import megengine.distributed as dist
 import megengine as mge
 import megengine.functional as F
+from megengine.autodiff import GradManager
 from edit.utils import imwrite, tensor2img, bgr2ycbcr, imrescale, ensemble_forward, bbox_ensemble_back
 from ..base import BaseModel
 from ..builder import build_backbone
@@ -22,23 +23,33 @@ def get_box(xy_ctr, offsets, test_z_size=512):
     bboxes_pred = F.concat([xy0, xy1], axis=1)  # (B,4,H,W)
     return bboxes_pred
 
-config = SublinearMemoryConfig()
-
-@trace(symbolic=True)
-def train_generator_batch(optical, sar, label, cls_id, file_id, *, opt, netG):
+def train_generator_batch(optical, sar, label, cls_id, file_id, *, gm, netG):
     netG.train()
-    cls_score, offsets, ctr_score = netG(sar, optical)
-    loss, loss_cls, loss_reg, loss_ctr, cls_labels = netG.loss(cls_score, offsets, ctr_score, label)
-    opt.backward(loss)
-    if dist.is_distributed():
-        # do all reduce mean
-        pass
+    with gm:
+        cls_score, offsets = netG(sar, optical)
+        loss, loss_cls, loss_reg, cls_labels = netG.loss(cls_score, offsets, label)
+        gm.backward(loss)
+
+        # _, _, H, W = cls_labels.shape
+        # ans = []
+        # for i in range(H):
+        #     ans.append([])
+        # for i in range(H):
+        #     for j in range(W):
+        #         ans[i].append(str(int(cls_labels[0, 0, ...].numpy()[i][j])))
+        # for i in range(len(ans)):
+        #     ans[i] = "".join(ans[i])
+        # print("\n".join(ans))
+
+        if dist.is_distributed():
+            # do all reduce mean
+            pass
 
     # performance in the training data
-    B, _, H, W = cls_score.shape  # 500 110  stride2    196*196
+    B, _, H, W = cls_score.shape
     cls_score = cls_score.reshape(B, -1)
     times = 1
-    pred_box = get_box(netG.fm_ctr, offsets*0)  # (B,4,H,W)
+    pred_box = get_box(netG.fm_ctr, offsets)  # (B,4,H,W)
 
     res = []
     for t in range(times):
@@ -48,21 +59,31 @@ def train_generator_batch(optical, sar, label, cls_id, file_id, *, opt, netG):
             H_id = max_id[i] // H
             W_id = max_id[i] % H
             output.append(F.expand_dims(pred_box[i, :, H_id, W_id], axis=0))  # (1,4)
-            x = mge.tensor(-100000.0)
+            # x = mge.tensor(-100000.0)
             # cls_score = cls_score.set_subtensor(x)[i, max_id[i]]
+            # min_id = F.argmin((offsets[i, 0, H_id:H_id+(margin*2+1), W_id:W_id+(margin*2+1)]**2 + offsets[i, 1, H_id:H_id+(margin*2+1), W_id:W_id+(margin*2+1)]**2).reshape((margin*2+1)**2), axis = 0)
+            # H_min_id = min_id // (margin*2+1)
+            # W_min_id = min_id % (margin*2+1)
+            # H_min_id = margin
+            # W_min_id = margin   
+            # output.append(F.expand_dims(pred_box[i, :, H_id+H_min_id-margin, W_id+W_min_id-margin], axis=0)) # (1, 4)
         output = F.concat(output, axis=0)  # (B, 4)
         res.append(output)
     output = sum(res) / len(res)
-    dis = F.norm(output[:, 0:2] - label[:, 0:2], p=2, axis = 1)  # (B, )
-    return [loss_cls, loss_reg, loss_ctr, dis.mean(), cls_score.reshape(B,1,H,W)]
+
+    dis = F.norm(F.floor(output[:, 0:2]+0.5) - label[:, 0:2], ord=2, axis = 1)  # (B, )
+    # if F.max(dis).item() > 20:
+    #     Id = F.argmax(dis)
+    #     print(cls_id[Id], file_id[Id])
+    #     print(dis)
+    return [loss_cls*1000, loss_reg, dis.mean()]
 
 
-@trace(symbolic=True)
 def test_generator_batch(optical, sar, *, netG):
     netG.eval()
     tmp = netG.z_size
-    netG.z_size = netG.test_z_size  # 176   需要分块 4*4
-    block_nums = 4
+    netG.z_size = netG.test_z_size  # 256 分2*2
+    block_nums = 2
     gap = (block_nums * netG.z_size - 512)//(block_nums-1)  # 64
     times = 1
 
@@ -73,9 +94,9 @@ def test_generator_batch(optical, sar, *, netG):
             start_H = i*(netG.z_size - gap)
             start_W = j*(netG.z_size - gap)
             sar_block = sar[:, :, start_H:start_H + netG.z_size, start_W:start_W + netG.z_size]
-            cls_score, offsets, ctr_score = netG(sar_block, optical) # 800 176        score map: 313
+            cls_score, offsets = netG(sar_block, optical)
             B, _, H, W = cls_score.shape
-            cls_score = cls_score.reshape(B, -1)
+            cls_score = cls_score.reshape((B, -1))
             pred_box = get_box(netG.test_fm_ctr, offsets)  # (B,4,H,W)
 
             res = []
@@ -86,12 +107,14 @@ def test_generator_batch(optical, sar, *, netG):
                     H_id = max_id[i] // H
                     W_id = max_id[i] % H
                     output.append(F.expand_dims(pred_box[i, :, H_id, W_id], axis=0))  # (1,4)
-                    cls_score = cls_score.set_subtensor(mge.tensor(-100000.0))[i, max_id[i]]  # 消除当前的最大
+                    # cls_score = cls_score.set_subtensor(mge.tensor(-100000.0))[i, max_id[i]]  # 消除当前的最大
                 output = F.concat(output, axis=0)  # (B, 4)
                 res.append(output)
             output = sum(res) / len(res)  # (B, 4)
             back = mge.tensor([start_H, start_W, start_H, start_W])  # 后面两个不重要，随便写的
             blocks_res.append(output - back)
+            break
+        break
 
     output = blocks_res[0]  # 目前只取左上角
     netG.z_size = tmp
@@ -117,6 +140,8 @@ class BasicMatchingV3(BaseModel):
         # load pretrained
         self.init_weights(pretrained)
 
+        self.generator_gm = GradManager().attach(self.generator.parameters()) # 定义一个求导器，将指定参数与求导器绑定 
+
     def init_weights(self, pretrained=None):
         """Init weights for models.
 
@@ -136,26 +161,17 @@ class BasicMatchingV3(BaseModel):
         """
         optical, sar, label, cls_id, file_id = batchdata
         # 保存optical 和 sar，看下对不对
-        name = random.sample('zyxwvutsrqponmlkjihgfedcba', 3)
-        name = "".join(name) + "_" + str(label[0][0]) + "_" + str(label[0][1]) + "_" + str(label[0][2]) + "_" + str(label[0][3])
-        imwrite(cv2.rectangle(tensor2img(optical[0, ...], min_max=(-0.8, 1.2)), (label[0][1], label[0][0]), (label[0][3], label[0][2]), (0,0,255), 2), file_path="./workdirs/" + name + "_opt.png") 
-        imwrite(tensor2img(sar[0, ...], min_max=(-0.8, 1.2)), file_path="./workdirs/" + name + "_sar.png")
-        self.optimizers['generator'].zero_grad()
-        loss = train_generator_batch(optical, sar, label, cls_id, file_id, opt=self.optimizers['generator'], netG=self.generator)
+        # name = random.sample('zyxwvutsrqponmlkjihgfedcba', 3)
+        # name = "".join(name) + "_" + str(label[0][0]) + "_" + str(label[0][1]) + "_" + str(label[0][2]) + "_" + str(label[0][3])
+        # imwrite(cv2.rectangle(tensor2img(optical[0, ...], min_max=(-0.64, 1.36)), (label[0][1], label[0][0]), (label[0][3], label[0][2]), (0,0,255), 2), file_path="./workdirs/" + name + "_opt.png") 
+        # imwrite(tensor2img(sar[0, ...], min_max=(-0.64, 1.36)), file_path="./workdirs/" + name + "_sar.png")
+        optical_tensor = mge.tensor(optical, dtype="float32")
+        sar_tensor = mge.tensor(sar, dtype="float32")
+        label_tensor = mge.tensor(label, dtype="float32")   
+        loss = train_generator_batch(optical_tensor, sar_tensor, label_tensor, cls_id, file_id, gm=self.generator_gm, netG=self.generator)
         self.optimizers['generator'].step()
-
-        name = "".join(random.sample('zyxwvutsrqponmlkjihgfedcba',10))
-        if "a" in name and "b" in name:
-            tt = loss[-1][0, 0, :, :]
-            # label周围3*3标0
-            label_H = int(label[0][0].item())//2
-            label_W = int(label[0][1].item())//2
-            img = tensor2img(tt, out_type=np.uint8, min_max=(F.min(tt).item(), F.max(tt).item()))
-            img = img[:, :, np.newaxis]
-            img[label_H-2:label_H+3, label_W-2:label_W+3, :] = 0
-            imwrite(img=img, file_path = "./test40/"+name+"_{}.png".format(0))
-
-        return loss[0:-1]
+        self.optimizers['generator'].clear_grad()
+        return loss
 
     def test_step(self, batchdata, **kwargs):
         """test step.
@@ -177,7 +193,9 @@ class BasicMatchingV3(BaseModel):
         class_id = batchdata[-2]
         file_id = batchdata[-1]
         
-        pre_bbox = test_generator_batch(optical, sar, netG=self.generator)  # [B, 4]
+        optical_tensor = mge.tensor(optical, dtype="float32")
+        sar_tensor = mge.tensor(sar, dtype="float32")
+        pre_bbox = test_generator_batch(optical_tensor, sar_tensor, netG=self.generator)  # [B, 4]
 
         pre_bbox = mge.tensor(bbox_ensemble_back(pre_bbox, Type=epoch))
 
@@ -219,7 +237,7 @@ class BasicMatchingV3(BaseModel):
         :param gathered_batchdata: list of numpy, [optical, sar, bbox_gt, class_id, file_id]
         :return: eval result
         """
-        pre_bbox = gathered_outputs[0]
+        pre_bbox = F.floor(gathered_outputs[0]+0.5)
         bbox_gt = gathered_batchdata[2]
         class_id = gathered_batchdata[-2]
         file_id = gathered_batchdata[-1]

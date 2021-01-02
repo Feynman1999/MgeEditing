@@ -1,10 +1,10 @@
+import numpy as np
 import megengine as mge
 import megengine.module as M
 from megengine.module.conv import Conv2d, ConvTranspose2d
 import megengine.functional as F
 from edit.models.common import WeightNet, WeightNet_DW, FilterResponseNorm2d
-import numpy as np
-from edit.models.builder import BACKBONES, build_component, COMPONENTS, build_loss
+from edit.models.builder import BACKBONES, build_loss
 
 def xcorr_depthwise(x, kernel):
     """
@@ -20,6 +20,29 @@ def xcorr_depthwise(x, kernel):
     out = out.reshape(batch, channel, int(out.shape[2]), int(out.shape[3]))
     return out
 
+# def xcorr_depthwise(x, kernel):
+#     """
+#         x: [B,C,H,W]   250
+#         kernel: [B,C,h,w]   160
+#     """    
+#     batch, channel, kH, kW = kernel.shape
+#     _, _, xH, xW = x.shape
+#     bc = batch*channel
+#     x = x.reshape(1, bc, xH, xW)
+#     kernel = kernel.reshape(bc, 1, 1, kH, kW)
+#     # divide by 2 * 2
+#     kernel_lt = kernel[:, :, :, 0:kH//2, 0:kW//2]
+#     kernel_rb = kernel[:, :, :, kH//2:kH, kW//2:kW] 
+#     kernel_rt = kernel[:, :, :, 0:kH//2, kW//2:kW]
+#     kernel_lb = kernel[:, :, :, kH//2:kH, 0:kW//2]
+#     # cal result
+#     out_lt = F.conv2d(x[:, :, 0:(xH-kH//2), 0:(xW - kW//2)], kernel_lt, groups=bc)
+#     out_rb = F.conv2d(x[:, :, (kH//2):xH, (kW//2):xW], kernel_rb, groups=bc)
+#     out_rt = F.conv2d(x[:, :, 0:(xH-kH//2), (kW//2):xW], kernel_rt, groups=bc)
+#     out_lb = F.conv2d(x[:, :, (kH//2):xH, 0:(xW - kW//2)], kernel_lb, groups=bc)
+#     oH, oW = out_lt.shape[2], out_lt.shape[3] 
+#     out = (out_lt + out_rb + out_rt + out_lb).reshape(batch, channel, oH, oW)
+#     return out
 
 def get_xy_ctr_np(score_size, score_offset, total_stride):
     """ generate coordinates on image plane for score map pixels (in numpy)
@@ -34,7 +57,6 @@ def get_xy_ctr_np(score_size, score_offset, total_stride):
     xy_ctr = mge.tensor(xy_list.astype(np.float32))
     return xy_ctr
 
-
 @BACKBONES.register_module()
 class SIAMFCPP(M.Module):
     def __init__(self, in_cha,
@@ -48,10 +70,10 @@ class SIAMFCPP(M.Module):
                        test_z_size = 512,
                        test_x_size = 800,
                        lambda1=2,
-                       lambda2=0,
                        bbox_scale = 0.1,
                        stride = 8,
-                       backbone_type = "alexnet"  #  alexnet | unet
+                       backbone_type = "alexnet",  #  alexnet | unet
+                       use_distance_cls_label = False
                        ):
         super(SIAMFCPP, self).__init__()
         self.in_cha = in_cha
@@ -68,8 +90,9 @@ class SIAMFCPP(M.Module):
         self.test_z_size = test_z_size
         self.test_x_size = test_x_size
         self.lambda1 = lambda1
-        self.lambda2 = lambda2
         self.bbox_scale = bbox_scale
+        self.use_distance_cls_label = use_distance_cls_label
+        self.reg_distance_thre = 0.7
 
         self.score_offset = (x_size - 1 - (self.score_size - 1) * self.total_stride) / 2  # /2
         self.test_score_offset = (test_x_size - 1 - (self.test_score_size - 1) * self.total_stride) / 2  # /2
@@ -92,10 +115,7 @@ class SIAMFCPP(M.Module):
                 self.backbone_sar = UNet_stride4(self.in_cha, self.channels)
                 self.backbone_opt = UNet_stride4(self.in_cha, self.channels)
             else:
-                raise NotImplementedError("not implement!")
-        elif self.total_stride == 8:
-            self.backbone_sar = AlexNet_stride8(self.in_cha, self.channels)
-            self.backbone_opt = AlexNet_stride8(self.in_cha, self.channels)
+                raise NotImplementedError("not implement backbone_type!")
         elif self.total_stride == 2:
             if self.backbone_type == "alexnet":
                 self.backbone_sar = AlexNet_stride2(self.in_cha, self.channels)
@@ -104,9 +124,9 @@ class SIAMFCPP(M.Module):
                 self.backbone_sar = Shuffle_weight_frn_stride2(self.in_cha, self.channels)
                 self.backbone_opt = Shuffle_weight_frn_stride2(self.in_cha, self.channels)
             else:
-                raise NotImplementedError("not implement!")
+                raise NotImplementedError("not implement backbone_type!")
         else:
-            pass
+            raise NotImplementedError("not implement total_stride!")
         # self.bi = mge.Parameter(value=[0.0])
         # self.si = mge.Parameter(value=[1.0])
 
@@ -213,7 +233,7 @@ class SIAMFCPP(M.Module):
         r_out = self.reg_convs(r_out)
         cls_score = self.conv_cls(c_out)  # [B,1,37,37]
         offsets = self.conv_reg(r_out)
-        offsets = F.relu(offsets*self.total_stride + (self.z_size-1)/2)  # [B,2,37,37]
+        offsets = F.relu(offsets*self.total_stride*2 + (self.z_size-1)/2)  # [B,2,37,37]
         return [cls_score, offsets]
 
     def forward(self, sar, optical):
@@ -240,8 +260,8 @@ class SIAMFCPP(M.Module):
                 bbox_targets (Tensor): BBox targets. (B, 4, 37, 37)  only consider the foreground, for the background should set loss as 0!
         """
         B, _ = gt_bboxes.shape
-        gt_bboxes = F.expand_dims(gt_bboxes, axis=2)
-        gt_bboxes = F.expand_dims(gt_bboxes, axis=3)  # (B,4,1,1)
+        gt_bboxes = F.expand_dims(gt_bboxes, axis=[2,3]) # (B,4,1,1)
+        
         # cls_labels
         # 计算四个值以确定是否在内部，由于template比较大，于是缩小bbox为之前的1/4
         gap = (gt_bboxes[:, 2, ...] - gt_bboxes[:, 0, ...]) * (1-bbox_scale) / 2
@@ -252,13 +272,25 @@ class SIAMFCPP(M.Module):
         cls_labels = up_bound * left_bound * down_bound * right_bound
         cls_labels = F.expand_dims(cls_labels, axis=1)  # (B, 1, 37, 37)
 
+        # change to distance
+        distance = None
+        if self.use_distance_cls_label:
+            center = F.stack([gt_bboxes[:, 0, ...] + gt_bboxes[:, 2, ...], gt_bboxes[:, 1, ...] + gt_bboxes[:, 3, ...]], axis=1) / 2  # [B,2,1,1]
+            distance = F.sqrt((self.fm_ctr[:, 0, ...] - center[:, 0, ...])**2 + (self.fm_ctr[:, 1, ...] - center[:, 1, ...])**2)     # [B, 37, 37]
+            distance = F.expand_dims(distance, axis=1)  # [B, 1, 37, 37]
+            # 求出中间部分的Min 和 max
+            d_min = F.min(distance, axis=[2,3], keepdims=True)  # [B, 1, 1, 1]
+            d_max = F.max(distance * cls_labels, axis=[2,3], keepdims=True)
+            # 把distance归一化
+            distance = (1 - (distance - d_min) / (d_max - d_min)) * cls_labels
+
         # bbox_targets
         # 对于points中的每个坐标，计算偏离情况（这里每个坐标都会计算，所以会有负数）
         up_left = points - gt_bboxes[:, 0:2, ...]  # (B, 2, 37, 37)
         bottom_right = gt_bboxes[:, 2:4, ...] - points
         bbox_targets = F.concat([up_left, bottom_right], axis = 1)  # (B, 4, 37, 37)
 
-        return cls_labels, bbox_targets
+        return cls_labels, bbox_targets, distance
 
     def loss(self,
              cls_scores,
@@ -277,23 +309,26 @@ class SIAMFCPP(M.Module):
         """
         
         B, _, H, W = cls_scores.shape
-        cls_labels, bbox_targets = self.get_cls_reg_ctr_targets(self.fm_ctr, gt_bboxes, self.bbox_scale)  # (B, 1, 37, 37), (B, 4, 37, 37), (B,1,37,37)
-
-        # cls 
+        cls_labels, bbox_targets, distance = self.get_cls_reg_ctr_targets(self.fm_ctr, gt_bboxes, self.bbox_scale)  # (B, 1, 37, 37), (B, 4, 37, 37), (B,1,37,37)
+        
         cls_scores = cls_scores.reshape(B, 1, -1)  # (B, 1, 37*37)
         cls_scores = F.transpose(cls_scores, (0, 2, 1))  # (B, 37*37, 1)
-        loss_cls = self.loss_cls(cls_scores, cls_labels.reshape(B, -1)) / (B*H*W)
 
-        # reg
         bbox_preds = F.concat([bbox_preds, self.z_size -1 - bbox_preds], axis = 1)  # [B,4,37,37]
         bbox_preds = F.transpose(bbox_preds, (0, 2, 3, 1))
         bbox_preds = bbox_preds.reshape(-1, 4)  # (B*37*37, 4)
-        
         bbox_targets = F.transpose(bbox_targets, (0, 2, 3, 1))
         bbox_targets = bbox_targets.reshape(-1, 4)  # (B*37*37, 4)
-        loss_reg = self.loss_bbox(bbox_preds, bbox_targets, weight = cls_labels.reshape((B*H*W, ))) / cls_labels.sum()
 
-        loss = (loss_cls + self.lambda1 * loss_reg) 
+        if distance is not None:
+            loss_cls = self.loss_cls(cls_scores, distance.reshape(B, -1)) / (B*H*W)
+            reg_weight = (distance > self.reg_distance_thre).astype("float32").reshape((B*H*W, ))
+            loss_reg = self.loss_bbox(bbox_preds, bbox_targets, weight = reg_weight) / reg_weight.sum()
+        else: 
+            loss_cls = self.loss_cls(cls_scores, cls_labels.reshape(B, -1)) / (B*H*W)
+            loss_reg = self.loss_bbox(bbox_preds, bbox_targets, weight = cls_labels.reshape((B*H*W, ))) / cls_labels.sum()
+
+        loss = (loss_cls + self.lambda1 * loss_reg)
         return loss, loss_cls, loss_reg, cls_labels
 
     def init_weights(self, pretrained=None, strict=True):
@@ -315,51 +350,24 @@ class SIAMFCPP(M.Module):
         #                     f'But received {type(pretrained)}.')
 
 
-class AlexNet_stride8(M.Module):
-    def __init__(self, in_cha, ch=48):
-        super(AlexNet_stride8, self).__init__()
-        assert ch % 2 ==0, "channel nums should % 2 = 0"
-        
-        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=11, stride=2, padding=5)
-        self.pool1 = M.MaxPool2d(3, 2, 1)
-        self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 5, 1, 2)
-        self.pool2 = M.MaxPool2d(3, 2, 1)
-        self.conv3 = M.conv_bn.ConvBnRelu2d(ch, ch*2, 3, 1, 1)
-        self.conv4 = M.conv_bn.ConvBnRelu2d(ch*2, ch*2, 3, 1, 1)
-        self.conv5 = M.conv_bn.ConvBn2d(ch*2, ch, 3, 1, 1)
-        
-    def forward(self, x):
-        # 800, 512
-        x = self.conv1(x) # 400, 256
-        x = self.pool1(x) # 200, 128
-        x = self.conv2(x) # 200, 128
-        x = self.pool2(x) # 100, 64
-        x = self.conv3(x) # 100, 64
-        x = self.conv4(x) # 100, 64
-        x = self.conv5(x) # 100, 64
-        return x
-
-
 class AlexNet_stride4(M.Module):
     def __init__(self, in_cha, ch=48):
         super(AlexNet_stride4, self).__init__()
         assert ch % 2 ==0, "channel nums should % 2 = 0"
         
-        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=5, stride=2, padding=2)
-        self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 3, 1, 1)
-        self.pool1 = M.MaxPool2d(3, 2, 1)
+        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=7, stride=2, padding=3)
+        self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 3, 2, 1)
+        # self.pool1 = M.MaxPool2d(3, 2, 1)
         self.conv3 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
-        self.conv4 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
-        self.conv5 = M.conv_bn.ConvBn2d(ch, ch, 3, 1, 1)
+        # self.conv4 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
+        self.conv4 = M.conv_bn.ConvBn2d(ch, ch, 3, 1, 1)
         
     def forward(self, x):
         # 800, 512
         x = self.conv1(x) # 400, 256
         x = self.conv2(x) # 400, 256
-        x = self.pool1(x) # 200, 128
         x = self.conv3(x)
         x = self.conv4(x)
-        x = self.conv5(x) # 200, 128
         return x
 
 
@@ -457,13 +465,12 @@ class AlexNet_stride2(M.Module):
         super(AlexNet_stride2, self).__init__()
         assert ch % 2 ==0, "channel nums should % 2 = 0"
         
-        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=11, stride=2, padding=5)
-        self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 5, 1, 2)
+        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=5, stride=2, padding=2)
+        self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 3, 1, 1)
         self.conv3 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
         self.conv4 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
 
     def forward(self, x):
-        # 800, 512
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)

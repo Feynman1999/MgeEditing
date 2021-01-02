@@ -11,16 +11,16 @@ model = dict(
         type='SIAMFCPP',
         in_cha=1,
         channels=48,
-        loss_cls=dict(type='Focal_loss', alpha = 0.95, gamma = 2),
+        loss_cls=dict(type='Focal_loss', alpha = 0.993, gamma = 2),
         loss_bbox=dict(type='IOULoss', loc_loss_type='giou'),
         stacked_convs = 3,
-        feat_channels = 48,
+        feat_channels = 12,
         z_size = z_size,
         x_size = x_size,
         lambda1 = 0.25,  # reg
         lambda2 = 0.0,  # center
-        bbox_scale = 0.05,
-        stride = 4,
+        bbox_scale = 0.02,
+        stride = 2,
         backbone_type = "alexnet"
     ))
 
@@ -45,7 +45,7 @@ train_pipeline = [
         io_backend='disk',
         key='sar',
         flag='color'),  # H,W,3  BGR
-    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.2, contrast=0.2, saturation=0.2, hue=0.0),
+    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.2, contrast=0.2, saturation=0.0, hue=0.0),
     dict(type='Corner_Shelter', keys=['opt'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Corner_Shelter', keys=['sar'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Bgr2Gray', keys=['opt', 'sar']),  # H, W, 1
@@ -100,7 +100,7 @@ repeat_times = 1
 
 data = dict(
     # train
-    samples_per_gpu=32,
+    samples_per_gpu=16,
     workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
@@ -112,7 +112,6 @@ data = dict(
             sar_folder= "sar",
             file_list_name = "train_random.txt",
             pipeline=train_pipeline,
-            scale = 1,
             balance_flag = "None")),  # test and uniform and None
     # eval
     eval_samples_per_gpu=1,
@@ -124,8 +123,7 @@ data = dict(
         sar_folder= "sar",
         file_list_name = "valid_random.txt",
         pipeline=eval_pipeline,
-        mode="eval",
-        scale = 1),
+        mode="eval"),
     # test
     test_samples_per_gpu=1,
     test_workers_per_gpu=4,
@@ -136,8 +134,7 @@ data = dict(
         sar_folder= "sar",
         file_list_name = "img_list_path.txt",
         pipeline=test_pipeline,
-        mode="test",
-        scale = 1),
+        mode="test"),
 )
 
 # optimizer
