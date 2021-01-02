@@ -61,14 +61,14 @@ def get_xy_ctr_np(score_size):
 class SIAMFCPP_P(M.Module):
     def __init__(self, in_cha,
                        channels,
-                       loss_cls,
                        stacked_convs = 3,
                        feat_channels = 24,
                        z_size = 256,
                        x_size = 260,
                        test_z_size = 512,
                        test_x_size = 520,
-                       backbone_type = "alexnet"  #  alexnet | Shuffle_weightnet
+                       backbone_type = "alexnet",  #  alexnet | Shuffle_weightnet
+                       lambda1 = 4
                        ):
         super(SIAMFCPP_P, self).__init__()
         self.in_cha = in_cha
@@ -83,13 +83,12 @@ class SIAMFCPP_P(M.Module):
         self.test_x_size = test_x_size
         self.score_size = x_size - z_size + 1
         self.test_score_size = test_x_size - test_z_size + 1
+        self.lambda1 = lambda1
 
         self.fm_ctr = get_xy_ctr_np(self.score_size) # [1,2,5,5]
         self.test_fm_ctr = get_xy_ctr_np(self.test_score_size)
 
         self._init_layers() # r_z_k, c_z_k, r_x, c_x, cls_convs, reg_convs, conv_cls, conv_reg, conv_centerness
-
-        self.loss_cls = build_loss(loss_cls)
 
     def _init_layers(self):
         """Initialize layers of the head."""
@@ -161,8 +160,8 @@ class SIAMFCPP_P(M.Module):
     def loss(self, cls_scores, gt_bboxes):
         cls_scores = F.sigmoid(cls_scores)
         cls_label = self.get_cls_targets(gt_bboxes)  # (B, 1, 5, 5)
-        quan = (cls_label > 0.99).astype("float32") * 4.0 + 1
-        print(quan[0])
+        quan = (cls_label > 0.99).astype("float32") * (self.lambda1 - 1.0) + 1
+
         loss1 = - 1.0 * ((cls_label* F.log(cls_scores) + (1.0 - cls_label) * F.log(1 - cls_scores))*quan).mean()
         return loss1, cls_label
 

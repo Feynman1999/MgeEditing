@@ -13,14 +13,14 @@ model = dict(
         type='SIAMFCPP_P',
         in_cha=1,
         channels=128,
-        loss_cls=dict(type='Focal_loss', alpha = 0.9, gamma = 2),
         stacked_convs = 3,
         feat_channels = 128,
         z_size = z_size,
         x_size = x_size,
         test_z_size = test_z_size,
         test_x_size = test_x_size,
-        backbone_type = "alexnet"  # alexnet  Shuffle_weightnet
+        backbone_type = "alexnet",  # alexnet  Shuffle_weightnet
+        lambda1 = 4
     ))
 
 # model training and testing settings
