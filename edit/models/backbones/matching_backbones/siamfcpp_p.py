@@ -27,23 +27,23 @@ def xcorr_depthwise(x, kernel):
     return res.reshape(b,c,gapH, gapW)
 
 
-def xcorr_depthwise(x, kernel):
-    """
-        x: [B,C,H,W]
-        kernel: [B,C,h,w]
-    """    
-    b,c,h,w = kernel.shape
-    gapH = x.shape[2] - h + 1
-    gapW = x.shape[3] - w + 1
-    res = []
-    for i in range(gapH):
-        for j in range(gapW):
-            # 取x中对应的点乘
-            result = x[:, :, i:i+h, j:j+w] * kernel # [B,C,h,w]
-            result = result.reshape(b, c, -1)
-            res.append(F.sum(result, axis=2, keepdims=True)) # [B, C, 1]
-    res = F.concat(res, axis= 2)  # [B,C,5*5]
-    return res.reshape(b,c,gapH, gapW)
+# def xcorr_depthwise(x, kernel):
+#     """
+#         x: [B,C,H,W]
+#         kernel: [B,C,h,w]
+#     """    
+#     b,c,h,w = kernel.shape
+#     gapH = x.shape[2] - h + 1
+#     gapW = x.shape[3] - w + 1
+#     res = []
+#     for i in range(gapH):
+#         for j in range(gapW):
+#             # 取x中对应的点乘
+#             result = x[:, :, i:i+h, j:j+w] * kernel # [B,C,h,w]
+#             result = result.reshape(b, c, -1)
+#             res.append(F.sum(result, axis=2, keepdims=True)) # [B, C, 1]
+#     res = F.concat(res, axis= 2)  # [B,C,5*5]
+#     return res.reshape(b,c,gapH, gapW)
 
 
 def get_xy_ctr_np(score_size):
@@ -108,11 +108,11 @@ class SIAMFCPP_P(M.Module):
     def _init_feature_adjust(self):
         self.c_z_k = M.Sequential(
             M.Conv2d(self.channels, self.feat_channels, kernel_size=1, stride=1, padding=0),
-            GroupNorm(num_groups=4, num_channels=self.feat_channels)
+            GroupNorm(num_groups=8, num_channels=self.feat_channels)
         )
         self.c_x = M.Sequential(
             M.Conv2d(self.channels, self.feat_channels, kernel_size=1, stride=1, padding=0),
-            GroupNorm(num_groups=4, num_channels=self.feat_channels)
+            GroupNorm(num_groups=8, num_channels=self.feat_channels)
         )
 
     def _init_cls_convs(self):
@@ -120,16 +120,16 @@ class SIAMFCPP_P(M.Module):
         self.cls_convs.append(
             M.Sequential(
                 M.Conv2d(self.feat_channels, self.feat_channels, kernel_size=3, stride=1, padding=1),
-                GroupNorm(num_groups=4, num_channels=self.feat_channels),
-                M.LeakyReLU(negative_slope=0.05)
+                GroupNorm(num_groups=8, num_channels=self.feat_channels),
+                M.PReLU()
             )
         )
         for i in range(self.stacked_convs-1):
             self.cls_convs.append(
                 M.Sequential(
                     M.Conv2d(self.feat_channels, self.feat_channels, kernel_size=1, stride=1, padding=0),
-                    GroupNorm(num_groups=4, num_channels=self.feat_channels),
-                    M.LeakyReLU(negative_slope=0.05)
+                    GroupNorm(num_groups=8, num_channels=self.feat_channels),
+                    M.PReLU()
                 )
             )
         self.cls_convs = M.Sequential(*self.cls_convs)
@@ -153,16 +153,21 @@ class SIAMFCPP_P(M.Module):
     def get_cls_targets(self, gt_bboxes):
         gt_bboxes = F.expand_dims(gt_bboxes, axis=[2,3])  # (B,4,1,1)    关注左上角坐标即可  范围0~4
         dist = F.sqrt((self.fm_ctr[:, 0, :, :] - gt_bboxes[:, 0, :, :]) ** 2 + (self.fm_ctr[:, 1, :, :] - gt_bboxes[:, 1, :, :]) ** 2)
-        label = F.where(dist <= 3,  ((-dist / 6) + 1), F.zeros_like(dist))
-        label = F.expand_dims(label, axis=1) # (B, 1, 5 , 5)
-        return label
+        # label = F.where(dist <= 3,  ((-dist / 6) + 1), F.zeros_like(dist))
+        # label = F.expand_dims(label, axis=1) # (B, 1, 5 , 5)
+        dist = F.expand_dims(dist, axis = 1)  # (B, 1, 5 , 5)
+        return dist
 
     def loss(self, cls_scores, gt_bboxes):
-        cls_scores = F.sigmoid(cls_scores)
+        # B,2,5,5
         cls_label = self.get_cls_targets(gt_bboxes)  # (B, 1, 5, 5)
-        quan = (cls_label > 0.99).astype("float32") * (self.lambda1 - 1.0) + 1
-
-        loss1 = - 1.0 * ((cls_label* F.log(cls_scores) + (1.0 - cls_label) * F.log(1 - cls_scores))*quan).mean()
+        quan = (cls_label < 0.0001).astype("float32") * (self.lambda1 - 1.0) + 1
+        X = abs(cls_scores - cls_label)
+        loss1 = (F.where(X <1.1, 0.5*(X**2), X-0.5) * quan).mean()
+        # cls_scores = F.sigmoid(cls_scores)
+        # cls_label = self.get_cls_targets(gt_bboxes)  # (B, 1, 5, 5)
+        # quan = (cls_label > 0.99).astype("float32") * (self.lambda1 - 1.0) + 1
+        # loss1 = - 1.0 * ((cls_label* F.log(cls_scores) + (1.0 - cls_label) * F.log(1 - cls_scores))*quan).mean()
         return loss1, cls_label
 
     def init_weights(self, pretrained=None, strict=True):
@@ -192,99 +197,14 @@ class AlexNet(M.Module):
         # self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 3, 1, 1)
         self.conv1 = M.Sequential(
             M.Conv2d(in_cha, ch//2, kernel_size=3, stride=1, padding=1),
-            GroupNorm(num_groups=2, num_channels=ch//2),
+            GroupNorm(num_groups=4, num_channels=ch//2),
             M.PReLU()
         )
         self.conv2 = M.Sequential(
             M.Conv2d(ch//2, ch, kernel_size=3, stride=1, padding=1),
-            GroupNorm(num_groups=4, num_channels=ch),
+            GroupNorm(num_groups=8, num_channels=ch),
             M.PReLU()
         )
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        return x
-
-
-class ShuffleV2Block(M.Module):
-    def __init__(self, inp, oup, mid_channels, *, ksize, stride):
-        super(ShuffleV2Block, self).__init__()
-        self.stride = stride
-        assert stride in [1, 2]
-
-        self.mid_channels = mid_channels
-        self.ksize = ksize
-        pad = ksize // 2
-        self.pad = pad
-        self.inp = inp
-        outputs = oup - inp
-        self.reduce = M.Conv2d(inp, max(16, inp//16), 1, 1, 0, bias=True)
-        self.wnet1 = WeightNet(inp, mid_channels, 1, 1)
-        # self.bn1 = M.BatchNorm2d(mid_channels)
-        self.bn1 = FilterResponseNorm2d(mid_channels)
-        self.wnet2 = WeightNet_DW(mid_channels, ksize, stride)
-        # self.bn2 =M.BatchNorm2d(mid_channels)
-        self.bn2 = FilterResponseNorm2d(mid_channels)
-        self.wnet3 = WeightNet(mid_channels, outputs, 1, 1)
-        # self.bn3 = M.BatchNorm2d(outputs)
-        self.bn3 = FilterResponseNorm2d(outputs)
-        if stride == 2:
-            self.wnet_proj_1 = WeightNet_DW(inp, ksize, stride)
-            self.bn_proj_1 = M.BatchNorm2d(inp)
-
-            self.wnet_proj_2 = WeightNet(inp, inp, 1, 1)
-            self.bn_proj_2 = M.BatchNorm2d(inp)
-
-    def forward(self, old_x):
-        if self.stride == 1:
-            x_proj, x = self.channel_shuffle(old_x)
-        elif self.stride == 2:
-            x_proj = old_x
-            x = old_x
-
-        x_gap = x.mean(axis=2,keepdims=True).mean(axis=3,keepdims=True)
-        x_gap = self.reduce(x_gap)
-
-        x = self.wnet1(x, x_gap)
-        x = self.bn1(x)
-        x = F.relu(x)
-
-        x = self.wnet2(x, x_gap)
-        x = self.bn2(x)
-
-        x = self.wnet3(x, x_gap)
-        x = self.bn3(x)
-        x = F.relu(x)
-
-        if self.stride == 2:
-            x_proj = self.wnet_proj_1(x_proj, x_gap)
-            x_proj = self.bn_proj_1(x_proj)
-            x_proj = self.wnet_proj_2(x_proj, x_gap)
-            x_proj = self.bn_proj_2(x_proj)
-            x_proj = F.relu(x_proj)
-
-        return F.concat((x_proj, x), 1)
-
-    def channel_shuffle(self, x):
-        batchsize, num_channels, height, width = x.shape
-        # assert (num_channels % 4 == 0)
-        x = x.reshape(batchsize * num_channels // 2, 2, height * width)
-        x = x.dimshuffle(1, 0, 2)
-        x = x.reshape(2, -1, num_channels // 2, height, width)
-        return x[0], x[1]
-
-
-class Shuffle_weightnet(M.Module):
-    def __init__(self, in_cha, ch=48):
-        super(Shuffle_weightnet, self).__init__()
-        assert ch % 2 ==0, "channel nums should % 2 = 0"
-        self.conv1 = M.Sequential(
-            M.Conv2d(in_cha, ch//2, kernel_size=3, stride=1, padding=1),
-            M.LeakyReLU(),
-            FilterResponseNorm2d(num_features=ch//2)
-        )
-        self.conv2 = ShuffleV2Block(ch//4, ch, ch//2, ksize = 3, stride=1)
 
     def forward(self, x):
         x = self.conv1(x)

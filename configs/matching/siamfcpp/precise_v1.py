@@ -3,24 +3,23 @@ exp_name = 'sar_opt_precise_v1'
 
 test_z_size = 512
 test_x_size = 520
-z_size = 256
+z_size = 256 #
 x_size = 260
 
 # model settings
 model = dict(
     type='PreciseMatching',
     generator=dict(
-        type='SIAMFCPP_P',
+        type='SIAMFCPP_two_sota',
         in_cha=1,
-        channels=128,
+        channels=56,
         stacked_convs = 3,
-        feat_channels = 128,
+        feat_channels = 48,
         z_size = z_size,
         x_size = x_size,
         test_z_size = test_z_size,
         test_x_size = test_x_size,
-        backbone_type = "alexnet",  # alexnet  Shuffle_weightnet
-        lambda1 = 4
+        backbone_type = "alexnet"  # alexnet  Shuffle_weightnet
     ))
 
 # model training and testing settings
@@ -100,7 +99,7 @@ repeat_times = 1
 
 data = dict(
     # train
-    samples_per_gpu=4,
+    samples_per_gpu=8,
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
@@ -112,7 +111,7 @@ data = dict(
             sar_folder= "sar",
             file_list_name = "train_random.txt",
             pipeline=train_pipeline,
-            balance_flag = "uniform")),  # test and uniform and None
+            balance_flag = "None")),  # test and uniform and None
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,
@@ -139,7 +138,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=2 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6)) # 1 -> 0.4 
+optimizers = dict(generator=dict(type='Adam', lr=0.01 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6)) # 1 -> 0.4 
 
 # learning policy
 total_epochs = 2000 // repeat_times
@@ -148,17 +147,17 @@ total_epochs = 2000 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=10)
 log_config = dict(
-    interval=20,
+    interval=2,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=800, save_image=False)
+evaluation = dict(interval=10, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = None # f'./workdirs/{exp_name}/20210101_225424/checkpoints/epoch_20' # f'./workdirs/{exp_name}/epoch_70' # f'./workdirs/{exp_name}/20201121_002958/checkpoints/epoch_100'
+load_from = f'./workdirs/two_stage_sota/epoch_780' # f'./workdirs/{exp_name}/20210102_231058/checkpoints/epoch_30' # f'./workdirs/{exp_name}/epoch_70' # f'./workdirs/{exp_name}/20201121_002958/checkpoints/epoch_100'
 resume_from = None
 resume_optim = True
 workflow = 'train'

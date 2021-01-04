@@ -28,7 +28,7 @@ class FilterResponseNormNd(M.Module):
     def forward(self, x):
         B, C, _, _ = x.shape
         # avg_dims = tuple(range(2, len(x.shape)))  # [2 ,3 ]
-        nu2 = F.expand_dims(F.power(x, 2).reshape(B, C, -1).mean(axis=-1, keepdims=True), axis=-1)  # [B, C, 1, 1]
+        nu2 = F.expand_dims(F.pow(x, 2).reshape(B, C, -1).mean(axis=-1, keepdims=True), axis=-1)  # [B, C, 1, 1]
         x = x  / F.sqrt(nu2 + F.abs(self.eps))
         return F.maximum(self.gamma * x + self.beta, self.tau)
 

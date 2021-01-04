@@ -21,54 +21,39 @@ def train_generator_batch(optical, sar, label, cls_id, file_id, *, gm, netG):
         loss, cls_labels = netG.loss(cls_score, label)
         gm.backward(loss)
         
-    # performance in the training data
     B, _, H, W = cls_score.shape
     cls_score = cls_score.reshape(B, -1)
-    times = 1
-
-    res = []
-    for t in range(times):
-        output = []
-        max_id = F.argmax(cls_score, axis = 1)  # (B, )
-        for i in range(B):
-            H_id = max_id[i] // W
-            W_id = max_id[i] % W
-            output.append(F.expand_dims(netG.fm_ctr[0, :, H_id, W_id], axis=0))  # (1,2)
-            # x = mge.tensor(-100000.0)
-            # cls_score = cls_score.set_subtensor(x)[i, max_id[i]]
-        output = F.concat(output, axis=0)  # (B, 2)
-        res.append(output)
-    output = sum(res) / len(res)
-
+    output = []
+    max_id = F.argmax(cls_score, axis = 1)  # (B, )
+    for i in range(B):
+        H_id = max_id[i] // W
+        W_id = max_id[i] % W
+        output.append(netG.fm_ctr[0, :, H_id, W_id])  # (2, )
+    output = F.stack(output, axis=0)  # (B, 2)
     dis = F.norm(F.floor(output[:, 0:2]+0.5) - label[:, 0:2], ord=2, axis = 1)  # (B, )
     return [loss*1000, dis.mean()]
 
 
 def test_generator_batch(optical, sar, *, netG):
     netG.eval()
-    cls_score = netG(sar, optical)  # [B,1,19,19]  [B,2,19,19]  [B,1,19,19]
+    cls_score = netG(sar, optical)
+
     B, _, H, W = cls_score.shape
     cls_score = cls_score.reshape(B, -1)
-    times = 1
-
-    res = []
-    for t in range(times):
-        output = []
-        max_id = F.argmax(cls_score, axis = 1)  # (B, )
-        for i in range(B):
-            H_id = max_id[i] // W
-            W_id = max_id[i] % W
-            output.append(F.expand_dims(netG.test_fm_ctr[0, :, H_id, W_id], axis=0))  # (1,2)
-            # x = mge.tensor(-100000.0)
-            # cls_score = cls_score.set_subtensor(x)[i, max_id[i]]
-        output = F.concat(output, axis=0)  # (B, 2)
-        res.append(output)
-    output = sum(res) / len(res)
+    output = []
+    max_id = F.argmax(cls_score, axis = 1)  # (B, )
+    for i in range(B):
+        H_id = max_id[i] // W
+        W_id = max_id[i] % W
+        output.append(netG.test_fm_ctr[0, :, H_id, W_id])
+    output = F.stack(output, axis=0)  # (B, 2)
     return F.concat([output, output], axis= 1) # [B,4]
+
 
 def eval_distance(pred, gt):  # (4, )
     assert len(pred.shape) == 1
     return np.linalg.norm(pred[0:2]-gt[0:2], ord=2)
+
 
 @MODELS.register_module()
 class PreciseMatching(BaseModel):
@@ -105,6 +90,11 @@ class PreciseMatching(BaseModel):
             list: loss
         """
         optical, sar, label, cls_id, file_id = batchdata
+        
+        # name = random.sample('zyxwvutsrqponmlkjihgfedcba', 3)
+        # name = "".join(name) + "_" + str(label[0][0]) + "_" + str(label[0][1]) + "_" + str(label[0][2]) + "_" + str(label[0][3])
+        # imwrite(tensor2img(optical[0, ...], min_max=(-0.64, 1.36)), file_path="./workdirs/" + name + "_opt.png") 
+        # imwrite(tensor2img(sar[0, ...], min_max=(-0.64, 1.36)), file_path="./workdirs/" + name + "_sar.png")
         
         optical_tensor = mge.tensor(optical, dtype="float32")
         sar_tensor = mge.tensor(sar, dtype="float32")

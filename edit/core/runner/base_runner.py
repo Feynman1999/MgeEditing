@@ -234,7 +234,7 @@ class BaseRunner(metaclass=ABCMeta):
             assert submodule is not None, "model should have submodule {}".format(submodule_name)
             assert isinstance(submodule, Module), "submodule should be instance of mge.module.Module"
             module_state_dict = mge.load(osp.join(path2checkpoint, submodule_name + module_ckpt_suffix))
-            submodule.load_state_dict(module_state_dict)
+            submodule.load_state_dict(module_state_dict, strict = False)
             if load_optim:
                 optim_state_dict = mge.load(osp.join(path2checkpoint, submodule_name + optim_ckpt_suffix))
                 res[submodule_name] = optim_state_dict
