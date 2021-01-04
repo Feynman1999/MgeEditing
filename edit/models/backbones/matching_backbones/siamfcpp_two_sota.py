@@ -3,7 +3,6 @@ import megengine.module as M
 from megengine.module.conv import Conv2d, ConvTranspose2d
 import megengine.functional as F
 import numpy as np
-from edit.models.common import WeightNet
 from edit.models.builder import BACKBONES, build_component, COMPONENTS, build_loss
 
 def xcorr_depthwise(x, kernel):

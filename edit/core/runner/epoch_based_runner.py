@@ -32,7 +32,7 @@ class EpochBasedRunner(BaseRunner):
         self.mode = 'test'
         self.data_loader = data_loader
         self.call_hook('before_test_epoch')
-        time.sleep(0.2)
+        time.sleep(0.05)
         sample_nums_all_threads = 0
         save_path = osp.join(self.work_dir, "test_results")
         mkdir_or_exist(save_path)
@@ -88,7 +88,7 @@ class EpochBasedRunner(BaseRunner):
                 raise TypeError('mode in workflow must be a str, but got {}'.format(type(workflow)))
             epoch_runner(data_loaders[0])
 
-        time.sleep(1)  # wait for some hooks like loggers to finish
+        time.sleep(0.1)  # wait for some hooks like loggers to finish
 
         if workflow == 'test':
             save_path = osp.join(self.work_dir, "test_results")

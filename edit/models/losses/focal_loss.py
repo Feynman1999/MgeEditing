@@ -64,27 +64,26 @@ def get_focal_loss(
     """
     class_range = F.arange(1, logits.shape[2] + 1)  # [1, ]  0 is background
     labels = F.expand_dims(labels, axis=2)  # [B, A, 1]
-    hard_labels = labels > 1e-4
+    # hard_labels = labels > 1e-4
     scores = F.sigmoid(logits)
     
-    
-    # pos_part = -(1 - scores) ** gamma * logsigmoid(logits)  # logits越大 loss越小
-    # neg_part = -scores ** gamma * logsigmoid(-logits)  # logits越小 loss 越小
-    # pos_loss = (labels == class_range).astype("float32") * pos_part * alpha
-    # neg_loss = (
-    #     (labels != class_range).astype("float32") * (labels != ignore_label).astype("float32") * neg_part * (1 - alpha)
-    # )
+    pos_part = -(1 - scores) ** gamma * logsigmoid(logits)  # logits越大 loss越小
+    neg_part = -scores ** gamma * logsigmoid(-logits)  # logits越小 loss 越小
+    pos_loss = (labels == class_range).astype("float32") * pos_part * alpha
+    neg_loss = (
+        (labels != class_range).astype("float32") * (labels != ignore_label).astype("float32") * neg_part * (1 - alpha)
+    )
 
-    loss = (-1) * ((abs(labels - scores))**gamma) * ((1 - labels)*safelog(1 - scores) + labels * safelog(scores))
-    pos_loss = (hard_labels == class_range).astype("float32") * loss * alpha
-    neg_loss = (hard_labels != class_range).astype("float32") * loss * (1 - alpha)
+    # loss = (-1) * ((abs(labels - scores))**gamma) * ((1 - labels)*safelog(1 - scores) + labels * safelog(scores))
+    # pos_loss = (hard_labels == class_range).astype("float32") * loss * alpha
+    # neg_loss = (hard_labels != class_range).astype("float32") * loss * (1 - alpha)
     
     loss = (pos_loss + neg_loss).sum()
     
     if norm_type == "fg":
         # fg_mask = (labels != background) * (labels != ignore_label)
         # return loss / F.maximum(fg_mask.sum(), 1)
-        pass
+        raise NotImplementedError
     elif norm_type == "none":
         return loss
     else:

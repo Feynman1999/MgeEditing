@@ -72,10 +72,6 @@ def train_generator_batch(optical, sar, label, cls_id, file_id, *, gm, netG):
     output = sum(res) / len(res)
 
     dis = F.norm(F.floor(output[:, 0:2]+0.5) - label[:, 0:2], ord=2, axis = 1)  # (B, )
-    # if F.max(dis).item() > 20:
-    #     Id = F.argmax(dis)
-    #     print(cls_id[Id], file_id[Id])
-    #     print(dis)
     return [loss_cls*1000, loss_reg, dis.mean()]
 
 def test_generator_batch(optical, sar, *, netG):

@@ -10,11 +10,11 @@ x_size = 260
 model = dict(
     type='PreciseMatching',
     generator=dict(
-        type='SIAMFCPP_two_sota',
+        type='SIAMFCPP_P',
         in_cha=1,
-        channels=56,
+        channels=28,
         stacked_convs = 3,
-        feat_channels = 48,
+        feat_channels = 24,
         z_size = z_size,
         x_size = x_size,
         test_z_size = test_z_size,
@@ -99,7 +99,7 @@ repeat_times = 1
 
 data = dict(
     # train
-    samples_per_gpu=8,
+    samples_per_gpu=16,
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
@@ -138,7 +138,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.01 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6)) # 1 -> 0.4 
+optimizers = dict(generator=dict(type='Adam', lr=0.6 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6)) # 1 -> 0.4 
 
 # learning policy
 total_epochs = 2000 // repeat_times
@@ -147,17 +147,17 @@ total_epochs = 2000 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=10)
 log_config = dict(
-    interval=2,
+    interval=20,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=10, save_image=False)
+evaluation = dict(interval=1000, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/two_stage_sota/epoch_780' # f'./workdirs/{exp_name}/20210102_231058/checkpoints/epoch_30' # f'./workdirs/{exp_name}/epoch_70' # f'./workdirs/{exp_name}/20201121_002958/checkpoints/epoch_100'
+load_from = None # f'./workdirs/two_stage_sota/epoch_780' # f'./workdirs/{exp_name}/20210102_231058/checkpoints/epoch_30' # f'./workdirs/{exp_name}/epoch_70' # f'./workdirs/{exp_name}/20201121_002958/checkpoints/epoch_100'
 resume_from = None
 resume_optim = True
 workflow = 'train'

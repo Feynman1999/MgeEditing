@@ -1,13 +1,15 @@
-# stage 1
-exp_name = 'sar_opt_v4'
+exp_name = 'sar_opt_v4_precise'
 
-z_size = 320
-x_size = 500
+stage1_z_size = 320
+stage1_x_size = 500
+
+stage2_z_size = 256
+stage2_x_size = 260
 
 # model settings
 model = dict(
-    type='BasicMatching',
-    generator=dict(
+    type='TwoStageMatching',
+    generator1=dict(
         type='SIAMFCPP_one_sota',
         in_cha=1,
         channels=48,
@@ -15,12 +17,24 @@ model = dict(
         loss_bbox=dict(type='IOULoss', loc_loss_type='giou'),
         stacked_convs = 3,
         feat_channels = 48,
-        z_size = z_size,
-        x_size = x_size,
+        z_size = stage1_z_size,
+        x_size = stage1_x_size,
         lambda1 = 0.25,  # reg
         bbox_scale = 0.05,
         stride = 4,
         backbone_type = "alexnet"
+    ),
+    generator2=dict(
+        type='SIAMFCPP_two_sota',
+        in_cha=1,
+        channels=56,
+        stacked_convs = 3,
+        feat_channels = 48,
+        z_size = stage2_z_size,
+        x_size = stage2_x_size,
+        test_z_size = 512,
+        test_x_size = 520,
+        backbone_type = "alexnet"  # alexnet  Shuffle_weightnet
     ))
 
 # model training and testing settings
@@ -44,18 +58,18 @@ train_pipeline = [
         io_backend='disk',
         key='sar',
         flag='color'),  # H,W,3  BGR
-    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.5, contrast=0.5, saturation=0.0, hue=0.0),
+    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.2, contrast=0.2, saturation=0.0, hue=0.0),
     dict(type='Corner_Shelter', keys=['opt'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Corner_Shelter', keys=['sar'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Bgr2Gray', keys=['opt', 'sar']),  # H, W, 1
-    dict(type='Random_Crop_Opt_Sar', keys=['opt', 'sar'], size=[x_size, z_size]),
+    dict(type='Random_Crop_Opt_Sar', keys=['opt', 'sar'], size=[500, 320]),
     dict(type='RescaleToZeroOne', keys=['opt', 'sar']),
     dict(type='Normalize', keys=['opt', 'sar'], to_rgb=False, **img_norm_cfg),
-    dict(type='Flip', keys=['opt', 'sar', 'bbox'], flip_ratio=0.5, direction='horizontal', Len = x_size),
-    dict(type='Flip', keys=['opt', 'sar', 'bbox'], flip_ratio=0.5, direction='vertical', Len = x_size),
+    dict(type='Flip', keys=['opt', 'sar', 'bbox'], flip_ratio=0.5, direction='horizontal', Len = 500),
+    dict(type='Flip', keys=['opt', 'sar', 'bbox'], flip_ratio=0.5, direction='vertical', Len = 500),
     dict(type='RandomTransposeHW', keys=['opt', 'sar', 'bbox'], transpose_ratio=0.5),
     dict(type='ImageToTensor', keys=['opt', 'sar']),  # [H,W,C] -> [C,H,W]
-    dict(type='Collect', keys=['opt', 'sar', 'bbox', 'class_id', 'file_id'])
+    dict(type='Collect', keys=['opt', 'sar', 'bbox'])
 ]
 
 eval_pipeline = [
@@ -113,8 +127,8 @@ data = dict(
             pipeline=train_pipeline,
             balance_flag = "None")),  # test and uniform and None
     # eval
-    eval_samples_per_gpu=1,
-    eval_workers_per_gpu=4,
+    eval_samples_per_gpu=6,
+    eval_workers_per_gpu=6,
     eval=dict(
         type=eval_dataset_type,
         data_path= dataroot + "/stage1",
@@ -128,7 +142,7 @@ data = dict(
     test_workers_per_gpu=4,
     test=dict(
         type=test_dataset_type,
-        data_path= dataroot + "/stage1/test1",
+        data_path= dataroot + "/stage1/test2",
         opt_folder= "optical",
         sar_folder= "sar",
         file_list_name = "img_list_path.txt",
@@ -137,27 +151,28 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.005 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6))
+optimizers = dict(generator1=dict(type='Adam', lr=0.0001 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6),
+                  generator2=dict(type='Adam', lr=0.0001 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6))
 
 # learning policy
 total_epochs = 2000 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
-checkpoint_config = dict(interval=40)
+checkpoint_config = dict(interval=total_epochs // 40)
 log_config = dict(
-    interval=2,
+    interval=100,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=10, save_image=False)
+evaluation = dict(interval=1, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/delete/epoch_5'
-resume_from = None
+load_from = f'./workdirs/two_stage/20210104_2303/epoch_1'
+resume_from = None 
 resume_optim = True
 workflow = 'train'
 
