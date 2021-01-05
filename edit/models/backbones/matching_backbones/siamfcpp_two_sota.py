@@ -4,6 +4,7 @@ from megengine.module.conv import Conv2d, ConvTranspose2d
 import megengine.functional as F
 import numpy as np
 from edit.models.builder import BACKBONES, build_component, COMPONENTS, build_loss
+import time
 
 def xcorr_depthwise(x, kernel):
     """
@@ -22,6 +23,13 @@ def xcorr_depthwise(x, kernel):
             res.append(F.sum(result, axis=2, keepdims=True))  # [B, C, 1]
     res = F.concat(res, axis=2)  # [B,C,5*5]
     return res.reshape(b, c, gapH, gapW)
+
+# def xcorr_depthwise_2(x, kernel):
+#     b, c, h, w = kernel.shape
+#     _, _, H, W = x.shape
+#     x = x.reshape(b*c, H, W)
+#     kernel = kernel.reshape(b*c, h, w)
+#     # 先算出h维度上的所有
 
 
 def get_xy_ctr_np(score_size):

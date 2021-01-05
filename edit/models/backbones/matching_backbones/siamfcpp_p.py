@@ -12,14 +12,18 @@ def xcorr_depthwise(x, kernel):
         kernel: [B,C,h,w]
     """
     b, c, h, w = kernel.shape
+    _, _, H, W = x.shape
+    # 对kernel做normalize
+    kernel = kernel.reshape(b,c,-1)
+    kernel = F.normalize(kernel, ord = 2, axis= 2)
+
     gapH = x.shape[2] - h + 1
     gapW = x.shape[3] - w + 1
     res = []
     for i in range(gapH):
         for j in range(gapW):
             # 取x中对应的点乘
-            result = x[:, :, i:i + h, j:j + w] * kernel  # [B,C,h,w]
-            result = result.reshape(b, c, -1)
+            result = F.normalize(x[:, :, i:i + h, j:j + w].reshape(b,c,-1), ord=2, axis=2) * kernel  # [B,C,h,w]
             res.append(F.sum(result, axis=2, keepdims=True))  # [B, C, 1]
     res = F.concat(res, axis=2)  # [B,C,5*5]
     return res.reshape(b, c, gapH, gapW)

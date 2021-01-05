@@ -3,8 +3,8 @@ exp_name = 'sar_opt_precise_v1'
 
 test_z_size = 512
 test_x_size = 520
-z_size = 256 #
-x_size = 260
+z_size = 128 #
+x_size = 132
 
 # model settings
 model = dict(
@@ -12,9 +12,9 @@ model = dict(
     generator=dict(
         type='SIAMFCPP_P',
         in_cha=1,
-        channels=28,
-        stacked_convs = 3,
-        feat_channels = 24,
+        channels=64,
+        stacked_convs = 2,
+        feat_channels = 40,
         z_size = z_size,
         x_size = x_size,
         test_z_size = test_z_size,
@@ -43,7 +43,7 @@ train_pipeline = [
         io_backend='disk',
         key='sar',
         flag='color'),  # H,W,3  BGR
-    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.5, contrast=0.5, saturation=0.0, hue=0.0),
+    dict(type='ColorJitter', keys=['opt', 'sar'], brightness=0.2, contrast=0.8, saturation=0.0, hue=0.0),
     dict(type='Corner_Shelter', keys=['opt'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Corner_Shelter', keys=['sar'], shelter_ratio = 0, black_ratio=0.75),
     dict(type='Bgr2Gray', keys=['opt', 'sar']),  # H, W, 1
@@ -99,7 +99,7 @@ repeat_times = 1
 
 data = dict(
     # train
-    samples_per_gpu=16,
+    samples_per_gpu=20,
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
@@ -138,7 +138,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.6 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6)) # 1 -> 0.4 
+optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-3, betas=(0.9, 0.999), weight_decay=2e-6)) # 1 -> 0.4 
 
 # learning policy
 total_epochs = 2000 // repeat_times
@@ -157,7 +157,7 @@ evaluation = dict(interval=1000, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = None # f'./workdirs/two_stage_sota/epoch_780' # f'./workdirs/{exp_name}/20210102_231058/checkpoints/epoch_30' # f'./workdirs/{exp_name}/epoch_70' # f'./workdirs/{exp_name}/20201121_002958/checkpoints/epoch_100'
+load_from = None # f'./workdirs/{exp_name}/20210105_022045/checkpoints/epoch_430' # f'./workdirs/{exp_name}/epoch_70' # f'./workdirs/{exp_name}/20201121_002958/checkpoints/epoch_100'
 resume_from = None
 resume_optim = True
 workflow = 'train'

@@ -14,10 +14,27 @@ from ..registry import MODELS
 def train_generator_batch(optical, sar, label, cls_id, file_id, *, gm, netG):
     raise NotImplementedError(" do not support for train for TwoStageMatching")
 
-def check_valid(x):
-    if x>=4 and x+511<=795:
+def check_valid(x, more = 0):
+    if x>=(4+more) and (x+511)<=(795 - more):
         return True
     return False
+
+def get_location_by_sobel(sar):
+    """
+        sar: [1, 512, 512]
+        sobel: []
+        
+    """
+    sar = F.expand_dims(sar, axis=0)  # [1, 1, 512, 512]
+    sobel_weight = mge.tensor(np.array([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]], dtype='float32'))  # [3, 3]
+    sobel_weight = F.expand_dims(sobel_weight, axis=[0,1]) # [1, 1, 3, 3]
+    grad = F.conv2d(sar, sobel_weight, stride=1, padding=0) # [1, 1, 510, 510]
+    grad = F.abs(grad)
+    average_weight = mge.tensor(np.ones((1, 1, 256, 256), dtype='float32'))
+    grad = F.conv2d(grad, average_weight, stride=1, padding=0)  # [1, 1, 255, 255]
+    # 取最大下标
+    max_id = F.argmax(grad.flatten()) # shape: ()
+    return (int(max_id // 255), int(max_id % 255))
 
 def test_generator_batch(optical, sar, *, G1, G2):
     # B,_,_,_ = optical.shape
@@ -36,7 +53,6 @@ def test_generator_batch(optical, sar, *, G1, G2):
     stage2_sar = []
     stage2_optical = []
     max_id = F.argmax(cls_score, axis = 1)  # (B1, )
-
     for i in range(B1):
         H_id = max_id[i] // H1
         W_id = max_id[i] % H1
@@ -45,10 +61,24 @@ def test_generator_batch(optical, sar, *, G1, G2):
         # 根据top_left，截取512周围的520（如果足够的话）
         x,y = int(top_left[0]), int(top_left[1])
         if check_valid(x) and check_valid(y):
+            # method1, use 520 512 but too slow
             # stage2_optical.append(optical[i, :, x-4 : x+516, y-4 : y+516])
-            stage2_optical.append(optical[i, :, x-2 : x+258, y-2 : y+258]) # 选取520中梯度变化最大的260做输入
             # stage2_sar.append(sar[i, ...])
-            stage2_sar.append(sar[i, :, 0:256, 0:256])
+
+            # method2, use up left 260 256, fast but bad result  (0.8 -> 0.93)
+            # stage2_optical.append(optical[i, :, x-2 : x+258, y-2 : y+258])
+            # stage2_sar.append(sar[i, :, 0:256, 0:256])
+
+            # method3, find grad change most 256 in 512 sar
+            sar_x, sar_y = get_location_by_sobel(sar[i, ...])  # [0, 254]
+            sar_256 = sar[i, :, (1+sar_x):(1+sar_x+256), (1+sar_y):(1+sar_y+256)]
+            # write sar and sar_256
+            imwrite(tensor2img(sar_256, min_max=(-0.64, 1.36)), file_path="./workdirs/{}_{}.png".format(sar_x, sar_y))
+            imwrite(tensor2img(sar[i,:,:,:], min_max=(-0.64, 1.36)), file_path="./workdirs/{}_{}_large.png".format(sar_x, sar_y))
+            optical_260 = optical[i, :, x+1+sar_x-2 : x+1+sar_x + 256 + 2, y+1+sar_y-2 : y+1+sar_y + 256 + 2]
+            stage2_optical.append(optical_260)
+            stage2_sar.append(sar_256)
+
             flag.append(1)
         else:
             flag.append(0)
@@ -58,7 +88,7 @@ def test_generator_batch(optical, sar, *, G1, G2):
     if 1 in flag:
         sar = F.stack(stage2_sar, axis=0)
         optical = F.stack(stage2_optical, axis=0)
-        cls_score = G2(sar, optical) # [B, 1, 9, 9]
+        cls_score = G2(sar, optical)
         B2, _, H2, W2 = cls_score.shape
         cls_score = cls_score.reshape((B2, -1))
         max_id = F.argmax(cls_score, axis=1) # (B2, )
