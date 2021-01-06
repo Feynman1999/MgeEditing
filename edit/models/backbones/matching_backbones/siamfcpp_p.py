@@ -3,7 +3,7 @@ import megengine.module as M
 from megengine.module.conv import Conv2d, ConvTranspose2d
 import megengine.functional as F
 import numpy as np
-from edit.models.common import WeightNet
+from edit.models.common import WeightNet, WeightNet_DW
 from edit.models.builder import BACKBONES, build_component, COMPONENTS, build_loss
 from megengine.module.normalization import LayerNorm
 
@@ -149,7 +149,7 @@ class SIAMFCPP_P(M.Module):
     def loss(self, cls_scores, gt_bboxes):
         B, _, H, W = cls_scores.shape
         cls_labels = self.create_label(gt_bboxes).reshape(B, -1)  # (B, 1, 5, 5)
-        quan = (cls_labels > 0.99).astype("float32") * 1 + 1
+        quan = (cls_labels > 0.99).astype("float32") * 2 + 1
         cls_scores = F.sigmoid(cls_scores).reshape(B, -1)
         loss_cls = -1.0* ((cls_labels * F.log(cls_scores) + (1.0 - cls_labels) * F.log(1 - cls_scores)) * quan ).mean()
         return loss_cls, cls_labels
@@ -180,7 +180,10 @@ class AlexNet(M.Module):
         self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch // 2, kernel_size=3, stride=1, padding=1) #original
         self.conv2 = CARBBlock(ch // 2)  #original
         self.conv3 = M.conv_bn.ConvBnRelu2d(ch // 2, ch, 1, 1, 0) #original
-        self.conv4 = CARBBlock(ch) #original
+        # self.conv4 = CARBBlock(ch) #original
+        # self.conv3 = ShuffleV2Block(ch//4, ch // 2, ch//4, ksize = 3, stride=1)
+        # self.conv3 = ShuffleV2Block(ch//2, ch, ch//2, ksize = 3, stride=1)
+        self.conv4 = ShuffleV2Block(ch//2, ch, ch//2, ksize = 3, stride=1)
 
     def forward(self, x):
         x = self.conv1(x)  # 8,28,256,256
@@ -234,3 +237,71 @@ class CARBBlocks(M.Module):
 
     def forward(self, x):
         return self.model(x)
+
+
+class ShuffleV2Block(M.Module):
+    def __init__(self, inp, oup, mid_channels, *, ksize, stride):
+        super(ShuffleV2Block, self).__init__()
+        self.stride = stride
+        assert stride in [1, 2]
+
+        self.mid_channels = mid_channels
+        self.ksize = ksize
+        pad = ksize // 2
+        self.pad = pad
+        self.inp = inp
+        outputs = oup - inp
+        self.reduce = M.Conv2d(inp, max(16, inp//16), 1, 1, 0, bias=True)
+        self.wnet1 = WeightNet(inp, mid_channels, 1, 1)
+        self.bn1 = M.BatchNorm2d(mid_channels)
+        # self.bn1 = FilterResponseNorm2d(mid_channels)
+        self.wnet2 = WeightNet_DW(mid_channels, ksize, stride)
+        self.bn2 =M.BatchNorm2d(mid_channels)
+        # self.bn2 = FilterResponseNorm2d(mid_channels)
+        self.wnet3 = WeightNet(mid_channels, outputs, 1, 1)
+        self.bn3 = M.BatchNorm2d(outputs)
+        # self.bn3 = FilterResponseNorm2d(outputs)
+        if stride == 2:
+            self.wnet_proj_1 = WeightNet_DW(inp, ksize, stride)
+            self.bn_proj_1 = M.BatchNorm2d(inp)
+
+            self.wnet_proj_2 = WeightNet(inp, inp, 1, 1)
+            self.bn_proj_2 = M.BatchNorm2d(inp)
+
+    def forward(self, old_x):
+        if self.stride == 1:
+            x_proj, x = self.channel_shuffle(old_x)
+        elif self.stride == 2:
+            x_proj = old_x
+            x = old_x
+
+        x_gap = x.mean(axis=2,keepdims=True).mean(axis=3,keepdims=True)
+        x_gap = self.reduce(x_gap)
+
+        x = self.wnet1(x, x_gap)
+        x = self.bn1(x)
+        x = F.relu(x)
+
+        x = self.wnet2(x, x_gap)
+        x = self.bn2(x)
+
+        x = self.wnet3(x, x_gap)
+        x = self.bn3(x)
+        x = F.relu(x)
+
+        if self.stride == 2:
+            x_proj = self.wnet_proj_1(x_proj, x_gap)
+            x_proj = self.bn_proj_1(x_proj)
+            x_proj = self.wnet_proj_2(x_proj, x_gap)
+            x_proj = self.bn_proj_2(x_proj)
+            x_proj = F.relu(x_proj)
+
+        return F.concat((x_proj, x), 1)
+
+    def channel_shuffle(self, x):
+        batchsize, num_channels, height, width = x.shape
+        # assert (num_channels % 4 == 0)
+        x = x.reshape(batchsize * num_channels // 2, 2, height * width)
+        x = x.transpose(1, 0, 2)
+        x = x.reshape(2, -1, num_channels // 2, height, width)
+        return x[0], x[1]

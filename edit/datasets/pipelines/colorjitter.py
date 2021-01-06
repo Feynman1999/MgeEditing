@@ -1,8 +1,84 @@
 import random
+import numpy as np
 import cv2
 from megengine.data.transform import ColorJitter as mge_color_jitter
+# from megengine.data.transform import ContrastTransform as mge_contrast
 from edit.utils import imwrite
 from ..registry import PIPELINES
+
+def brightness(image, value):
+    if value == 0:
+        return image
+    dtype = image.dtype
+    image = image.astype(np.float32)
+    alpha = value
+    image = image * alpha
+    return image.clip(0, 255).astype(dtype)
+
+@PIPELINES.register_module()
+class Add_brightness(object):
+    def __init__(self, keys, value_sar = 1, value_optical = 1):
+        self.keys = keys
+        self.value_sar = value_sar
+        self.value_optical = value_optical
+
+    def __call__(self, results):
+        for key in self.keys:
+            if isinstance(results[key], list):
+                raise NotImplementedError("not support list key")
+            else:
+                if key in ['sar', 'SAR']:
+                    results[key] = brightness(results[key], value = self.value_sar)
+                elif key in ['optical', 'OPTICAL', 'opt', "OPT"]:
+                    # imwrite(results[key], "./workdirs/{}_origin.png".format(self.nums))
+                    results[key] = brightness(results[key], value = self.value_optical)
+                    # imwrite(results[key], "./workdirs/{}_hou.png".format(self.nums))
+                    # self.nums += 1
+                else:
+                    raise NotImplementedError("not support key")
+        return results
+
+    def __repr__(self):
+        format_string = self.__class__.__name__
+        return format_string
+
+
+def contrast(image, value):
+    if value <= 0:
+        return image
+    dtype = image.dtype
+    image = image.astype(np.float32)
+    alpha = value
+    image = image * alpha + image.mean() * (1 - alpha)
+    return image.clip(0, 255).astype(dtype)
+
+
+@PIPELINES.register_module()
+class Add_contrast(object):
+    def __init__(self, keys, value_sar = 1, value_optical = 1):
+        self.keys = keys
+        self.value_sar = value_sar
+        self.value_optical = value_optical
+
+    def __call__(self, results):
+        for key in self.keys:
+            if isinstance(results[key], list):
+                raise NotImplementedError("not support list key")
+            else:
+                if key in ['sar', 'SAR']:
+                    results[key] = contrast(results[key], value = self.value_sar)
+                elif key in ['optical', 'OPTICAL', 'opt', "OPT"]:
+                    # imwrite(results[key], "./workdirs/{}_origin.png".format(self.nums))
+                    results[key] = contrast(results[key], value = self.value_optical)
+                    # imwrite(results[key], "./workdirs/{}_hou.png".format(self.nums))
+                    # self.nums += 1
+                else:
+                    raise NotImplementedError("not support key")
+        return results
+
+    def __repr__(self):
+        format_string = self.__class__.__name__
+        return format_string
 
 
 def bgr2gray(img, keepdim=True):
