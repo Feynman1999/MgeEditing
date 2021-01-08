@@ -83,7 +83,7 @@ eval_pipeline = [
         io_backend='disk',
         key='sar',
         flag='grayscale'),  # H,W,3  BGR
-    dict(type='Add_contrast', keys=['opt', 'sar'], value_sar = 1.2, value_optical = 1.2),
+    dict(type='Add_contrast', keys=['opt', 'sar'], value_sar = 1, value_optical = 1),
     # dict(type='Bgr2Gray', keys=['opt', 'sar']),  # H, W, 1
     dict(type='RescaleToZeroOne', keys=['opt', 'sar']),
     dict(type='Normalize', keys=['opt', 'sar'], to_rgb=False, **img_norm_cfg),  

@@ -15,32 +15,49 @@ class Random_Crop_Opt_Sar(object):
         if self.Contrast:
             assert have_seed == False
 
+    def get_optical_h_w(self, sar_h, sar_w):
+        up = 800 - self.size[0]
+        optical_h = random.randint(max(sar_h - (self.size[0]-self.size[1]), 0), min(sar_h, up))
+        optical_w = random.randint(max(sar_w - (self.size[0]-self.size[1]), 0), min(sar_w, up))
+        return optical_h, optical_w
+
     def __call__(self, results):
         if self.have_seed:  # 用于测试时
             random.seed(np.sum(results['sar']))
-        # 首先随机一个512内的size[1]大小的图片作为sar
-        gap = 512 - self.size[1]  # 192
-        # 随机两个数 在0~192之间
-        sar_h = random.randint(0, gap)
+
+        gap = 512 - self.size[1]
+        sar_h = random.randint(0, gap) # 随机两个数 去裁剪sar
         sar_w = random.randint(0, gap)
         # 获得sar图像
         results['sar'] = results['sar'][sar_h:sar_h+self.size[1], sar_w:sar_w+self.size[1], :]  # h,w,1
-
-        # 所以我们可以得到320图在800中的左上角
+        # 所以我们可以得到裁剪出的sar图在800中的左上角
         sar_h = results['bbox'][0] + sar_h
         sar_w = results['bbox'][1] + sar_w
-        # 随机一个包含sar的optical 大小 500
-        up = 800 - self.size[0]  # 300
-        optical_h = random.randint(max(sar_h - (self.size[0]-self.size[1]), 0), min(sar_h, up))
-        optical_w = random.randint(max(sar_w - (self.size[0]-self.size[1]), 0), min(sar_w, up))
-        # 截取optical
-        results['opt'] = results['opt'][optical_h:optical_h+self.size[0], optical_w:optical_w+self.size[0], :]  # h,w,1
+        
+        if self.Contrast: # 随机三个用于训练
+            sar = results['sar']
+            optical = results['opt']
+            results['sar'] = []
+            results['opt'] = []
+            results['bbox'] = []
+            for _ in range(3):
+                results['sar'].append(sar.copy())
+                opt = optical.copy()
+                optical_h, optical_w = self.get_optical_h_w(sar_h, sar_w)
+                results['opt'].append(opt[optical_h:optical_h+self.size[0], optical_w:optical_w+self.size[0], :])
+                results['bbox'].append(np.array([sar_h - optical_h, 
+                                                 sar_w - optical_w, 
+                                                 sar_h - optical_h + self.size[1] - 1, 
+                                                 sar_w - optical_w + self.size[1] - 1]).astype(np.float32))
+        else:
+            optical_h, optical_w = self.get_optical_h_w(sar_h, sar_w)
+            results['opt'] = results['opt'][optical_h:optical_h+self.size[0], optical_w:optical_w+self.size[0], :]  # h,w,1
 
-        # 更改bbox
-        results['bbox'][0] = sar_h - optical_h
-        results['bbox'][1] = sar_w - optical_w
-        results['bbox'][2] = results['bbox'][0] + self.size[1] - 1
-        results['bbox'][3] = results['bbox'][1] + self.size[1] - 1
+            # 更改bbox
+            results['bbox'][0] = sar_h - optical_h
+            results['bbox'][1] = sar_w - optical_w
+            results['bbox'][2] = results['bbox'][0] + self.size[1] - 1
+            results['bbox'][3] = results['bbox'][1] + self.size[1] - 1
         return results
 
     def __repr__(self):

@@ -72,7 +72,8 @@ class FramesToTensor(ImageToTensor):
                     v = v[..., None]
                 if self.to_float32 and not isinstance(v, np.float32):
                     v = v.astype(np.float32)
-                results[key][idx] = v.transpose(2, 0, 1)
+                if len(v.shape) == 3:
+                    results[key][idx] = v.transpose(2, 0, 1)
             results[key] = np.stack(results[key], axis=0)
             if results[key].shape[0] == 1:
                 results[key] = np.squeeze(results[key], axis=0)

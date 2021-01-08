@@ -23,6 +23,8 @@ class BaseMatchDataset(BaseDataset):
         super(BaseMatchDataset, self).__init__(pipeline, mode)
         self.moving_average_len = 10
         self.pooling = defaultdict(list)  # key -> value list (less than or equal moving_average_len)
+        self.difficulty_score = {1:0.4, 2:0.4, 3:0.4, 4:0.6, 5:0.6, 6:0.6, 7:0.8, 8:0.8}
+        self.threshold = {1:5, 2:5, 3:5, 4:5, 5:5, 6:5, 7:5, 8:5}
 
     @staticmethod
     def scan_folder(path):
@@ -72,34 +74,60 @@ class BaseMatchDataset(BaseDataset):
         eval_results = defaultdict(list)  # a dict of list
 
         for res in results:
-            # find on res's id
             class_id = res['class_id']
+            file_id = res['file_id']
             # 统计
             for metric, val in res.items():
                 if "id" in metric:
                     continue 
                 eval_results[metric].append(val)
                 eval_results[metric+ "_" + str(class_id)].append(val)
+
+                # 特殊打印
                 if val > 5:
-                    print("value: {}".format(val))
+                    self.logger.info("{} value: {}".format(metric, val))
                     eval_results[metric+ "_" + str(class_id) + "_more_than_5_nums"].append(1.0)
                 else:
-                    val = int(val+0.5)
-                    eval_results[metric+ "_" + str(val) + "_nums"].append(1.0)
+                    # val = int(val+0.5)
+                    integer = str(int(val))
+                    point = str(int(val*10)%10)
+                    eval_results[metric+ "_" + "{}.{}".format(integer, point) + "_nums"].append(1.0)
+        
+        # 根据eval_results[metric+ "_" + str(class_id)]计算分数信息
+        def get_score_by_dis(x):
+            if x>5:
+                return 0
+            else:
+                return 6-x
 
-        # for metric, val_list in eval_results.items():
-        #     assert len(val_list) == len(self), (
-        #         f'Length of evaluation result of {metric} is {len(val_list)}, '
-        #         f'should be {len(self)}')
+        now_score = 0
+        best_score = 0
+        for class_id, diff_score in self.difficulty_score.items():
+            key = "dis_"+str(class_id)
+            if eval_results.get(key) is None:
+                self.logger.info("do not have class index: {}".format(class_id))
+            else:
+                thre = self.threshold[class_id]
+                list_0_1 = [ (dis_value<=thre) for dis_value in eval_results[key]]
+                Lambda =  sum(list_0_1) * 1.0 / len(list_0_1)
+                for dis_value in eval_results[key]:
+                    now_score += get_score_by_dis(dis_value) * diff_score * Lambda
+                    best_score += 6 * diff_score * 1.0
+        now_score_percent = now_score*100/best_score
+        self.logger.info("now competition score: {}".format(now_score_percent))
 
-        # average the results
-        eval_results = {
-            metric: (sum(values) / len(values) if "nums" not in metric else sum(values))
-            for metric, values in eval_results.items()
-        }
+        ans = {}
+        ans['competition_score'] = now_score_percent
+        for metric, values in eval_results.items():
+            if "nums" not in metric:
+                ans[metric] = sum(values) / len(values)
+            else:
+                ans[metric] = sum(values)
+            if metric == "dis":
+                self.logger.info("now dis: {}".format(ans[metric]))
 
-        # update pooling 
-        for metric, value in eval_results.items():
+        # update pooling
+        for metric, value in ans.items():
             self.pooling[metric].append(value)
             if len(self.pooling[metric]) > self.moving_average_len:
                 # remove the first one

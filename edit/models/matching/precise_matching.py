@@ -99,6 +99,14 @@ class PreciseMatching(BaseModel):
         optical_tensor = mge.tensor(optical, dtype="float32")
         sar_tensor = mge.tensor(sar, dtype="float32")
         label_tensor = mge.tensor(label, dtype="float32")   
+        # print(optical_tensor[0,0:3,:,0:10,0:10])
+        # print(label_tensor[0,0:3])
+        # if len(optical_tensor.shape) == 5:
+        #     B,X,C,H,W = optical_tensor.shape
+        #     _,_,_,h,w = sar_tensor.shape
+        #     optical_tensor = optical_tensor.reshape(B*X, C, H, W)
+        #     sar_tensor = sar_tensor.reshape(B*X, C, h, w)
+        #     label_tensor = label_tensor.reshape(B*X, 4)
         loss = train_generator_batch(optical_tensor, sar_tensor, label_tensor, cls_id, file_id, gm=self.generator_gm, netG=self.generator)
         self.optimizers['generator'].step()
         self.optimizers['generator'].clear_grad()

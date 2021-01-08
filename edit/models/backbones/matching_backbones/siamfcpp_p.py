@@ -150,8 +150,12 @@ class SIAMFCPP_P(M.Module):
         B, _, H, W = cls_scores.shape
         cls_labels = self.create_label(gt_bboxes).reshape(B, -1)  # (B, 1, 5, 5)
         quan = (cls_labels > 0.99).astype("float32") * 2 + 1
-        cls_scores = F.sigmoid(cls_scores).reshape(B, -1)
-        loss_cls = -1.0* ((cls_labels * F.log(cls_scores) + (1.0 - cls_labels) * F.log(1 - cls_scores)) * quan ).mean()
+        cls_scores = cls_scores.reshape(B, -1)
+        # cls_scores = F.sigmoid(cls_scores).reshape(B, -1)
+        distance = abs(cls_labels - cls_scores)
+        yuzhi = 0.1
+        loss_cls = (F.where(distance < yuzhi, 0.5*(distance**2), distance-yuzhi) * quan).mean() 
+        # loss_cls = -1.0* ((cls_labels * F.log(cls_scores) + (1.0 - cls_labels) * F.log(1 - cls_scores)) * quan ).mean()
         return loss_cls, cls_labels
 
     def init_weights(self, pretrained=None, strict=True):
@@ -186,6 +190,7 @@ class AlexNet(M.Module):
         self.conv4 = ShuffleV2Block(ch//2, ch, ch//2, ksize = 3, stride=1)
 
     def forward(self, x):
+        # print(x.shape)
         x = self.conv1(x)  # 8,28,256,256
         x = self.conv2(x)  # 8,28,256,256
         x = self.conv3(x)  # 8,56,256,256

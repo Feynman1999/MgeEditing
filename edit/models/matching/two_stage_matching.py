@@ -174,8 +174,8 @@ class TwoStageMatching(BaseModel):
         ensemble_flag = kwargs.get('ensemble_flag', True)
         epochs = [0]
         res = [] # item: [B,4]
-        # if ensemble_flag:
-        #     epochs = list(range(0,1))
+        if ensemble_flag:
+            epochs = list(range(0,1))
         for epoch in epochs:
             optical_now = ensemble_forward(optical, Type=epoch)
             sar_now = ensemble_forward(sar, Type=epoch)
@@ -185,7 +185,7 @@ class TwoStageMatching(BaseModel):
             pre_bbox = mge.tensor(bbox_ensemble_back(pre_bbox, Type=epoch))
             res.append(pre_bbox)
         res = F.stack(res, axis=2) # [B,4,1] or [B, 4, 8]
-        print(res[0])
+        #print(res[0])
         pre_bbox = F.mean(res, axis=2, keepdims=False)  # [B, 4]
 
         save_image_flag = kwargs.get('save_image')

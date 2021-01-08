@@ -1,2 +1,2 @@
-python tools/train.py configs/matching/siamfcpp/combine_train.py --gpuid 9 -d
+python tools/train.py configs/matching/siamfcpp/combine_train.py --gpuid 8 -d
 # nohup python -u tools/train.py configs/matching/siamfcpp/precise_v1_24G.py --gpuid 0 -d >> /data/home/songtt/chenyuxiang/MgeEditing/1111.log 2>&1 &

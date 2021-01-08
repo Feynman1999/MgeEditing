@@ -65,7 +65,12 @@ class RandomTransposeHW(object):
             for key in self.keys:
                 if key in ('bbox', 'bboxes'):
                     if isinstance(results[key], list):
-                        raise NotImplementedError("not imple for key is list for bbox tranposeHW")
+                        for idx, v in enumerate(results[key]):
+                            tmp_bbox = v.copy()
+                            tmp_bbox[0], tmp_bbox[1] = tmp_bbox[1], tmp_bbox[0]
+                            tmp_bbox[2], tmp_bbox[3] = tmp_bbox[3], tmp_bbox[2]
+                            results[key][idx] = tmp_bbox
+                        # raise NotImplementedError("not imple for key is list for bbox tranposeHW")
                     else:
                         tmp_bbox = results[key].copy()
                         tmp_bbox[0], tmp_bbox[1] = tmp_bbox[1], tmp_bbox[0]
