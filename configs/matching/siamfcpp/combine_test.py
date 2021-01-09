@@ -171,7 +171,7 @@ evaluation = dict(interval=1, save_image=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/two_stage/20210104_2303/epoch_1'
+load_from = f'./workdirs/sota/epoch_1'
 resume_from = None 
 resume_optim = True
 workflow = 'test'

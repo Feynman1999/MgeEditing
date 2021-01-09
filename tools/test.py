@@ -21,16 +21,15 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Train an editor o(*￣▽￣*)ブ')
     parser.add_argument('config', help='train config file path')
     parser.add_argument("-d", "--dynamic", default=False, action='store_true', help="enable dygraph mode")
-    parser.add_argument("--gpus", type=int, default=1, help="how many gpus for one machine to use, 0 use cpu, default 1")
-    parser.add_argument("--gpuid", type=str, default="9", help="spcefic one gpu")
+    parser.add_argument("--gpuids", type=str, default="-1", help="spcefic gpus, -1 for cpu, >=0 for gpu, e.g.: 2,3")
     parser.add_argument('--work_dir', type=str, default=None, help='the dir to save logs and models')
     parser.add_argument("-e", "--ensemble", default=False, action = 'store_true')
     args = parser.parse_args()
     return args
 
 def get_loader(dataset, cfg):
-    samples_per_gpu = cfg.data.get('test_samples_per_gpu', cfg.data.samples_per_gpu)
-    workers_per_gpu = cfg.data.get('test_workers_per_gpu', cfg.data.workers_per_gpu)
+    samples_per_gpu = cfg.data.test_samples_per_gpu
+    workers_per_gpu = cfg.data.test_workers_per_gpu
     sampler = SequentialSampler(dataset, batch_size=samples_per_gpu, drop_last=False)
     loader = DataLoader(dataset, sampler, num_workers=workers_per_gpu)
     return loader
@@ -46,29 +45,29 @@ def test(model, datasets, cfg, rank):
     # load from
     if cfg.load_from is not None:
         runner.load_checkpoint(cfg.load_from, load_optim=False)
-        runner.create_optimizers()
+        # runner.create_optimizers()
     else:
         raise RuntimeError("cfg.load_from should not be None for test")
 
-    runner.run(data_loaders, cfg.workflow, 8 if cfg.ensemble else 1)
+    runner.run(data_loaders, cfg.workflow, 1)  # 永远只跑一个epoch
 
-def worker(rank, world_size, cfg):
-    logger = get_root_logger()  # 每个进程再创建一个logger
-    
+def worker(rank, world_size, cfg, gpu_id="0", port=23333):
     # set dynamic graph for debug
     if cfg.dynamic:
         trace.enabled = False
 
     if world_size > 1:
         # Initialize distributed process group
-        logger.info("init distributed process group {} / {}".format(rank, world_size))
+        print("init distributed process group {} / {}".format(rank, world_size))
         dist.init_process_group(
-            master_ip="localhost",
-            master_port=23333,
-            world_size=world_size,
-            rank=rank,
-            dev=rank%8,
+            master_ip = "localhost",
+            port = port,
+            world_size = world_size,
+            rank = rank,
+            device = int(gpu_id)%10,
         )
+        logger = get_root_logger()  # 每个进程再创建一个logger
+    x = mge.tensor([1.])
     model = build_model(cfg.model, eval_cfg=cfg.eval_cfg)  # eval cfg can provide some useful info, e.g. the padding multi
     datasets = [build_dataset(cfg.data.test)]
     test(model, datasets, cfg, rank)
@@ -77,7 +76,6 @@ def main():
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     args = parse_args()
     cfg = Config.fromfile(args.config)
-    cfg.gpus = args.gpus
     cfg.dynamic = args.dynamic
     cfg.ensemble = args.ensemble
     if args.work_dir is not None:
@@ -93,29 +91,39 @@ def main():
     logger = get_root_logger(log_file=log_file, log_level=cfg.log_level)
 
     # log some basic info
-    logger.info('test gpus num: {}'.format(args.gpus))
     logger.info('Config:\n{}'.format(cfg.text))
 
     # get world_size
-    world_size = args.gpus
-    assert world_size <= mge.get_device_count("gpu")
+    gpu_list = [ item.strip() for item in args.gpuids.split(",")]
+    if gpu_list[0] == "-1":
+        world_size = 0 # use cpu
+        logger.info('test use only cpu')
+    else:
+        world_size = len(gpu_list)
+        logger.info('test gpus num: {}'.format(world_size))
+
+    # assert world_size <= mge.get_device_count("gpu") bug
+
     if world_size == 0: # use cpu    
         mge.set_default_device(device='cpux')
+    elif world_size == 1:
+        mge.set_default_device(device='gpu' + gpu_list[0])
     else:
-        gpuid = args.gpuid
-        mge.set_default_device(device='gpu' + gpuid)
+        pass
 
     if world_size > 1:
-        # start distributed test, dispatch sub-processes
-        mp.set_start_method("spawn")
+        port = dist.util.get_free_ports(1)[0]
+        server = dist.Server(port)
         processes = []
         for rank in range(world_size):
-            p = mp.Process(target=worker, args=(rank, world_size, cfg))
+            p = mp.Process(target=worker, args=(rank, world_size, cfg, gpu_list[rank], port))
             p.start()
             processes.append(p)
 
-        for p in processes:
-            p.join()
+        for rank in range(world_size):
+            processes[rank].join()
+            code = processes[rank].exitcode
+            assert code == 0, "subprocess {} exit with code {}".format(rank, code)
     else:
         worker(0, 1, cfg)
 

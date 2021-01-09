@@ -171,7 +171,7 @@ class TwoStageMatching(BaseModel):
         class_id = batchdata[-2]
         file_id = batchdata[-1]
 
-        ensemble_flag = kwargs.get('ensemble_flag', True)
+        ensemble_flag = kwargs.get('ensemble_flag', False)
         epochs = [0]
         res = [] # item: [B,4]
         if ensemble_flag:
@@ -191,11 +191,10 @@ class TwoStageMatching(BaseModel):
         save_image_flag = kwargs.get('save_image')
         if save_image_flag:
             save_path = kwargs.get('save_path', None)
-            start_id = kwargs.get('sample_id', None)
-            if save_path is None or start_id is None:
-                raise RuntimeError("if save image in test_step, please set 'save_path' and 'sample_id' parameters")
-            # todo: 每一次都打开，太慢了
-            with open(os.path.join(save_path, "result_epoch_{}.txt".format(epoch)), 'a+') as f:
+            if save_path is None:
+                raise RuntimeError("if want save image(or result) in test_step, please set 'save_path' parameters")
+            # todo: 每一次都打开，会不会影响速度？
+            with open(os.path.join(save_path, "result_epoch_{}_rank_{}.txt".format(epoch, self.local_rank)), 'a+') as f:
                 for idx in range(pre_bbox.shape[0]):
                     # imwrite(tensor2img(optical[idx], min_max=(-0.64, 1.36)), file_path=os.path.join(save_path, "idx_{}.png".format(start_id + idx)))
                     # 向txt中加入一行

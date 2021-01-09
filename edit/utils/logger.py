@@ -24,6 +24,7 @@ def get_logger(name, log_file=None, log_level=logging.INFO):
         logging.Logger: The expected logger.
     """
     logger = logging.getLogger(name)
+    
     if name in logger_initialized:
         return logger
 

@@ -33,20 +33,15 @@ class EpochBasedRunner(BaseRunner):
         self.data_loader = data_loader
         self.call_hook('before_test_epoch')
         time.sleep(0.05)
-        sample_nums_all_threads = 0
         save_path = osp.join(self.work_dir, "test_results")
         mkdir_or_exist(save_path)
         for i, data_batch in enumerate(data_loader):
             batchdata = data_batch
-            sample_nums_for_one_thread = batchdata[0].shape[0]
             self._inner_iter = i
             self.call_hook('before_test_iter')
             self.outputs = self.model.test_step(batchdata, 
                                                 save_image = True, 
-                                                save_path = save_path,
-                                                sample_id=sample_nums_all_threads + sample_nums_for_one_thread * self.local_rank,
-                                                epoch = self._epoch)  # for ensemble  如果开启了ensemble，这个epoch就会被使用，添加在生成图像的后面，方面后面进行求平均，并move 
-            sample_nums_all_threads += self.outputs[0].shape[0]
+                                                save_path = save_path)
             self.call_hook('after_test_iter')
             self._iter += 1
 
@@ -88,7 +83,7 @@ class EpochBasedRunner(BaseRunner):
                 raise TypeError('mode in workflow must be a str, but got {}'.format(type(workflow)))
             epoch_runner(data_loaders[0])
 
-        time.sleep(0.1)  # wait for some hooks like loggers to finish
+        time.sleep(0.05)  # wait for some hooks like loggers to finish
 
         if workflow == 'test':
             save_path = osp.join(self.work_dir, "test_results")
