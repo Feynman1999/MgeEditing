@@ -1,4 +1,4 @@
-exp_name = 'combine_test_36'
+exp_name = 'combine_test_24G'
 
 stage1_z_size = 320
 stage1_x_size = 500
@@ -63,7 +63,7 @@ test_pipeline = [
     dict(type='Collect', keys=['opt', 'sar', 'class_id', 'file_id'])  
 ]
 
-dataroot = "/data0/home/rocket_warning_3/dataset/"
+dataroot = "/data/home/songtt/work/datasets"
 repeat_times = 1
 
 data = dict(
@@ -71,7 +71,7 @@ data = dict(
     test_workers_per_gpu=8,
     test=dict(
         type=test_dataset_type,
-        data_path= dataroot + "/stage1/test2",
+        data_path= dataroot + "/test2",
         opt_folder= "optical",
         sar_folder= "sar",
         file_list_name = "img_list_path.txt",

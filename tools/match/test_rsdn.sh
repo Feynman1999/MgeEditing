@@ -1,1 +1,1 @@
-python tools/test.py configs/matching/siamfcpp/combine_test_36.py --gpuids 1,2,3
+python tools/test.py configs/matching/siamfcpp/combine_test_24G.py --gpuids 1,6
