@@ -7,16 +7,12 @@ from edit.utils import to_list, is_list_of, get_logger, mkdir_or_exist
 
 def gpu_gather(v):
     raise NotImplementedError("gather for gpu tensor is not implement now")
-    # if v is not None:
-    #     v = [to_variable(l) for l in to_list(v)]
-    # v = [_all_gather(l, ParallelEnv().nranks) for l in v]
-    # return v
 
 def cpu_gather(v):
     raise NotImplementedError("gather for cpu list is not implement now")
 
 class EvalIterHook(Hook):
-    """evaluation hook for iteration-based runner.
+    """evaluation hook by iteration-based.
 
     This hook will regularly perform evaluation in a given interval
 
@@ -30,8 +26,7 @@ class EvalIterHook(Hook):
 
     def __init__(self, dataloader, **eval_kwargs):
         if not isinstance(dataloader, DataLoader):
-            raise TypeError('dataloader must be a mge DataLoader, '
-                            f'but got { type(dataloader)}')
+            raise TypeError('dataloader must be a mge DataLoader, but got {}'.format(type(dataloader)))
         self.dataloader = dataloader
         self.eval_kwargs = eval_kwargs
         self.interval = self.eval_kwargs.pop('interval', 10000)

@@ -1,6 +1,5 @@
 """
     train your model and support eval when training(hook).
-    normally the workflow is ``workflow = [('train', 1)]`` for training.
     you can also append test workflow, but more formally, use tools/test.py.
 """
 import os
@@ -18,7 +17,7 @@ from megengine.data import RandomSampler, SequentialSampler, DataLoader
 from edit.utils import Config, mkdir_or_exist, build_from_cfg, get_root_logger
 from edit.models import build_model
 from edit.datasets import build_dataset
-from edit.core.runner import IterBasedRunner, EpochBasedRunner
+from edit.core.runner import EpochBasedRunner
 from edit.core.hook import HOOKS
 from edit.core.evaluation import EvalIterHook
 
@@ -52,13 +51,9 @@ def train(model, datasets, cfg, rank):
         data_loaders.append(get_loader(ds, cfg, 'train'))
 
     # build runner for training
-    if cfg.get('total_iters', None) is not None:
-        runner = IterBasedRunner(model=model, optimizers_cfg=cfg.optimizers, work_dir=cfg.work_dir)
-        total_iters_or_epochs = cfg.total_iters
-    else:
-        runner = EpochBasedRunner(model=model, optimizers_cfg=cfg.optimizers, work_dir=cfg.work_dir)
-        assert cfg.get('total_epochs', None) is not None
-        total_iters_or_epochs = cfg.total_epochs
+    runner = EpochBasedRunner(model=model, optimizers_cfg=cfg.optimizers, work_dir=cfg.work_dir)
+    assert cfg.get('total_epochs', None) is not None, "you should make sure config file have total_epochs item"
+    total_epochs = cfg.total_epochs
 
     # resume and create optimizers
     if cfg.resume_from is not None:
@@ -90,7 +85,7 @@ def train(model, datasets, cfg, rank):
                             log_path=log_path, 
                             **cfg.evaluation))
 
-    runner.run(data_loaders, cfg.workflow, total_iters_or_epochs)
+    runner.run(data_loaders, cfg.workflow, total_epochs)
 
 def worker(rank, world_size, cfg):
     logger = get_root_logger()  # 每个进程再创建一个logger

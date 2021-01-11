@@ -54,4 +54,3 @@ class CheckpointHook(Hook):
         if not self.out_dir:
             self.out_dir = os.path.join(runner.work_dir, "checkpoints")
         runner.save_checkpoint(self.out_dir)
-

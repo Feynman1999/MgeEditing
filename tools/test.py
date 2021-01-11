@@ -13,7 +13,7 @@ from megengine.data import RandomSampler, SequentialSampler, DataLoader
 from edit.utils import Config, mkdir_or_exist, build_from_cfg, get_root_logger
 from edit.models import build_model
 from edit.datasets import build_dataset
-from edit.core.runner import IterBasedRunner, EpochBasedRunner
+from edit.core.runner import EpochBasedRunner
 from edit.core.hook import HOOKS
 from edit.core.evaluation import EvalIterHook
 

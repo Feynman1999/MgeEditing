@@ -219,16 +219,14 @@ class BaseRunner(metaclass=ABCMeta):
                             or workdirs/xxxxx/checkpoint/iter_100000
         :return: dict 
         """
-        dirname = osp.split(path2checkpoint)[-1]
-        epoch_or_iter, nums = dirname.split("_")
-        assert epoch_or_iter in ("epoch", "iter")
         assert osp.exists(path2checkpoint), "{} do not exist".format(path2checkpoint)
-        self.logger.info('load checkpoint from %s', path2checkpoint)
+        dirname = osp.split(path2checkpoint)[-1]
+        epoch, nums = dirname.split("_")
+        assert epoch in ("epoch", )
+        self.logger.info('load checkpoint from {}'.format(path2checkpoint))
         # 遍历model中的所有配置optimizer的model，并进行load
         res = dict()
-        res['epoch_or_iter'] = epoch_or_iter
         res['nums'] = int(nums)
-        res['load_optim'] = load_optim
         for submodule_name in self.optimizers_cfg.keys():
             submodule = getattr(self.model, submodule_name, None)
             assert submodule is not None, "model should have submodule {}".format(submodule_name)
@@ -301,5 +299,3 @@ class BaseRunner(metaclass=ABCMeta):
         for info in log_config['hooks']:
             logger_hook = build_from_cfg(info, HOOKS, default_args=dict(interval=log_interval))
             self.register_hook(logger_hook, priority='HIGH')
-
-
