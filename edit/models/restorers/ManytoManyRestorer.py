@@ -1,10 +1,10 @@
 import os
 import time
 import numpy as np
-from megengine.jit import trace
 import megengine.distributed as dist
 import megengine as mge
 import megengine.functional as F
+from megengine.autodiff import GradManager
 from edit.core.evaluation import psnr, ssim
 from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de_multi_padding, ensemble_forward, ensemble_back
 from ..base import BaseModel
@@ -13,63 +13,62 @@ from ..registry import MODELS
 
 hidden_channels = 64
 
-@trace(symbolic=True)
-def train_generator_batch(image, label, *, opt, netG, netloss):
+def train_generator_batch(image, label, *, gm, netG, netloss):
     netG.train()
-    B,T,_,H,W = image.shape
-    # image
-    image_S = image.reshape((B*T, -1, H, W))
-    image_S = F.interpolate(image_S, scale_factor = [0.25, 0.25])
-    image_S = F.interpolate(image_S, size = [H, W])
-    image_S = image_S.reshape((B, T, -1, H, W))
-    image_D = image - image_S
-    # label
-    label_S = label.reshape((B*T, -1, 4*H, 4*W))
-    label_S = F.interpolate(label_S, scale_factor = [0.25, 0.25])
-    label_S = F.interpolate(label_S, size = [4 * H, 4 * W])
-    label_S = label_S.reshape((B, T, -1, 4*H, 4*W))
-    label_D = label - label_S
+    with gm:
+        B,T,_,H,W = image.shape
+        # image
+        image_S = image.reshape((B*T, -1, H, W))
+        image_S = F.nn.interpolate(image_S, scale_factor = [0.25, 0.25])
+        image_S = F.nn.interpolate(image_S, size = [H, W])
+        image_S = image_S.reshape((B, T, -1, H, W))
+        image_D = image - image_S
+        # label
+        label_S = label.reshape((B*T, -1, 4*H, 4*W))
+        label_S = F.nn.interpolate(label_S, scale_factor = [0.25, 0.25])
+        label_S = F.nn.interpolate(label_S, size = [4 * H, 4 * W])
+        label_S = label_S.reshape((B, T, -1, 4*H, 4*W))
+        label_D = label - label_S
 
-    HR_G = []
-    HR_D = []
-    HR_S = []
+        HR_G = []
+        HR_D = []
+        HR_S = []
 
-    pre_S_hat = mge.tensor(np.zeros((B, hidden_channels, H, W), dtype=np.float32))
-    pre_D_hat = F.zeros_like(pre_S_hat)
-    pre_SD = F.zeros_like(pre_S_hat)
+        pre_S_hat = mge.tensor(np.zeros((B, hidden_channels, H, W), dtype=np.float32))
+        pre_D_hat = F.zeros_like(pre_S_hat)
+        pre_SD = F.zeros_like(pre_S_hat)
     
-    imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(image[:, 0, ...], image_S[:, 0, ...], 
-                                        image_D[:, 0, ...], image_S[:, 1, ...],
-                                        image_D[:, 1, ...], pre_S_hat, pre_D_hat, pre_SD)
-    HR_G.append(F.expand_dims(imgHR, axis = 1))
-    HR_D.append(F.expand_dims(img_D, axis = 1))
-    HR_S.append(F.expand_dims(img_S, axis = 1))
-    for t in range(1, T):
-        imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(image[:, t, ...], image_S[:, t, ...], 
-                                    image_D[:, t, ...], image_S[:, t-1, ...],
-                                    image_D[:, t-1, ...], pre_S_hat, pre_D_hat, pre_SD)
-        HR_G.append(F.expand_dims(imgHR, axis = 1))
-        HR_D.append(F.expand_dims(img_S, axis = 1))
-        HR_S.append(F.expand_dims(img_D, axis = 1))
+        imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(image[:, 0, ...], image_S[:, 0, ...], 
+                                            image_D[:, 0, ...], image_S[:, 1, ...],
+                                            image_D[:, 1, ...], pre_S_hat, pre_D_hat, pre_SD)
+        HR_G.append(imgHR)
+        HR_D.append(img_D)
+        HR_S.append(img_S)
+        for t in range(1, T):
+            imgHR, pre_SD, pre_S_hat, pre_D_hat, img_S, img_D = netG(image[:, t, ...], image_S[:, t, ...], 
+                                        image_D[:, t, ...], image_S[:, t-1, ...],
+                                        image_D[:, t-1, ...], pre_S_hat, pre_D_hat, pre_SD)
+            HR_G.append(imgHR)
+            HR_D.append(img_S)
+            HR_S.append(img_D)
 
-    HR_G = F.concat(HR_G, axis = 1)
-    HR_D = F.concat(HR_D, axis = 1)
-    HR_S = F.concat(HR_S, axis = 1)
-    # assert HR_G.shape == HR_D.shape and HR_D.shape == HR_S.shape # [B,T,C,H,W]
-    loss = netloss(HR_G, HR_D, HR_S, label, label_D, label_S)
-    opt.backward(loss)
-    if dist.is_distributed():
-        # do all reduce mean
-        pass
+        HR_G = F.stack(HR_G, axis = 1)
+        HR_D = F.stack(HR_D, axis = 1)
+        HR_S = F.stack(HR_S, axis = 1)
+        # assert HR_G.shape == HR_D.shape and HR_D.shape == HR_S.shape # [B,T,C,H,W]
+        loss = netloss(HR_G, HR_D, HR_S, label, label_D, label_S)
+        gm.backward(loss)
+        if dist.is_distributed():
+            # do all reduce mean
+            pass
     return loss
 
 
-@trace(symbolic=True)
 def test_generator_batch(image, pre_S, pre_D, pre_S_hat, pre_D_hat, pre_SD, *, netG):
     netG.eval()
     _,_,H,W = image.shape
-    image_S = F.interpolate(image, scale_factor = [0.25, 0.25])
-    image_S = F.interpolate(image_S, size = [H, W])
+    image_S = F.nn.interpolate(image, scale_factor = [0.25, 0.25])
+    image_S = F.nn.interpolate(image_S, size = [H, W])
     image_D = image - image_S
     outputs = netG(image, image_S, image_D, pre_S, pre_D, pre_S_hat, pre_D_hat, pre_SD)
     return list(outputs)[:4] + [image_S, image_D]
@@ -109,6 +108,8 @@ class ManytoManyRestorer(BaseModel):
         # load pretrained
         self.init_weights(pretrained)
 
+        self.generator_gm = GradManager().attach(self.generator.parameters()) # 定义一个求导器，将指定参数与求导器绑定 
+
         self.now_test_num = 1
 
     def init_weights(self, pretrained=None):
@@ -129,9 +130,11 @@ class ManytoManyRestorer(BaseModel):
             list: loss
         """
         data, label = batchdata
-        self.optimizers['generator'].zero_grad()
-        loss = train_generator_batch(data, label, opt=self.optimizers['generator'], netG=self.generator, netloss=self.pixel_loss)
+        LR_tensor = mge.tensor(data, dtype="float32")
+        HR_tensor = mge.tensor(label, dtype="float32")
+        loss = train_generator_batch(LR_tensor, HR_tensor, gm=self.generator_gm, netG=self.generator, netloss=self.pixel_loss)
         self.optimizers['generator'].step()
+        self.optimizers['generator'].clear_grad()
         return loss
 
     def test_step(self, batchdata, **kwargs):
@@ -145,40 +148,41 @@ class ManytoManyRestorer(BaseModel):
         """
         epoch = kwargs.get('epoch', 0)
         image = batchdata[0]  # [B,C,H,W]
-        image = ensemble_forward(image, Type = epoch)  # for ensemble
+        # image = ensemble_forward(image, Type = epoch)  # for ensemble
 
         H,W = image.shape[-2], image.shape[-1]
         scale = getattr(self.generator, 'upscale_factor', 4)
         padding_multi = self.eval_cfg.get('padding_multi', 1)
         # padding for H and W
-        image = img_multi_padding(image, padding_multi = padding_multi, pad_value = -0.5)  # [B,C,H,W]
+        # image = img_multi_padding(image, padding_multi = padding_multi, pad_value = -0.5)  # [B,C,H,W]
         
         assert image.shape[0] == 1  # only support batchsize 1
         assert len(batchdata[1].shape) == 1  # first frame flag
+        image_tensor = mge.tensor(image, dtype="float32")
         if batchdata[1][0] > 0.5:  # first frame
             print("first frame")
             self.now_test_num = 1
-            B, _ , now_H ,now_W = image.shape
+            B, _ , now_H ,now_W = image_tensor.shape
             print("use now_H : {} and now_W: {}".format(now_H, now_W))
-            self.pre_S_hat = np.zeros((B, hidden_channels, now_H, now_W), dtype=np.float32)
-            self.pre_D_hat = np.zeros_like(self.pre_S_hat)
-            self.pre_SD = np.zeros_like(self.pre_S_hat)
-            self.pre_S = F.interpolate(mge.tensor(image), scale_factor = [0.25, 0.25])
-            self.pre_S = F.interpolate(self.pre_S, size = [now_H, now_W]).numpy()
-            self.pre_D = image - self.pre_S
+            self.pre_S_hat = mge.tensor(np.zeros((B, hidden_channels, now_H, now_W), dtype=np.float32))
+            self.pre_D_hat = mge.tensor(np.zeros_like(self.pre_S_hat))
+            self.pre_SD = mge.tensor(np.zeros_like(self.pre_S_hat))
+            self.pre_S = F.nn.interpolate(image_tensor, scale_factor = [0.25, 0.25])
+            self.pre_S = F.nn.interpolate(self.pre_S, size = [now_H, now_W])
+            self.pre_D = image_tensor - self.pre_S
 
-        outputs = test_generator_batch(image, self.pre_S, self.pre_D, self.pre_S_hat, self.pre_D_hat, self.pre_SD, netG = self.generator)
+        outputs = test_generator_batch(image_tensor, self.pre_S, self.pre_D, self.pre_S_hat, self.pre_D_hat, self.pre_SD, netG = self.generator)
         outputs = list(outputs)
-        outputs[0] = img_de_multi_padding(outputs[0], origin_H = H*scale, origin_W = W*scale)
+        # outputs[0] = img_de_multi_padding(outputs[0], origin_H = H*scale, origin_W = W*scale)
         
-        for i in range(0, 6):
-            outputs[i] = outputs[i].numpy()
+        # for i in range(0, 6):
+        #     outputs[i] = outputs[i].numpy()
 
         # update hidden state
         G, self.pre_SD, self.pre_S_hat, self.pre_D_hat, self.pre_S, self.pre_D = outputs
         
         # back ensemble for G
-        G = ensemble_back(G, Type = epoch)
+        # G = ensemble_back(G, Type = epoch)
 
         save_image_flag = kwargs.get('save_image')
         if save_image_flag:

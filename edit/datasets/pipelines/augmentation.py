@@ -178,7 +178,7 @@ class GenerateFrameIndiceswithPadding(object):
                 circle: [3, 4, 0, 1, 2]
     """
 
-    def __init__(self, padding, index_start = 1, name_padding = False):
+    def __init__(self, padding, index_start = 0, name_padding = True):
         if padding not in ('replicate', 'reflection', 'reflection_circle', 'circle'):
             raise ValueError(f'Wrong padding mode {padding}.'
                              'Should be "replicate", "reflection", '
@@ -265,7 +265,7 @@ class GenerateFrameIndices(object):
             frame index with the interval.
     """
 
-    def __init__(self, interval_list, many2many = False, index_start = 1, name_padding = False):
+    def __init__(self, interval_list, many2many = False, index_start = 0, name_padding = True): # default is REDS dataset
         self.interval_list = interval_list
         self.many2many = many2many
         self.index_start = index_start
@@ -281,11 +281,10 @@ class GenerateFrameIndices(object):
         Returns:
             dict: A dict containing the processed data and information.
         """
-        clip_name, frame_name = results['LRkey'].split('/')  # key example: 000_down/00000000.png
+        clip_name, frame_name = results['LRkey'].split('/')  # key example: 000/00000000.png
         clip_name_HR, _ = results['HRkey'].split('/')  # key example: 000/00000000.png
-        
-        frame_name, ext_name = osp.splitext(frame_name)
-        if self.name_padding:  # 由int恢复str时使用, int 方便下标计算
+        frame_name, ext_name = osp.splitext(frame_name)  # 00000000    .png
+        if self.name_padding:
             padding_length = len(frame_name)
         else:
             padding_length = 0
@@ -302,7 +301,7 @@ class GenerateFrameIndices(object):
             center_frame_idx = np.random.randint(start, end)
             start_frame_idx = center_frame_idx - num_half_frames * interval
             end_frame_idx = center_frame_idx + num_half_frames * interval
-        frame_name = str(center_frame_idx).zfill(padding_length) # 由于center_frame_idx可能改变，所以重新zfill
+
         neighbor_list = list(
             range(center_frame_idx - num_half_frames * interval,
                   center_frame_idx + num_half_frames * interval + 1, interval))
@@ -319,6 +318,7 @@ class GenerateFrameIndices(object):
                 for v in neighbor_list
             ]
         else:
+            frame_name = str(center_frame_idx).zfill(padding_length)
             gt_path = [osp.join(gt_path_root, clip_name_HR, frame_name + ext_name)]
         results['lq_path'] = lq_path
         results['gt_path'] = gt_path

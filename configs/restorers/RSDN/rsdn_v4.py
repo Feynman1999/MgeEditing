@@ -1,4 +1,4 @@
-exp_name = 'rsdn_v4'
+exp_name = 'rsdn_v4_2021'
 
 scale = 4
 
@@ -10,8 +10,8 @@ model = dict(
         in_channels=3,
         out_channels=3,
         mid_channels=128,
-        hidden_channels = 128,
-        blocknums = 9,
+        hidden_channels = 256,
+        blocknums = 8,
         upscale_factor = scale),
     pixel_loss=dict(type='RSDNLoss'))
 
@@ -26,20 +26,18 @@ eval_dataset_type = 'SRManyToManyDataset'
 test_dataset_type = 'SRManyToManyDataset'
 
 train_pipeline = [
-    dict(type='GenerateFrameIndices', interval_list=[1, 2], many2many = True, name_padding = True),
-    dict(type='TemporalReverse', keys=['lq_path', 'gt_path'], reverse_ratio=0.2),
+    dict(type='GenerateFrameIndices', interval_list=[1, 2], many2many = True, index_start = 0, name_padding = True),
+    dict(type='TemporalReverse', keys=['lq_path', 'gt_path'], reverse_ratio=0.3),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
         key='lq',
-        flag='unchanged',
-        use_mem = True),
+        flag='unchanged'),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
         key='gt',
-        flag='unchanged',
-        use_mem = True),
+        flag='unchanged'),
     dict(type='PairedRandomCrop', gt_patch_size=256),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
@@ -80,37 +78,35 @@ test_pipeline = [
 ]
 
 
-dataroot = "/data-input/datasets"
+dataroot = "/opt/data/private/datasets/REDS"
 repeat_times = 1
-eval_part = ("26.mp4_down4x.mp4_frames", )
+eval_part =  ('000', '011', '015', '020')  # tuple(map(str, range(240,242)))
 data = dict(
     # train
-    samples_per_gpu=1,
+    samples_per_gpu=4,
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
         dataset=dict(
             type=train_dataset_type,
-            lq_folder=   dataroot + "/mge/train/train_png",
-            gt_folder= dataroot + "/mge/train/train_png",
-            num_input_frames=9,
+            lq_folder= dataroot + "/train/train_sharp_bicubic/X4",
+            gt_folder= dataroot + "/train/train_sharp",
+            num_input_frames=11,
             pipeline=train_pipeline,
             scale=scale,
-            eval_part = eval_part,
-            LR_symbol = "_down4x.mp4")),
+            eval_part = eval_part)),
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=4,
     eval=dict(
         type=eval_dataset_type,
-        lq_folder= dataroot + "/mge/train/train_png",
-        gt_folder= dataroot + "/mge/train/train_png",
+        lq_folder= dataroot + "/train/train_sharp_bicubic/X4",
+        gt_folder= dataroot + "/train/train_sharp",
         pipeline=eval_pipeline,
         scale=scale,
         mode="eval",
-        eval_part = eval_part,
-        LR_symbol = "_down4x.mp4"),
+        eval_part = eval_part),
     # test
     test_samples_per_gpu=1,
     test_workers_per_gpu=4,
@@ -123,22 +119,22 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=1e-4 *6/16, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=1e-4, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 100 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
-checkpoint_config = dict(interval=total_epochs // 10)
+checkpoint_config = dict(interval=2)
 log_config = dict(
-    interval=3,
+    interval=100,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=30, save_image=True)
+evaluation = dict(interval=5000, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'

@@ -155,10 +155,10 @@ class SIAMFCPP_one_sota(M.Module):
     def forward(self, sar, optical):
         feat1 = self.backbone_sar(sar)
         feat2 = self.backbone_opt(optical)
-        c_z_k = self.c_z_k(feat1)  # 100, 64
-        r_z_k = self.r_z_k(feat1)  # 100, 64
-        c_x = self.c_x(feat2)  # 100, 64
-        r_x = self.r_x(feat2)  # 100, 64
+        c_z_k = self.c_z_k(feat1)  # 100, 64           
+        r_z_k = self.r_z_k(feat1)  # 100, 64      
+        c_x = self.c_x(feat2)  # 100, 64      2*48*9*200*200*48
+        r_x = self.r_x(feat2)  # 100, 64      2*48*9*200*200*48
         # do depth-wise cross-correlation
         r_out = xcorr_depthwise(r_x, r_z_k)  # [37, 37]
         c_out = xcorr_depthwise(c_x, c_z_k)  # [37, 37]
@@ -247,13 +247,18 @@ class AlexNet_stride4(M.Module):
     def __init__(self, in_cha, ch=48):
         super(AlexNet_stride4, self).__init__()
         assert ch % 2 ==0, "channel nums should % 2 = 0"
-        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=11, stride=2, padding=5)
-        self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 5, 1, 2)
+        self.conv1 = M.conv_bn.ConvBnRelu2d(in_cha, ch//2, kernel_size=11, stride=2, padding=5)  # 2*1*121*400*400*24   929280000
+        self.conv2 = M.conv_bn.ConvBnRelu2d(ch//2, ch, 5, 1, 2) # 2*24*25*400*400*48   9216000000
         self.pool1 = M.MaxPool2d(3, 2, 1)
-        self.conv3 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
-        self.conv4 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1)
-        self.conv5 = M.conv_bn.ConvBn2d(ch, ch, 3, 1, 1)
-        
+        self.conv3 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1) # 2*48*9*200*200*48       1658880000
+        self.conv4 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1) # 2*48*9*200*200*48       1658880000
+        self.conv5 = M.conv_bn.ConvBn2d(ch, ch, 3, 1, 1) # 2*48*9*200*200*48           1658880000
+        #  total: 15121920000 + 2* 2*48*9*200*200*48  = 18439680000   optical
+        #          6193938432                         = 7552892928   sar
+        # 
+        #  互相关：                                      8381792256
+        #                    2*48*9*73*73*48*3 *2        1326025728
+        #                                                35700390912  3.57*10^10 flops
     def forward(self, x):
         x = self.conv1(x) # 400, 256
         x = self.conv2(x) # 400, 256

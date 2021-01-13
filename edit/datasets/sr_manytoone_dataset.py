@@ -36,8 +36,7 @@ class SRManyToOneDataset(BaseVSRDataset):
                  num_input_frames = 7,
                  scale = 4,
                  mode = "train",
-                 eval_part = None,
-                 LR_symbol = "@"):  # impossible name default
+                 eval_part = None):
         super(SRManyToOneDataset, self).__init__(pipeline, scale, mode)
         assert num_input_frames % 2 == 1, (
             f'num_input_frames should be odd numbers, '
@@ -48,7 +47,6 @@ class SRManyToOneDataset(BaseVSRDataset):
         self.eval_part = eval_part
         if eval_part is not None:
             assert is_tuple_of(eval_part, str)
-        self.LR_symbol = LR_symbol
 
         self.data_infos = self.load_annotations()
 
@@ -58,10 +56,6 @@ class SRManyToOneDataset(BaseVSRDataset):
         keys = [ v for v in keys if len(v.split('/')) == 2]
         keys = sorted(keys, key=get_key_for_video_imgs)  # 000/00000.png
         
-        if self.lq_folder == self.gt_folder:
-            # gt and lq in same dir, only select lq as keys
-            keys = [ key for key in keys if self.LR_symbol in key]
-
         # do split for train and eval
         if self.eval_part is not None:
             if self.mode == "train":
@@ -83,7 +77,7 @@ class SRManyToOneDataset(BaseVSRDataset):
         for key in keys:
             # do some checks, to make sure the key for LR and HR is same. 
             if self.mode in ("train", "eval"):
-                gt_path = os.path.join(self.gt_folder, key.replace(self.LR_symbol, ""))
+                gt_path = os.path.join(self.gt_folder, key)
                 assert os.path.exists(gt_path), "please make sure the key {} for LR and HR is same".format(key)
 
             if self.mode == "train":
@@ -92,7 +86,7 @@ class SRManyToOneDataset(BaseVSRDataset):
                         lq_path=self.lq_folder,
                         gt_path=self.gt_folder,
                         LRkey=key,
-                        HRkey=key.replace(self.LR_symbol, ""),
+                        HRkey=key,
                         max_frame_num=self.frame_num[key.split("/")[0]],
                         num_input_frames=self.num_input_frames
                     )
@@ -103,7 +97,7 @@ class SRManyToOneDataset(BaseVSRDataset):
                         lq_path = self.lq_folder,
                         gt_path = self.gt_folder,
                         LRkey = key,
-                        HRkey = key.replace(self.LR_symbol, ""),
+                        HRkey = key,
                         max_frame_num=self.frame_num[key.split("/")[0]],
                         num_input_frames=self.num_input_frames,
                         is_first = is_first

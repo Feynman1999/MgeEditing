@@ -30,11 +30,10 @@ class SRManyToManyDataset(BaseVSRDataset):
                  lq_folder,
                  pipeline,
                  gt_folder = "",
-                 num_input_frames = 7,
+                 num_input_frames = 11,
                  scale = 4,
                  mode = "train",
-                 eval_part = None,
-                 LR_symbol = "@"):  # impossible name default
+                 eval_part = None):
         super(SRManyToManyDataset, self).__init__(pipeline, scale, mode)
         assert num_input_frames % 2 == 1, (
             f'num_input_frames should be odd numbers, '
@@ -45,7 +44,6 @@ class SRManyToManyDataset(BaseVSRDataset):
         self.eval_part = eval_part
         if eval_part is not None:
             assert is_tuple_of(eval_part, str)
-        self.LR_symbol = LR_symbol
 
         self.data_infos = self.load_annotations()
         
@@ -53,13 +51,9 @@ class SRManyToManyDataset(BaseVSRDataset):
         # get keys
         keys = list(scandir(self.lq_folder, suffix=IMG_EXTENSIONS, recursive=True))
         keys = [ v for v in keys if len(v.split('/')) == 2]
-        keys = sorted(keys, key=get_key_for_video_imgs)  # 000/00000.png
+        keys = sorted(keys, key=get_key_for_video_imgs)  # 000/00000002.png for reds
         
-        if self.lq_folder == self.gt_folder:
-            # gt and lq in same dir, only select lq as keys
-            keys = [key for key in keys if self.LR_symbol in key]
-
-        # do split for train and eval   
+        # do split for train and eval
         if self.eval_part is not None:
             if self.mode == "train":
                 keys = [k for k in keys if k.split('/')[0] not in self.eval_part]
@@ -74,35 +68,13 @@ class SRManyToManyDataset(BaseVSRDataset):
         for key in keys:
             self.frame_num[key.split("/")[0]] += 1
         
-        # for meg competition
-        sence = dict()
-        # sence['92'] = []
-        # sence['92'].append(304)
-        # sence['93'] = []
-        # sence['93'].append(156)
-        # sence['93'].append(449)
-        # sence['93'].append(740)
-        # sence['94'] = []
-        # sence['94'].append(363)
-        # sence['94'].append(375)
-        # sence['95'] = []
-        # sence['95'].append(196)
-        # sence['95'].append(272)
-        # sence['95'].append(347)
-        # sence['96'] = []
-        # sence['96'].append(120)
-        # sence['97'] = []
-        # sence['97'].append(53)
-        # sence['99'] = []
-        # sence['99'].append(181)
-
         data_infos = []
         is_first = 1
         now_deal = 0
         for key in keys:
             # do some checks, to make sure the key for LR and HR is same. 
             if self.mode in ("train", "eval"):
-                gt_path = os.path.join(self.gt_folder, key.replace(self.LR_symbol, ""))
+                gt_path = os.path.join(self.gt_folder, key)
                 assert os.path.exists(gt_path), "please make sure the key {} for LR and HR is same".format(key)
 
             if self.mode == "train":
@@ -111,7 +83,7 @@ class SRManyToManyDataset(BaseVSRDataset):
                         lq_path=self.lq_folder,
                         gt_path=self.gt_folder,
                         LRkey=key,
-                        HRkey=key.replace(self.LR_symbol, ""),
+                        HRkey=key,
                         max_frame_num=self.frame_num[key.split("/")[0]],
                         num_input_frames=self.num_input_frames
                     )
@@ -120,7 +92,7 @@ class SRManyToManyDataset(BaseVSRDataset):
                 data_infos.append(
                     dict(
                         lq_path = os.path.join(self.lq_folder, key),
-                        gt_path = os.path.join(self.gt_folder, key.replace(self.LR_symbol, "")),
+                        gt_path = os.path.join(self.gt_folder, key),
                         is_first = is_first
                     )
                 )
@@ -139,8 +111,6 @@ class SRManyToManyDataset(BaseVSRDataset):
             if now_deal == self.frame_num[key.split("/")[0]]:
                 is_first = 1
                 now_deal = 0
-            elif key.split("/")[0] in sence.keys() and now_deal in sence[key.split("/")[0]]:
-                is_first = 1
             else:
                 is_first = 0
         return data_infos

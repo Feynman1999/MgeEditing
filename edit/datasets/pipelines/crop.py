@@ -94,6 +94,7 @@ class PairedRandomCrop(object):
             dict: A dict containing the processed data and information.
         """
         scale = results['scale']
+        assert self.gt_patch_size % scale == 0
         lq_patch_size = self.gt_patch_size // scale
 
         lq_is_list = isinstance(results['lq'], list)
@@ -107,11 +108,12 @@ class PairedRandomCrop(object):
         h_gt, w_gt, _ = results['gt'][0].shape
 
         if h_gt != h_lq * scale or w_gt != w_lq * scale:
+            raise RuntimeError("HR's size is not {}X times to LR's size".format(scale))
             # do resize, resize gt to lq * scale
-            results['gt'] = [
-                imresize(v, (w_lq * scale, h_lq * scale))
-                for v in results['gt']
-            ]
+            # results['gt'] = [
+            #     imresize(v, (w_lq * scale, h_lq * scale))
+            #     for v in results['gt']
+            # ]
             
         if h_lq < lq_patch_size or w_lq < lq_patch_size:
             raise ValueError(
