@@ -11,3 +11,5 @@
 /log
 
 /core
+
+__pycache__/
