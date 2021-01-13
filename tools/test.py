@@ -18,12 +18,12 @@ from edit.core.hook import HOOKS
 from edit.core.evaluation import EvalIterHook
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Train an editor o(*￣▽￣*)ブ')
+    parser = argparse.ArgumentParser(description='Test an editor o(*￣▽￣*)ブ')
     parser.add_argument('config', help='train config file path')
-    parser.add_argument("-d", "--dynamic", default=False, action='store_true', help="enable dygraph mode")
+    parser.add_argument("-d", "--dynamic", default=True, action='store_true', help="enable dygraph mode")
+    parser.add_argument("-e", "--ensemble", default=False, action = 'store_true')
     parser.add_argument("--gpuids", type=str, default="-1", help="spcefic gpus, -1 for cpu, >=0 for gpu, e.g.: 2,3")
     parser.add_argument('--work_dir', type=str, default=None, help='the dir to save logs and models')
-    parser.add_argument("-e", "--ensemble", default=False, action = 'store_true')
     args = parser.parse_args()
     return args
 
@@ -58,7 +58,6 @@ def worker(rank, world_size, cfg, gpu_id="0", port=23333):
 
     if world_size > 1:
         # Initialize distributed process group
-        print("init distributed process group {} / {}".format(rank, world_size))
         dist.init_process_group(
             master_ip = "localhost",
             port = port,
@@ -66,11 +65,12 @@ def worker(rank, world_size, cfg, gpu_id="0", port=23333):
             rank = rank,
             device = int(gpu_id)%10,
         )
-        logger = get_root_logger()  # 每个进程再创建一个logger
-    x = mge.tensor([1.])
+        log_file = os.path.join(cfg.work_dir, 'rank{}_root.log'.format(rank))
+        logger = get_root_logger(log_file=log_file, log_level=cfg.log_level)  # 给每个进程创立自己的root logger，但只有rank0的创建文件，其余的不创建且为error级别
     model = build_model(cfg.model, eval_cfg=cfg.eval_cfg)  # eval cfg can provide some useful info, e.g. the padding multi
     datasets = [build_dataset(cfg.data.test)]
-    test(model, datasets, cfg, rank)
+    # test(model, datasets, cfg, rank)
+
 
 def main():
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
@@ -102,7 +102,7 @@ def main():
         world_size = len(gpu_list)
         logger.info('test gpus num: {}'.format(world_size))
 
-    # assert world_size <= mge.get_device_count("gpu") bug
+    # assert world_size <= mge.get_device_count("gpu")
 
     if world_size == 0: # use cpu    
         mge.set_default_device(device='cpux')
@@ -110,12 +110,13 @@ def main():
         mge.set_default_device(device='gpu' + gpu_list[0])
     else:
         pass
-
+    
     if world_size > 1:
         port = dist.util.get_free_ports(1)[0]
         server = dist.Server(port)
         processes = []
         for rank in range(world_size):
+            logger.info("init distributed process group {} / {}".format(rank, world_size))
             p = mp.Process(target=worker, args=(rank, world_size, cfg, gpu_list[rank], port))
             p.start()
             processes.append(p)

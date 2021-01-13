@@ -1,6 +1,6 @@
 import os
 from megengine.distributed.group import get_rank, get_world_size
-from .hook import HOOKS, Hook
+from edit.core.hook import Hook, HOOKS
 
 
 @HOOKS.register_module()
@@ -17,40 +17,32 @@ class CheckpointHook(Hook):
             specified, ``runner.work_dir`` will be used by default.
     """
 
-    def __init__(self,
-                 interval=-1,
-                 by_epoch=True,
-                 out_dir=None,
-                 **kwargs):
+    def __init__(self, interval=-1, by_epoch=True, out_dir=None):
         self.interval = interval
         self.by_epoch = by_epoch
         self.out_dir = out_dir
-        self.args = kwargs
-
         self.local_rank = get_rank()
 
-
     def after_train_epoch(self, runner):
+        if self.local_rank > 0:
+            return
+
         if not self.by_epoch or not self.every_n_epochs(runner, self.interval):
             return
         
-        if self.local_rank > 0:
-            return 
-
         if not self.out_dir:
             self.out_dir = os.path.join(runner.work_dir, "checkpoints")
+        
         runner.save_checkpoint(self.out_dir)
 
-        # TODO: remove some checkpoints for save disk
-
-
     def after_train_iter(self, runner):
+        if self.local_rank > 0:
+            return
+
         if self.by_epoch or not self.every_n_iters(runner, self.interval):
             return
 
-        if self.local_rank > 0:
-            return 
-
         if not self.out_dir:
             self.out_dir = os.path.join(runner.work_dir, "checkpoints")
+        
         runner.save_checkpoint(self.out_dir)

@@ -7,15 +7,10 @@ class LoggerHook(Hook, metaclass=ABCMeta):
 
     Args:
         interval (int): Logging interval (every k iterations).
-        ignore_last (bool): Ignore the log of last iterations in each epoch
-            if less than `interval`.
-
+        ignore_last (bool): Ignore the log of last iterations in each epoch if less than `interval`.
         by_epoch (bool): Whether EpochBasedRunner is used.
     """
-    def __init__(self,
-                 interval=10,
-                 ignore_last=True,
-                 by_epoch=True):
+    def __init__(self, interval=10, ignore_last=True, by_epoch=False):
         self.interval = interval
         self.ignore_last = ignore_last
         self.by_epoch = by_epoch
@@ -33,9 +28,6 @@ class LoggerHook(Hook, metaclass=ABCMeta):
             self.log(runner)
         else:
             pass
-
-    # def after_train_epoch(self, runner):
-    #     self.log(runner)
 
     def after_test_epoch(self, runner):
         self.log(runner)

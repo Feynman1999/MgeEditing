@@ -153,7 +153,7 @@ class EpochBasedRunner(BaseRunner):
             log_config.setdefault('by_epoch', False)
 
         # self.register_lr_hook(lr_config)
+        # register_momentum_hook
+        # register_optimizer_hook
         self.register_checkpoint_hook(checkpoint_config)
         self.register_logger_hooks(log_config)
-
-        # self.register_hook(IterTimerHook())

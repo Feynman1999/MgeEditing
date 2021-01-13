@@ -8,6 +8,7 @@ from .colorspace import bgr2ycbcr, bgr2gray
 from .img import tensor2img, imnormalize, imdenormalize, imflip_, bboxflip_, imrescale, interp_codes, img_multi_padding, img_de_multi_padding, imresize, ensemble_back, ensemble_forward, bbox_ensemble_back, img_shelter
 from .logger import get_root_logger, get_logger
 from .video import images2video
+from .average_pool import AVERAGE_POOL
 
 __all__ = [
     'Registry', 'build_from_cfg',

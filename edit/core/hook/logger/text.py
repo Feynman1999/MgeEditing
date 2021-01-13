@@ -1,6 +1,8 @@
 from collections import OrderedDict
 from ..hook import HOOKS
 from .base import LoggerHook
+from megengine import Tensor
+from edit.utils import is_list_of, AVERAGE_POOL
 
 
 @HOOKS.register_module()
@@ -16,17 +18,12 @@ class TextLoggerHook(LoggerHook):
             if less than `interval`.
     """
 
-    def __init__(self,
-                 interval=10,
-                 ignore_last=True,
-                 by_epoch=False):
+    def __init__(self, interval = 10, ignore_last = True, by_epoch = False, average_length = 10):
         super(TextLoggerHook, self).__init__(interval, ignore_last, by_epoch)
-        self.by_epoch = by_epoch
+        self.pool = AVERAGE_POOL(average_length=average_length)
 
     def log(self, runner):
         log_dict = OrderedDict()
-        mode = runner.mode
-        log_dict['mode'] = mode
         log_dict['epoch'] = runner.epoch
         log_dict['losses'] = runner.losses
         if self.by_epoch:
@@ -39,13 +36,22 @@ class TextLoggerHook(LoggerHook):
 
         log_items = []
         for name, val in log_dict.items():
-            if isinstance(val, float):
-                val = f'{val:.4f}'
-            elif isinstance(val, int):
-                val = str(val)
+            if isinstance(val, Tensor) or is_list_of(val, Tensor):
+                if isinstance(val, list):
+                    val = [ float(item.item()) for item in val ]
+                else:
+                    val = float(val.item())
+                aver_val = self.pool.update(name, val)
+                
+                if isinstance(val, list):
+                    val = ", ".join([ "{:.5f}".format(item) for item in val ])
+                    aver_val = ", ".join([ "{:.5f}".format(item) for item in aver_val ])
+                else:
+                    val = "{:.5f}".format(val)
+                    aver_val = "{:.5f}".format(aver_val)
+                log_items.append("{}: [{}], {}_ma: [{}]".format(name, val, name, aver_val))
             else:
-                pass
-            log_items.append(f'{name}: {val}')
+                log_items.append(f'{name}: {val}')
 
-        log_str = ', '.join(log_items)
+        log_str = ',  '.join(log_items)
         runner.logger.info(log_str)

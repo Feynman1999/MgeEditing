@@ -2,7 +2,6 @@ from edit.utils import Registry
 
 HOOKS = Registry('hook')
 
-
 class Hook:
 
     def before_run(self, runner):

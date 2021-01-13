@@ -238,24 +238,6 @@ class BaseRunner(metaclass=ABCMeta):
                 res[submodule_name] = optim_state_dict
         return res
 
-    def register_lr_hook(self, lr_config):
-        if isinstance(lr_config, dict):
-            assert 'policy' in lr_config
-            policy_type = lr_config.pop('policy')
-            # If the type of policy is all in lower case, e.g., 'cyclic',
-            # then its first letter will be capitalized, e.g., to be 'Cyclic'.
-            # This is for the convenient usage of Lr updater.
-            # Since this is not applicable for `CosineAnealingLrUpdater`,
-            # the string will not be changed if it contains capital letters.
-            if policy_type == policy_type.lower():
-                policy_type = policy_type.title()
-            hook_type = policy_type + 'LrUpdaterHook'
-            lr_config['type'] = hook_type
-            hook = build_from_cfg(lr_config, HOOKS)
-        else:
-            hook = lr_config
-        self.register_hook(hook)
-
     def register_momentum_hook(self, momentum_config):
         if momentum_config is None:
             return
@@ -284,6 +266,24 @@ class BaseRunner(metaclass=ABCMeta):
             hook = build_from_cfg(optimizer_config, HOOKS)
         else:
             hook = optimizer_config
+        self.register_hook(hook)
+
+    def register_lr_hook(self, lr_config):
+        if isinstance(lr_config, dict):
+            assert 'policy' in lr_config
+            policy_type = lr_config.pop('policy')
+            # If the type of policy is all in lower case, e.g., 'cyclic',
+            # then its first letter will be capitalized, e.g., to be 'Cyclic'.
+            # This is for the convenient usage of Lr updater.
+            # Since this is not applicable for `CosineAnealingLrUpdater`,
+            # the string will not be changed if it contains capital letters.
+            if policy_type == policy_type.lower():
+                policy_type = policy_type.title()
+            hook_type = policy_type + 'LrUpdaterHook'
+            lr_config['type'] = hook_type
+            hook = build_from_cfg(lr_config, HOOKS)
+        else:
+            hook = lr_config
         self.register_hook(hook)
 
     def register_checkpoint_hook(self, checkpoint_config):

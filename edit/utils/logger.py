@@ -1,5 +1,6 @@
 import logging
 from megengine.distributed.group import get_rank
+from megengine.distributed import is_distributed
 
 logger_initialized = {}
 
@@ -32,7 +33,7 @@ def get_logger(name, log_file=None, log_level=logging.INFO):
     # e.g., logger "a" is initialized, then logger "a.b" will skip the
     # initialization since it is a child of "a".
     for logger_name in logger_initialized:
-        if name.startswith(logger_name):
+        if name.startswith(logger_name): # child
             return logger
 
     # fix stream twice bug
@@ -42,7 +43,10 @@ def get_logger(name, log_file=None, log_level=logging.INFO):
     stream_handler = logging.StreamHandler()
     handlers = [stream_handler]
 
-    rank = get_rank()
+    if is_distributed():
+        rank = get_rank()
+    else:
+        rank = 0
 
     # only rank 0 will add a FileHandler
     if rank == 0 and log_file is not None:
@@ -61,7 +65,6 @@ def get_logger(name, log_file=None, log_level=logging.INFO):
         logger.setLevel(logging.ERROR)
 
     logger_initialized[name] = True
-
     return logger
 
 
@@ -82,6 +85,9 @@ def get_root_logger(log_file=None, log_level=logging.INFO):
     Returns:
         logging.Logger: The root logger.
     """
-    # root logger name: mmedit
-    logger = get_logger(__name__.split('.')[0], log_file, log_level)
+    root_name = __name__.split('.')[0]  # edit.utils.logger
+    if is_distributed():
+        rank = get_rank()
+        root_name = "rank" + str(rank) + "_" + root_name
+    logger = get_logger(root_name, log_file, log_level)
     return logger

@@ -78,21 +78,21 @@ test_pipeline = [
 ]
 
 
-dataroot = "/opt/data/private/datasets/REDS"
+dataroot = "/data/home/songtt/chenyuxiang/datasets/REDS/train"
 repeat_times = 1
 eval_part =  ('000', '011', '015', '020')  # tuple(map(str, range(240,242)))
 data = dict(
     # train
-    samples_per_gpu=4,
-    workers_per_gpu=4,
+    samples_per_gpu=8,
+    workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
         dataset=dict(
             type=train_dataset_type,
-            lq_folder= dataroot + "/train/train_sharp_bicubic/X4",
-            gt_folder= dataroot + "/train/train_sharp",
-            num_input_frames=11,
+            lq_folder= dataroot + "/train_sharp_bicubic/X4",
+            gt_folder= dataroot + "/train_sharp",
+            num_input_frames=21,
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part)),
@@ -101,8 +101,8 @@ data = dict(
     eval_workers_per_gpu=4,
     eval=dict(
         type=eval_dataset_type,
-        lq_folder= dataroot + "/train/train_sharp_bicubic/X4",
-        gt_folder= dataroot + "/train/train_sharp",
+        lq_folder= dataroot + "/train_sharp_bicubic/X4",
+        gt_folder= dataroot + "/train_sharp",
         pipeline=eval_pipeline,
         scale=scale,
         mode="eval",
@@ -119,26 +119,25 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=0.2 * 1e-4, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 100 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
-checkpoint_config = dict(interval=2)
+checkpoint_config = dict(interval=3)
 log_config = dict(
-    interval=100,
+    interval=200,
     hooks=[
-        dict(type='TextLoggerHook'),
+        dict(type='TextLoggerHook', average_length=20),
         # dict(type='VisualDLLoggerHook')
     ])
-visual_config = None
 evaluation = dict(interval=5000, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = None
+load_from = f'./workdirs/epoch_1'
 resume_from = None
 resume_optim = True
 workflow = 'train'

@@ -19,12 +19,12 @@ from edit.models import build_model
 from edit.datasets import build_dataset
 from edit.core.runner import EpochBasedRunner
 from edit.core.hook import HOOKS
-from edit.core.evaluation import EvalIterHook
+from edit.core.hook.evaluation import EvalIterHook
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Train an editor o(*￣▽￣*)ブ')
+    parser = argparse.ArgumentParser(description='Train and Eval an editor o(*￣▽￣*)ブ')
     parser.add_argument('config', help='train config file path')
-    parser.add_argument("-d", "--dynamic", default=False, action='store_true', help="enable dygraph mode")
+    parser.add_argument("-d", "--dynamic", default=True, action='store_true', help="enable dygraph mode")
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument("--gpus", type=int, default=1, help="how many gpus for one machine to use, 0 use cpu, default 1")
     parser.add_argument("--gpuid", type=str, default="0", help="spcefic one gpu")
@@ -67,15 +67,10 @@ def train(model, datasets, cfg, rank):
         # 不加载任何参数，每个进程直接创建optimizers，这个时候，尽管不加载相同参数，但创建optim时也会同步参数。
         runner.create_optimizers()
 
-    # register hooks
+    # register some useful hooks
     runner.register_training_hooks(lr_config=cfg.lr_config, checkpoint_config=cfg.checkpoint_config, log_config=cfg.log_config)
 
-    # visual hook
-    if cfg.get('visual_config', None) is not None:
-        cfg.visual_config['output_dir'] = os.path.join(cfg.work_dir, cfg.visual_config['output_dir'])
-        runner.register_hook(build_from_cfg(cfg.visual_config, HOOKS))
-
-    # evaluation hook
+    # register evaluation hook
     if cfg.get('evaluation', None) is not None:
         dataset = build_dataset(cfg.data.eval)
         save_path = os.path.join(cfg.work_dir, 'eval_visuals')

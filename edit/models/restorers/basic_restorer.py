@@ -3,7 +3,7 @@ import time
 from megengine.jit import trace, SublinearMemoryConfig
 import megengine.distributed as dist
 import megengine as mge
-from edit.core.evaluation import psnr, ssim
+from edit.core.hook.evaluation import psnr, ssim
 from edit.utils import imwrite, tensor2img, bgr2ycbcr
 from ..base import BaseModel
 from ..builder import build_backbone, build_loss

@@ -3,6 +3,7 @@ from abc import ABCMeta, abstractmethod
 from megengine.data.dataset import MapDataset
 from .pipelines.compose import Compose
 from edit.utils import get_root_logger
+from edit.utils.logger import logger_initialized
 
 
 class BaseDataset(MapDataset, metaclass=ABCMeta):
