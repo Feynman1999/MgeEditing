@@ -2,6 +2,9 @@ import copy
 import inspect
 from edit.utils import Registry, build_from_cfg
 import megengine.optimizer as mgeoptim
+from megengine.autodiff import GradManager
+import megengine.distributed as dist
+
 OPTIMIZERS = Registry('optimizer')
 OPTIMIZER_BUILDERS = Registry('optimizer builder')
 
@@ -62,16 +65,20 @@ def build_optimizers(model, cfgs):
         dict[:obj:`mge.optimizer`] The initialized optimizers.
     """
     optimizers = {}
-    # determine whether 'cfgs' has several dicts for optimizers
-    is_dict_of_dict = True
     for key, cfg in cfgs.items():
-        if not isinstance(cfg, dict):
-            is_dict_of_dict = False
-    if is_dict_of_dict:
-        for key, cfg in cfgs.items():
-            cfg_ = cfg.copy()
-            module = getattr(model, key)
-            optimizers[key] = build_optimizer(module, cfg_)
-        return optimizers
-    else:
-        raise RuntimeError("please use 'dict of dict' style for optimizers config")
+        cfg_ = cfg.copy()
+        module = getattr(model, key)
+        optimizers[key] = build_optimizer(module, cfg_)
+    return optimizers
+
+def build_gradmanager(module):
+    world_size = dist.get_world_size()
+    gm = GradManager().attach(module.parameters(), callbacks=dist.make_allreduce_cb("SUM") if world_size > 1 else None)
+    return gm
+
+def build_gradmanagers(model, cfgs):
+    gms = {}
+    for key, _ in cfgs.items():
+        module = getattr(model, key)
+        gms[key] = build_gradmanager(module)
+    return gms

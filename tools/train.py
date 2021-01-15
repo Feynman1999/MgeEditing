@@ -1,6 +1,5 @@
 """
-    train your model and support eval when training(hook).
-    you can also append test workflow, but more formally, use tools/test.py.
+    train your model and support eval when training.
 """
 import os
 import sys
@@ -26,8 +25,7 @@ def parse_args():
     parser.add_argument('config', help='train config file path')
     parser.add_argument("-d", "--dynamic", default=True, action='store_true', help="enable dygraph mode")
     parser.add_argument('--seed', type=int, default=0, help='random seed')
-    parser.add_argument("--gpus", type=int, default=1, help="how many gpus for one machine to use, 0 use cpu, default 1")
-    parser.add_argument("--gpuid", type=str, default="0", help="spcefic one gpu")
+    parser.add_argument("--gpuids", type=str, default="-1", help="spcefic gpus, -1 for cpu, >=0 for gpu, e.g.: 2,3")
     parser.add_argument('--work_dir', type=str, default=None, help='the dir to save logs and models')
     parser.add_argument('--resume_from', type=str, default=None, help='the checkpoint file to resume from')
     args = parser.parse_args()
@@ -41,31 +39,27 @@ def get_loader(dataset, cfg, mode='train'):
     else:
         samples_per_gpu = cfg.data.get('eval_samples_per_gpu', cfg.data.samples_per_gpu)
         workers_per_gpu = cfg.data.get('eval_workers_per_gpu', cfg.data.workers_per_gpu)
-        sampler = SequentialSampler(dataset, batch_size=samples_per_gpu, drop_last=False)
+        sampler = SequentialSampler(dataset, batch_size=samples_per_gpu, drop_last=False, world_size=1, rank=0)
         loader = DataLoader(dataset, sampler, num_workers=workers_per_gpu)
     return loader
 
 def train(model, datasets, cfg, rank):
-    data_loaders = []
-    for ds in datasets:
-        data_loaders.append(get_loader(ds, cfg, 'train'))
-
-    # build runner for training
+    data_loaders = [ get_loader(ds, cfg, 'train') for ds in datasets]
     runner = EpochBasedRunner(model=model, optimizers_cfg=cfg.optimizers, work_dir=cfg.work_dir)
-    assert cfg.get('total_epochs', None) is not None, "you should make sure config file have total_epochs item"
-    total_epochs = cfg.total_epochs
+    
+    runner.create_gradmanager_and_optimizers()  # 每个进程均创建gm和optimizers, 均是model的属性
 
-    # resume and create optimizers
     if cfg.resume_from is not None:
-        # 恢复之前的训练,即epoch数目（包括模型参数和优化器）。若多卡训练则每个进程均对模型加载参数，然后还都会加载当时保存的rank0的optim state。
-        runner.resume(cfg.resume_from, cfg.get('resume_optim', False))
+        # 恢复之前的训练,即epoch数目（包括模型参数和优化器）。若多卡训练则只有rank 0进程对模型加载参数（后面会同步）。如果resume optim，则每个进程均会load optim state.
+        runner.resume(cfg.resume_from, cfg.get('resume_optim', True)) 
     elif cfg.load_from is not None:
-        # 加载参数，但假装从头开始训练。若多卡训练则每个进程均对模型加载参数，然后每个进程创建optim（均使用配置文件中的config创建optim）。
-        runner.load_checkpoint(cfg.load_from, load_optim=False)
-        runner.create_optimizers()
+        # 加载参数，但假装从头开始训练。若多卡训练则只有rank 0进程对模型加载参数 （后面会同步）。
+        runner.load_checkpoint(cfg.load_from, load_optim=False) 
     else:
-        # 不加载任何参数，每个进程直接创建optimizers，这个时候，尽管不加载相同参数，但创建optim时也会同步参数。
-        runner.create_optimizers()
+        pass  # 不加载任何参数，从头训练
+    
+    # 对模型参数进行同步
+    runner.sync_model_params()
 
     # register some useful hooks
     runner.register_training_hooks(lr_config=cfg.lr_config, checkpoint_config=cfg.checkpoint_config, log_config=cfg.log_config)
@@ -74,32 +68,26 @@ def train(model, datasets, cfg, rank):
     if cfg.get('evaluation', None) is not None:
         dataset = build_dataset(cfg.data.eval)
         save_path = os.path.join(cfg.work_dir, 'eval_visuals')
-        log_path = cfg.work_dir
-        runner.register_hook(EvalIterHook(get_loader(dataset, cfg, 'eval'), 
-                            save_path=save_path, 
-                            log_path=log_path, 
-                            **cfg.evaluation))
+        log_path = os.path.join(cfg.work_dir, 'eval.log')
+        runner.register_hook(EvalIterHook(get_loader(dataset, cfg, 'eval'),  save_path=save_path, log_path=log_path, **cfg.evaluation))
 
-    runner.run(data_loaders, cfg.workflow, total_epochs)
+    runner.run(data_loaders, cfg.workflow, cfg.total_epochs)
 
-def worker(rank, world_size, cfg):
-    logger = get_root_logger()  # 每个进程再创建一个logger
-    
-    # set dynamic graph for debug
+def worker(rank, world_size, cfg, gpu_id="0", port=23333):
     if cfg.dynamic:
         trace.enabled = False
 
     if world_size > 1:
-        # Initialize distributed process group
-        logger.info("init distributed process group {} / {}".format(rank, world_size))
         dist.init_process_group(
-            master_ip="localhost",
-            master_port=23333,
-            world_size=world_size,
-            rank=rank,
-            dev=rank%8,
+            master_ip = "localhost",
+            port = port,
+            world_size = world_size,
+            rank = rank,
+            device = int(gpu_id)%10,
         )
-    model = build_model(cfg.model, train_cfg=cfg.train_cfg, eval_cfg=cfg.eval_cfg)
+        log_file = os.path.join(cfg.work_dir, 'rank{}_root.log'.format(rank))
+        logger = get_root_logger(log_file=log_file, log_level=cfg.log_level)
+    model = build_model(cfg.model, train_cfg=cfg.train_cfg, eval_cfg=cfg.eval_cfg) # 此时参数已经随机化完成
     datasets = [build_dataset(cfg.data.train)]
     train(model, datasets, cfg, rank)
 
@@ -107,7 +95,6 @@ def main():
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     args = parse_args()
     cfg = Config.fromfile(args.config)
-    cfg.gpus = args.gpus
     cfg.dynamic = args.dynamic
     if args.work_dir is not None:
         cfg.work_dir = args.work_dir
@@ -119,45 +106,40 @@ def main():
     cfg.work_dir = os.path.join(cfg.work_dir, timestamp)
     mkdir_or_exist(os.path.abspath(cfg.work_dir))
 
-    # init the logger
     log_file = os.path.join(cfg.work_dir, 'root.log')
     logger = get_root_logger(log_file=log_file, log_level=cfg.log_level)
-
-    # log some basic info
-    logger.info('training gpus num: {}'.format(args.gpus))
     logger.info('Config:\n{}'.format(cfg.text))
-
-    # get world_size
-    world_size = args.gpus
-    assert world_size <= mge.get_device_count("gpu")
-    if world_size == 0: # use cpu    
-        mge.set_default_device(device='cpux')
+    
+    gpu_list = [ item.strip() for item in args.gpuids.split(",")]
+    if gpu_list[0] == "-1":
+        world_size = 0 # use cpu
+        logger.info('training use only cpu')
     else:
-        gpuid = args.gpuid
-        mge.set_default_device(device='gpu' + gpuid)
+        world_size = len(gpu_list)
+        logger.info('training gpus num: {}'.format(world_size))
+
+    if world_size == 0: # use cpu
+        mge.set_default_device(device='cpux')
+    elif world_size == 1:
+        mge.set_default_device(device='gpu' + gpu_list[0])
+    else:
+        pass
 
     if world_size > 1:
-        # scale learning rate by number of gpus
-        is_dict_of_dict = True
-        for _, cfg_ in cfg.optimizers.items():
-            if not isinstance(cfg_, dict):
-                is_dict_of_dict = False
-        if is_dict_of_dict:
-            for _, cfg_ in cfg.optimizers.items():
-                cfg_['lr'] = cfg_['lr'] * world_size
-        else:
-            raise RuntimeError("please use 'dict of dict' style for optimizers config")
-        
-        # start distributed training, dispatch sub-processes
-        mp.set_start_method("spawn")
+        # scale weight decay in "SUM" mode
+        port = dist.util.get_free_ports(1)[0]
+        server = dist.Server(port)
         processes = []
         for rank in range(world_size):
-            p = mp.Process(target=worker, args=(rank, world_size, cfg))
+            logger.info("init distributed process group {} / {}".format(rank, world_size))
+            p = mp.Process(target=worker, args=(rank, world_size, cfg, gpu_list[rank], port))
             p.start()
             processes.append(p)
 
-        for p in processes:
-            p.join()
+        for rank in range(world_size):
+            processes[rank].join()
+            code = processes[rank].exitcode
+            assert code == 0, "subprocess {} exit with code {}".format(rank, code)
     else:
         worker(0, 1, cfg)
 

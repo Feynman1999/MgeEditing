@@ -1,7 +1,7 @@
 from abc import abstractmethod
 import megengine.module as M
 from megengine.distributed.group import get_rank
-from edit.core.optimizer import build_optimizers
+from edit.core.optimizer import build_optimizers, build_gradmanagers
 
 
 class BaseModel(M.Module):
@@ -54,6 +54,12 @@ class BaseModel(M.Module):
     def cal_for_eval(self, gathered_outputs, gathered_batchdata):
         pass
 
-    def create_optimizers(self, optimizers_cfg):
-        """build optimizers use optimizers_cfg"""
+    def create_gradmanager_and_optimizers(self, optimizers_cfg):
+        """build gradmanager and optimizers use optimizers_cfg"""
+        # check
+        for _, cfg in optimizers_cfg.items():
+            if not isinstance(cfg, dict):
+                raise RuntimeError("please use 'dict of dict' style for optimizers config (used in grad manager too)")
+        
+        self.gms = build_gradmanagers(self, optimizers_cfg)
         self.optimizers = build_optimizers(self, optimizers_cfg)

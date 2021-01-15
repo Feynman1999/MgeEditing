@@ -32,12 +32,10 @@ class EvalIterHook(Hook):
         self.interval = self.eval_kwargs.pop('interval', 10000)
         self.save_image = self.eval_kwargs.pop('save_image', False)
         self.save_path = self.eval_kwargs.pop('save_path', None)
-        self.log_dir_path = self.eval_kwargs.pop('log_path', None)
-        self.log_path = os.path.join(self.log_dir_path, "eval.log")
-        mkdir_or_exist(self.log_dir_path)
-        self.logger = get_logger(name = "EvalIterHook", log_file=self.log_path)
+        self.log_path = self.eval_kwargs.pop('log_path', None)
+        mkdir_or_exist(self.save_path)
+        self.logger = get_logger(name = "EvalIterHook", log_file=self.log_path) # only for rank0
         
-        # dist
         if is_distributed():
             self.local_rank = get_rank()
             self.nranks = get_world_size()
@@ -46,29 +44,17 @@ class EvalIterHook(Hook):
             self.nranks = 1
 
     def after_train_iter(self, runner):
-        """The behavior after each train iteration.
-
-        Args:
-            runner (``edit.core.runner.BaseRunner``): The runner.
-        """
         if not self.every_n_iters(runner, self.interval):
             return
-
-        # for key, para in runner.model.generator.named_parameters():
-        #     para.requires_grad = False
 
         self.logger.info("start to eval for iter: {}".format(runner.iter+1))
         save_path = os.path.join(self.save_path, "iter_{}".format(runner.iter+1))
         mkdir_or_exist(save_path)
         results = []  # list of dict
-        sample_nums_all_threads = 0
+        print(len(self.dataloader))
         for _, data in enumerate(self.dataloader):
             batchdata = data
-            sample_nums_for_one_thread = batchdata[0].shape[0]
-            outputs = runner.model.test_step(batchdata,
-                                             save_image=self.save_image,
-                                             save_path=save_path,
-                                             sample_id=sample_nums_all_threads + sample_nums_for_one_thread * self.local_rank)
+            outputs = runner.model.test_step(batchdata, save_image=self.save_image, save_path=save_path)
             if self.nranks > 1:
                 # TODO:
                 # 一定是使用GPU，将所有线程的outputs和data收集过来

@@ -62,7 +62,7 @@ eval_pipeline = [
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='ImageToTensor', keys=['lq', 'gt']),  # HWC -> CHW
-    dict(type='Collect', keys=['lq', 'is_first', 'gt'])
+    dict(type='Collect', keys=['lq', 'is_first', 'gt', 'id'])
 ]
 
 test_pipeline = [
@@ -92,7 +92,7 @@ data = dict(
             type=train_dataset_type,
             lq_folder= dataroot + "/train_sharp_bicubic/X4",
             gt_folder= dataroot + "/train_sharp",
-            num_input_frames=21,
+            num_input_frames=11,
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part)),
@@ -119,7 +119,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.2 * 1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=0.1 * 1e-4, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 100 // repeat_times
@@ -128,16 +128,16 @@ total_epochs = 100 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=3)
 log_config = dict(
-    interval=200,
+    interval=100,
     hooks=[
         dict(type='TextLoggerHook', average_length=20),
         # dict(type='VisualDLLoggerHook')
     ])
-evaluation = dict(interval=5000, save_image=True)
+evaluation = dict(interval=100000000, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/epoch_1'
+load_from = f'./workdirs/{exp_name}/20210115_010245/checkpoints/epoch_36'
 resume_from = None
 resume_optim = True
 workflow = 'train'

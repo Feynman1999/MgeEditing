@@ -1,3 +1,6 @@
+"""
+    test your model.
+"""
 import os
 import sys
 base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -15,11 +18,11 @@ from edit.models import build_model
 from edit.datasets import build_dataset
 from edit.core.runner import EpochBasedRunner
 from edit.core.hook import HOOKS
-from edit.core.evaluation import EvalIterHook
+from edit.core.hook.evaluation import EvalIterHook
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Test an editor o(*￣▽￣*)ブ')
-    parser.add_argument('config', help='train config file path')
+    parser.add_argument('config', help='test config file path')
     parser.add_argument("-d", "--dynamic", default=True, action='store_true', help="enable dygraph mode")
     parser.add_argument("-e", "--ensemble", default=False, action = 'store_true')
     parser.add_argument("--gpuids", type=str, default="-1", help="spcefic gpus, -1 for cpu, >=0 for gpu, e.g.: 2,3")
@@ -35,29 +38,16 @@ def get_loader(dataset, cfg):
     return loader
 
 def test(model, datasets, cfg, rank):
-    data_loaders = []
-    for ds in datasets:
-        data_loaders.append(get_loader(ds, cfg))
-
-    # build epoch runner for test
+    data_loaders = [ get_loader(ds, cfg) for ds in datasets ]
     runner = EpochBasedRunner(model=model, optimizers_cfg=cfg.optimizers, work_dir=cfg.work_dir)
-
-    # load from
-    if cfg.load_from is not None:
-        runner.load_checkpoint(cfg.load_from, load_optim=False)
-        # runner.create_optimizers()
-    else:
-        raise RuntimeError("cfg.load_from should not be None for test")
-
-    runner.run(data_loaders, cfg.workflow, 1)  # 永远只跑一个epoch
+    runner.load_checkpoint(cfg.load_from, load_optim=False)
+    runner.run(data_loaders, cfg.workflow, 1)
 
 def worker(rank, world_size, cfg, gpu_id="0", port=23333):
-    # set dynamic graph for debug
     if cfg.dynamic:
         trace.enabled = False
 
     if world_size > 1:
-        # Initialize distributed process group
         dist.init_process_group(
             master_ip = "localhost",
             port = port,
@@ -69,8 +59,7 @@ def worker(rank, world_size, cfg, gpu_id="0", port=23333):
         logger = get_root_logger(log_file=log_file, log_level=cfg.log_level)  # 给每个进程创立自己的root logger，但只有rank0的创建文件，其余的不创建且为error级别
     model = build_model(cfg.model, eval_cfg=cfg.eval_cfg)  # eval cfg can provide some useful info, e.g. the padding multi
     datasets = [build_dataset(cfg.data.test)]
-    # test(model, datasets, cfg, rank)
-
+    test(model, datasets, cfg, rank)
 
 def main():
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
@@ -86,14 +75,10 @@ def main():
     cfg.work_dir = os.path.join(cfg.work_dir, timestamp)
     mkdir_or_exist(os.path.abspath(cfg.work_dir))
 
-    # init the logger
     log_file = os.path.join(cfg.work_dir, 'root.log')
     logger = get_root_logger(log_file=log_file, log_level=cfg.log_level)
-
-    # log some basic info
     logger.info('Config:\n{}'.format(cfg.text))
 
-    # get world_size
     gpu_list = [ item.strip() for item in args.gpuids.split(",")]
     if gpu_list[0] == "-1":
         world_size = 0 # use cpu

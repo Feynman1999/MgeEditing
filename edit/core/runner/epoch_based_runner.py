@@ -95,12 +95,11 @@ class EpochBasedRunner(BaseRunner):
         res_dict = self.load_checkpoint(checkpoint, load_optim=resume_optimizer)
 
         self._epoch = res_dict['nums']  # 恢复epoch
-        self.logger.info("resumed from epoch: {}".format(res_dict['nums']))
+        self.logger.info("resumed from epoch: {}".format(self._epoch))
 
-        # create optimizers
-        self.create_optimizers() # 模型参数会自动同步一次
         # 加载optim的state
         if resume_optimizer:
+            self.logger.info("load optimizer's state dict")
             for submodule_name in self.optimizers_cfg.keys():
                 self.model.optimizers[submodule_name].load_state_dict(res_dict[submodule_name])
 

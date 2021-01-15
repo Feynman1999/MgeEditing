@@ -46,7 +46,8 @@ class SRManyToManyDataset(BaseVSRDataset):
             assert is_tuple_of(eval_part, str)
 
         self.data_infos = self.load_annotations()
-        
+        self.logger.info("SRManyToManyDataset dataset load ok,   mode: {}   len:{}".format(self.mode, len(self.data_infos)))
+
     def load_annotations(self):
         # get keys
         keys = list(scandir(self.lq_folder, suffix=IMG_EXTENSIONS, recursive=True))
@@ -93,7 +94,8 @@ class SRManyToManyDataset(BaseVSRDataset):
                     dict(
                         lq_path = os.path.join(self.lq_folder, key),
                         gt_path = os.path.join(self.gt_folder, key),
-                        is_first = is_first
+                        is_first = is_first,
+                        id = key,
                     )
                 )
             elif self.mode == "test":

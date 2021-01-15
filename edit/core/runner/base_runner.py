@@ -1,7 +1,7 @@
 import os.path as osp
 from abc import ABCMeta, abstractmethod
 import megengine as mge
-from megengine.distributed.group import get_rank, get_world_size, is_distributed
+import megengine.distributed as dist
 from megengine.optimizer.optimizer import Optimizer
 from megengine.module import Module
 from edit.utils import mkdir_or_exist, build_from_cfg, get_root_logger
@@ -30,7 +30,7 @@ class BaseRunner(metaclass=ABCMeta):
     def __init__(self, model, optimizers_cfg=None, work_dir=None):
         assert hasattr(model, 'train_step')
         assert hasattr(model, 'test_step')
-        assert hasattr(model, 'create_optimizers')
+        assert hasattr(model, 'create_gradmanager_and_optimizers')
 
         self.model = model
         self.optimizers_cfg = optimizers_cfg
@@ -47,14 +47,6 @@ class BaseRunner(metaclass=ABCMeta):
         self._inner_iter = 0
         self._max_epochs = 0
         self._max_iters = 0
-
-        # dist
-        if is_distributed():
-            self.local_rank = get_rank()
-            self.nranks = get_world_size()
-        else:
-            self.local_rank = 0
-            self.nranks = 1
 
     @property
     def model_name(self):
@@ -123,8 +115,15 @@ class BaseRunner(metaclass=ABCMeta):
         """
         pass
 
-    def create_optimizers(self):
-        self.model.create_optimizers(self.optimizers_cfg)
+    def create_gradmanager_and_optimizers(self):
+        self.model.create_gradmanager_and_optimizers(self.optimizers_cfg)
+
+    def sync_model_params(self):
+        if dist.is_distributed():
+            self.logger.info("syncing the model's parameters...")
+            dist.bcast_list_(self.model.parameters(), dist.WORLD)
+        else:
+            pass  # do nothing
 
     def current_lr(self):
         """Get current learning rates.
@@ -215,9 +214,8 @@ class BaseRunner(metaclass=ABCMeta):
 
     def load_checkpoint(self, path2checkpoint, load_optim=True):
         """
-        :param path2checkpoint: e.g. workdirs/xxxxx/checkpoint/epoch_10
-                            or workdirs/xxxxx/checkpoint/iter_100000
-        :return: dict 
+            :param path2checkpoint: e.g. workdirs/xxxxx/checkpoint/epoch_10
+            :return: dict
         """
         assert osp.exists(path2checkpoint), "{} do not exist".format(path2checkpoint)
         dirname = osp.split(path2checkpoint)[-1]
@@ -231,8 +229,9 @@ class BaseRunner(metaclass=ABCMeta):
             submodule = getattr(self.model, submodule_name, None)
             assert submodule is not None, "model should have submodule {}".format(submodule_name)
             assert isinstance(submodule, Module), "submodule should be instance of mge.module.Module"
-            module_state_dict = mge.load(osp.join(path2checkpoint, submodule_name + module_ckpt_suffix))
-            submodule.load_state_dict(module_state_dict, strict = False)
+            if dist.get_rank() == 0:
+                module_state_dict = mge.load(osp.join(path2checkpoint, submodule_name + module_ckpt_suffix))
+                submodule.load_state_dict(module_state_dict, strict = False)
             if load_optim:
                 optim_state_dict = mge.load(osp.join(path2checkpoint, submodule_name + optim_ckpt_suffix))
                 res[submodule_name] = optim_state_dict

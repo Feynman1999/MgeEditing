@@ -59,8 +59,7 @@ def train_generator_batch(image, label, *, gm, netG, netloss):
         loss = netloss(HR_G, HR_D, HR_S, label, label_D, label_S)
         gm.backward(loss)
         if dist.is_distributed():
-            # do all reduce mean
-            pass
+            loss = dist.functional.all_reduce_sum(loss) / dist.get_world_size()
     return loss
 
 
@@ -108,8 +107,6 @@ class ManytoManyRestorer(BaseModel):
         # load pretrained
         self.init_weights(pretrained)
 
-        self.generator_gm = GradManager().attach(self.generator.parameters()) # 定义一个求导器，将指定参数与求导器绑定 
-
         self.now_test_num = 1
 
     def init_weights(self, pretrained=None):
@@ -132,7 +129,7 @@ class ManytoManyRestorer(BaseModel):
         data, label = batchdata
         LR_tensor = mge.tensor(data, dtype="float32")
         HR_tensor = mge.tensor(label, dtype="float32")
-        loss = train_generator_batch(LR_tensor, HR_tensor, gm=self.generator_gm, netG=self.generator, netloss=self.pixel_loss)
+        loss = train_generator_batch(LR_tensor, HR_tensor, gm=self.gms['generator'], netG=self.generator, netloss=self.pixel_loss)
         self.optimizers['generator'].step()
         self.optimizers['generator'].clear_grad()
         return loss
@@ -151,13 +148,15 @@ class ManytoManyRestorer(BaseModel):
         # image = ensemble_forward(image, Type = epoch)  # for ensemble
 
         H,W = image.shape[-2], image.shape[-1]
-        scale = getattr(self.generator, 'upscale_factor', 4)
-        padding_multi = self.eval_cfg.get('padding_multi', 1)
+        # scale = getattr(self.generator, 'upscale_factor', 4)
+        # padding_multi = self.eval_cfg.get('padding_multi', 1)
         # padding for H and W
         # image = img_multi_padding(image, padding_multi = padding_multi, pad_value = -0.5)  # [B,C,H,W]
         
         assert image.shape[0] == 1  # only support batchsize 1
         assert len(batchdata[1].shape) == 1  # first frame flag
+        id = batchdata[-1]
+        print(id)
         image_tensor = mge.tensor(image, dtype="float32")
         if batchdata[1][0] > 0.5:  # first frame
             print("first frame")
