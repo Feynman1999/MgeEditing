@@ -10,8 +10,8 @@ model = dict(
         in_channels=3,
         out_channels=3,
         mid_channels=128,
-        hidden_channels = 256,
-        blocknums = 8,
+        hidden_channels = 128,
+        blocknums = 7,
         upscale_factor = scale),
     pixel_loss=dict(type='RSDNLoss'))
 
@@ -38,7 +38,7 @@ train_pipeline = [
         io_backend='disk',
         key='gt',
         flag='unchanged'),
-    dict(type='PairedRandomCrop', gt_patch_size=256),
+    dict(type='PairedRandomCrop', gt_patch_size=320),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='horizontal'),
@@ -62,7 +62,7 @@ eval_pipeline = [
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='ImageToTensor', keys=['lq', 'gt']),  # HWC -> CHW
-    dict(type='Collect', keys=['lq', 'is_first', 'gt', 'id'])
+    dict(type='Collect', keys=['lq', 'is_first', 'gt', 'name'])
 ]
 
 test_pipeline = [
@@ -74,7 +74,7 @@ test_pipeline = [
     dict(type='RescaleToZeroOne', keys=['lq']),
     dict(type='Normalize', keys=['lq'], to_rgb=True, **img_norm_cfg),
     dict(type='ImageToTensor', keys=['lq']), # HWC -> CHW
-    dict(type='Collect', keys=['lq', 'is_first'])
+    dict(type='Collect', keys=['lq', 'is_first', 'name'])
 ]
 
 
@@ -92,7 +92,7 @@ data = dict(
             type=train_dataset_type,
             lq_folder= dataroot + "/train_sharp_bicubic/X4",
             gt_folder= dataroot + "/train_sharp",
-            num_input_frames=11,
+            num_input_frames=9,
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part)),
@@ -119,7 +119,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.1 * 1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-4, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 100 // repeat_times
@@ -128,16 +128,16 @@ total_epochs = 100 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=3)
 log_config = dict(
-    interval=100,
+    interval=10,
     hooks=[
         dict(type='TextLoggerHook', average_length=20),
         # dict(type='VisualDLLoggerHook')
     ])
-evaluation = dict(interval=100000000, save_image=True)
+evaluation = dict(interval=2000, save_image=True, multi_process=False, ensemble=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20210115_010245/checkpoints/epoch_36'
+load_from = f'./workdirs/{exp_name}/20210115_140945/checkpoints/epoch_39'
 resume_from = None
 resume_optim = True
 workflow = 'train'

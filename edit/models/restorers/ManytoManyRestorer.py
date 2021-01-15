@@ -126,51 +126,66 @@ class ManytoManyRestorer(BaseModel):
         Returns:
             list: loss
         """
-        data, label = batchdata
-        LR_tensor = mge.tensor(data, dtype="float32")
-        HR_tensor = mge.tensor(label, dtype="float32")
+        LR_tensor = mge.tensor(batchdata['lq'], dtype="float32")
+        HR_tensor = mge.tensor(batchdata['gt'], dtype="float32")
         loss = train_generator_batch(LR_tensor, HR_tensor, gm=self.gms['generator'], netG=self.generator, netloss=self.pixel_loss)
         self.optimizers['generator'].step()
         self.optimizers['generator'].clear_grad()
         return loss
 
+    def group_by_H_W(self, list_of_4d_ndarray):
+        # HW一共有两种，返回一个list，长度是2，分别是2,C,H,W
+        pass
+
     def test_step(self, batchdata, **kwargs):
         """test step.
            need to know whether the first frame for video, and every step restore some hidden state.
-        Args:
-            batchdata: list for train_batch, numpy.ndarray, length up to Collect class.
+            Args:
+                batchdata: dict for train_batch, numpy.ndarray
 
         Returns:
             list: outputs
         """
-        epoch = kwargs.get('epoch', 0)
-        image = batchdata[0]  # [B,C,H,W]
-        # image = ensemble_forward(image, Type = epoch)  # for ensemble
+        lq = batchdata['lq']  # [B,C,H,W]
+        is_first = batchdata['is_first']
+        imagenames = batchdata['name']  # ("00/0000.png", "00/0001.png")  length is batchsize
+        # do some checks
+        assert lq.shape[0] == 1  # only support batchsize 1 for RNN, because the batch sampler, but we can use batchsize 8 when ensemble.
+        assert len(is_first.shape) == 1  # first frame flag
 
-        H,W = image.shape[-2], image.shape[-1]
         # scale = getattr(self.generator, 'upscale_factor', 4)
         # padding_multi = self.eval_cfg.get('padding_multi', 1)
+        if kwargs.get('ensemble'):
+            epochs = [i for i in range(8)]
+            raise NotImplementedError("")
+        else:
+            epochs = [0]
+
+        # lq_list = []
+        # for epoch in epochs:
+        #     lq_list.append(ensemble_forward(lq, Type = epoch))
+        # 由于图片的HW可能不一样， 所以不能直接concat，所以进行分组concat
+       
+            
+        # H, W = image_now.shape[-2], image_now.shape[-1]
+        
         # padding for H and W
         # image = img_multi_padding(image, padding_multi = padding_multi, pad_value = -0.5)  # [B,C,H,W]
         
-        assert image.shape[0] == 1  # only support batchsize 1
-        assert len(batchdata[1].shape) == 1  # first frame flag
-        id = batchdata[-1]
-        print(id)
-        image_tensor = mge.tensor(image, dtype="float32")
-        if batchdata[1][0] > 0.5:  # first frame
+        lq_tensor = mge.tensor(lq, dtype="float32")
+        if is_first[0] > 0.9:  # first frame
             print("first frame")
             self.now_test_num = 1
-            B, _ , now_H ,now_W = image_tensor.shape
+            B, _ , now_H ,now_W = lq_tensor.shape
             print("use now_H : {} and now_W: {}".format(now_H, now_W))
             self.pre_S_hat = mge.tensor(np.zeros((B, hidden_channels, now_H, now_W), dtype=np.float32))
             self.pre_D_hat = mge.tensor(np.zeros_like(self.pre_S_hat))
             self.pre_SD = mge.tensor(np.zeros_like(self.pre_S_hat))
-            self.pre_S = F.nn.interpolate(image_tensor, scale_factor = [0.25, 0.25])
+            self.pre_S = F.nn.interpolate(lq_tensor, scale_factor = [0.25, 0.25])
             self.pre_S = F.nn.interpolate(self.pre_S, size = [now_H, now_W])
-            self.pre_D = image_tensor - self.pre_S
+            self.pre_D = lq_tensor - self.pre_S
 
-        outputs = test_generator_batch(image_tensor, self.pre_S, self.pre_D, self.pre_S_hat, self.pre_D_hat, self.pre_SD, netG = self.generator)
+        outputs = test_generator_batch(lq_tensor, self.pre_S, self.pre_D, self.pre_S_hat, self.pre_D_hat, self.pre_SD, netG = self.generator)
         outputs = list(outputs)
         # outputs[0] = img_de_multi_padding(outputs[0], origin_H = H*scale, origin_W = W*scale)
         
@@ -183,44 +198,39 @@ class ManytoManyRestorer(BaseModel):
         # back ensemble for G
         # G = ensemble_back(G, Type = epoch)
 
-        save_image_flag = kwargs.get('save_image')
-        if save_image_flag:
+        if kwargs.get('save_image'):
             save_path = kwargs.get('save_path', None)
-            start_id = kwargs.get('sample_id', None)
-            if save_path is None or start_id is None:
-                raise RuntimeError("if save image in test_step, please set 'save_path' and 'sample_id' parameters")
+            if save_path is None:
+                raise RuntimeError("if save image in test_step, please set 'save_path' parameters")
             for idx in range(G.shape[0]):
-                if epoch == 0:
-                    imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, "idx_{}.png".format(start_id + idx)))
-                else:
-                    imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, "idx_{}_epoch_{}.png".format(start_id + idx, epoch)))
+                imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, imagenames[idx]))
 
-        print("now test num: {}".format(self.now_test_num))
+        if self.now_test_num % 10 == 0:
+            print("now tested num: {}".format(self.now_test_num))
         self.now_test_num += 1
         return outputs
 
     def cal_for_eval(self, gathered_outputs, gathered_batchdata):
         """
-
         :param gathered_outputs: list of tensor, [B,C,H,W]
-        :param gathered_batchdata: list of numpy, [B,C,H,W]
+        :param gathered_batchdata: dict, include data
         :return: eval result
         """
         crop_border = self.eval_cfg.crop_border
-        gathered_outputs = gathered_outputs[0]  # image 
-        gathered_batchdata = gathered_batchdata[-1]  # label
-        assert list(gathered_batchdata.shape) == list(gathered_outputs.shape), "{} != {}".format(list(gathered_batchdata.shape), list(gathered_outputs.shape))
+        G = gathered_outputs[0]  # image, tensor
+        gt = gathered_batchdata['gt']  # label, numpy
+        assert list(G.shape) == list(gt.shape), "{} != {}".format(list(gt.shape), list(G.shape))
 
         res = []
-        sample_nums = gathered_outputs.shape[0]
+        sample_nums = gt.shape[0]
         for i in range(sample_nums):
-            output = tensor2img(gathered_outputs[i], min_max=(-0.5, 0.5))
-            output_y = bgr2ycbcr(output, y_only=True)
-            gt = tensor2img(gathered_batchdata[i], min_max=(-0.5, 0.5))
-            gt_y = bgr2ycbcr(gt, y_only=True)
+            G_i = tensor2img(G[i], min_max=(-0.5, 0.5))
+            G_i_y = bgr2ycbcr(G_i, y_only=True)
+            gt_i = tensor2img(gt[i], min_max=(-0.5, 0.5))
+            gt_i_y = bgr2ycbcr(gt_i, y_only=True)
             eval_result = dict()
             for metric in self.eval_cfg.metrics:
-                eval_result[metric+"_RGB"] = self.allowed_metrics[metric](output, gt, crop_border)
-                eval_result[metric+"_Y"] = self.allowed_metrics[metric](output_y, gt_y, crop_border)
+                eval_result[metric+"_RGB"] = self.allowed_metrics[metric](G_i, gt_i, crop_border)
+                eval_result[metric+"_Y"] = self.allowed_metrics[metric](G_i_y, gt_i_y, crop_border)
             res.append(eval_result)
         return res

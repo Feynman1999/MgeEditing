@@ -148,7 +148,6 @@ class BaseVSRDataset(BaseDataset):
 
     def evaluate(self, results, save_path):
         """ Evaluate with different metrics.
-            collect images to dir.
             Args:
                 results (list of dict): for every dict, record metric -> value for one frame
 
@@ -170,13 +169,12 @@ class BaseVSRDataset(BaseDataset):
         do_frames = 0
         now_clip_idx = 0
         eval_results_one_clip = defaultdict(list)
-        total_deal = 0
         for res in results:
             for metric, val in res.items():
                 eval_results_one_clip[metric].append(val)
 
             do_frames += 1
-            if do_frames == frame_nums[now_clip_idx]:
+            if do_frames == frame_nums[now_clip_idx]: # 处理一个clip
                 clip_name = clip_names[now_clip_idx]
                 self.logger.info("{}: {} is ok".format(now_clip_idx, clip_name))
                 for metric, values in eval_results_one_clip.items():
@@ -198,16 +196,6 @@ class BaseVSRDataset(BaseDataset):
 
                     eval_results[metric].append(average)
 
-                # move images to dir use shutil
-                save_dir_path = osp.join(save_path, clip_name)
-                mkdir_or_exist(save_dir_path)
-                # index from [total_deal, total_deal + do_frames)
-                for idx in range(total_deal, total_deal + do_frames):
-                    # move
-                    shutil.move(osp.join(save_path, "idx_" + str(idx) + ".png"), 
-                                osp.join(save_dir_path, "idx_" + str(idx - total_deal) + ".png"))
-
-                total_deal += do_frames
                 do_frames = 0
                 now_clip_idx += 1
                 eval_results_one_clip = defaultdict(list)

@@ -39,7 +39,10 @@ def get_loader(dataset, cfg, mode='train'):
     else:
         samples_per_gpu = cfg.data.get('eval_samples_per_gpu', cfg.data.samples_per_gpu)
         workers_per_gpu = cfg.data.get('eval_workers_per_gpu', cfg.data.workers_per_gpu)
-        sampler = SequentialSampler(dataset, batch_size=samples_per_gpu, drop_last=False, world_size=1, rank=0)
+        if cfg.evaluation.multi_process is True:
+            sampler = SequentialSampler(dataset, batch_size=samples_per_gpu, drop_last=False)
+        else:
+            sampler = SequentialSampler(dataset, batch_size=samples_per_gpu, drop_last=False, world_size=1, rank=0)
         loader = DataLoader(dataset, sampler, num_workers=workers_per_gpu)
     return loader
 

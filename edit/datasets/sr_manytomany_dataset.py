@@ -95,14 +95,15 @@ class SRManyToManyDataset(BaseVSRDataset):
                         lq_path = os.path.join(self.lq_folder, key),
                         gt_path = os.path.join(self.gt_folder, key),
                         is_first = is_first,
-                        id = key,
+                        name = key,
                     )
                 )
             elif self.mode == "test":
                 data_infos.append(
                     dict(
                         lq_path = os.path.join(self.lq_folder, key),
-                        is_first = is_first
+                        is_first = is_first,
+                        name = key
                     )
                 )
             else:

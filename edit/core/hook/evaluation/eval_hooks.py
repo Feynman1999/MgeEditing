@@ -1,15 +1,11 @@
 import os
 import time
-from megengine.distributed.group import get_rank, get_world_size, is_distributed
+from megengine.distributed.group import is_distributed
+import megengine.distributed as dist
 from megengine.data.dataloader import DataLoader
 from edit.core.hook import Hook
 from edit.utils import to_list, is_list_of, get_logger, mkdir_or_exist
 
-def gpu_gather(v):
-    raise NotImplementedError("gather for gpu tensor is not implement now")
-
-def cpu_gather(v):
-    raise NotImplementedError("gather for cpu list is not implement now")
 
 class EvalIterHook(Hook):
     """evaluation hook by iteration-based.
@@ -33,12 +29,14 @@ class EvalIterHook(Hook):
         self.save_image = self.eval_kwargs.pop('save_image', False)
         self.save_path = self.eval_kwargs.pop('save_path', None)
         self.log_path = self.eval_kwargs.pop('log_path', None)
+        self.multi_process = self.eval_kwargs.pop('multi_process', False)
+        self.ensemble = self.eval_kwargs.pop('ensemble', False)
         mkdir_or_exist(self.save_path)
         self.logger = get_logger(name = "EvalIterHook", log_file=self.log_path) # only for rank0
         
         if is_distributed():
-            self.local_rank = get_rank()
-            self.nranks = get_world_size()
+            self.local_rank = dist.get_rank()
+            self.nranks = dist.get_world_size()
         else:
             self.local_rank = 0
             self.nranks = 1
@@ -51,35 +49,22 @@ class EvalIterHook(Hook):
         save_path = os.path.join(self.save_path, "iter_{}".format(runner.iter+1))
         mkdir_or_exist(save_path)
         results = []  # list of dict
-        print(len(self.dataloader))
-        for _, data in enumerate(self.dataloader):
-            batchdata = data
-            outputs = runner.model.test_step(batchdata, save_image=self.save_image, save_path=save_path)
-            if self.nranks > 1:
-                # TODO:
-                # 一定是使用GPU，将所有线程的outputs和data收集过来
-                # gathered_outputs = xxx
-                # gathered_batchdata = xxx
-                pass
-            else:
-                gathered_outputs = outputs  # list of tensor
-                gathered_batchdata = batchdata  # list of numpy
-            assert gathered_batchdata[0].shape[0] == gathered_outputs[0].shape[0]  # batch维度要匹配
-            assert gathered_batchdata[0].shape[0] == sample_nums_for_one_thread * self.nranks  # 确保是gather后的
-            sample_nums_all_threads += gathered_outputs[0].shape[0]
-            # 目前是所有进程前向并保存结果，0号进程去计算metric；之后增加CPU进程通信，把计算metric也分到不同进程上
-            if self.local_rank == 0:
-                result = runner.model.cal_for_eval(gathered_outputs, gathered_batchdata)
+        if self.multi_process:
+            assert is_distributed(), "when set multiprocess eval, you should use multi process training"
+            raise NotImplementedError("not support multi process for eval now")
+        elif self.local_rank == 0:  # 全部交给rank0来处理
+            for data in self.dataloader:
+                outputs = runner.model.test_step(data, save_image=self.save_image, save_path=save_path, ensemble=self.ensemble)
+                assert isinstance(outputs, list), "test step of model should return a list"
+                result = runner.model.cal_for_eval(outputs, data)
                 assert is_list_of(result, dict)
-                # self.logger.info(result)
                 results += result
-            else:
-                pass
-        if self.local_rank == 0:
             self.evaluate(results, runner.iter+1)
+        else:
+            pass
 
-        # for key, para in runner.model.generator.named_parameters():
-        #     para.requires_grad = True
+        if is_distributed:
+            dist.group_barrier()
 
     def evaluate(self, results, iters):
         """Evaluation function.

@@ -31,6 +31,7 @@ class BaseRunner(metaclass=ABCMeta):
         assert hasattr(model, 'train_step')
         assert hasattr(model, 'test_step')
         assert hasattr(model, 'create_gradmanager_and_optimizers')
+        assert hasattr(model, 'cal_for_eval')
 
         self.model = model
         self.optimizers_cfg = optimizers_cfg

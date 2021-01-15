@@ -104,9 +104,9 @@ class Collect(object):
         Returns:
             dict: A dict containing the processed data and information.
         """
-        data = []
+        data = {}
         for key in self.keys:
-            data.append(results[key])
+            data[key] = results[key]
         return data
 
     def __repr__(self):
