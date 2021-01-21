@@ -1,12 +1,12 @@
 import copy
 from abc import ABCMeta, abstractmethod
-from megengine.data.dataset import MapDataset
+from megengine.data.dataset import Dataset
 from .pipelines.compose import Compose
 from edit.utils import get_root_logger
 from edit.utils.logger import logger_initialized
 
 
-class BaseDataset(MapDataset, metaclass=ABCMeta):
+class BaseDataset(Dataset, metaclass=ABCMeta):
     """Base class for Dataset.
 
     All datasets should subclass it.

@@ -76,7 +76,7 @@ class FramesToTensor(ImageToTensor):
                     results[key][idx] = v.transpose(2, 0, 1)
             results[key] = np.stack(results[key], axis=0)
             if results[key].shape[0] == 1:
-                results[key] = np.squeeze(results[key], axis=0)
+                results[key] = np.squeeze(results[key], axis=0)  # 如果只有一帧则变成图片
         return results
 
 

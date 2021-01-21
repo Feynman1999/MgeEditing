@@ -11,21 +11,9 @@ IMG_EXTENSIONS = ('.png', )
 
 @DATASETS.register_module()
 class SRManyToManyDataset(BaseVSRDataset):
-    """Many to Many dataset for video super resolution.
-
-    The dataset loads several LQ (Low-Quality) frames and several GT
-    (Ground-Truth) frames. Then it applies specified transforms and finally
-    returns a list containing paired data (images, label).
-
-    Args:
-        lq_folder (str | :obj:`Path`): Path to a lq folder.
-        gt_folder (str | :obj:`Path`): Path to a gt folder.
-        num_input_frames (int): Window size for input frames.
-        pipeline (list[dict | callable]): A sequence of data transformations.
-        scale (int): Upsampling scale ratio.
-        mode (str): "train", "test" or "eval"
     """
-
+        Many to Many dataset for video super resolution.
+    """
     def __init__(self,
                  lq_folder,
                  pipeline,
@@ -70,8 +58,6 @@ class SRManyToManyDataset(BaseVSRDataset):
             self.frame_num[key.split("/")[0]] += 1
         
         data_infos = []
-        is_first = 1
-        now_deal = 0
         for key in keys:
             # do some checks, to make sure the key for LR and HR is same. 
             if self.mode in ("train", "eval"):
@@ -81,39 +67,27 @@ class SRManyToManyDataset(BaseVSRDataset):
             if self.mode == "train":
                 data_infos.append(
                     dict(
-                        lq_path=self.lq_folder,
-                        gt_path=self.gt_folder,
-                        LRkey=key,
-                        HRkey=key,
-                        max_frame_num=self.frame_num[key.split("/")[0]],
-                        num_input_frames=self.num_input_frames
+                        lq_path = self.lq_folder,
+                        gt_path = self.gt_folder,
+                        LRkey = key,
+                        HRkey = key,
+                        max_frame_num = self.frame_num[key.split("/")[0]],
+                        num_input_frames = self.num_input_frames
                     )
                 )
             elif self.mode == "eval":
                 data_infos.append(
                     dict(
-                        lq_path = os.path.join(self.lq_folder, key),
-                        gt_path = os.path.join(self.gt_folder, key),
-                        is_first = is_first,
-                        name = key,
+                        lq_path = self.lq_folder,
+                        gt_path = self.gt_folder,
+                        LRkey = key,
+                        HRkey = key,
+                        max_frame_num = self.frame_num[key.split("/")[0]],                   
+                        num_input_frames = self.num_input_frames
                     )
                 )
             elif self.mode == "test":
-                data_infos.append(
-                    dict(
-                        lq_path = os.path.join(self.lq_folder, key),
-                        is_first = is_first,
-                        name = key
-                    )
-                )
+                raise NotImplementedError("not support test now")
             else:
                 raise NotImplementedError("")
-
-            # update is_first
-            now_deal += 1
-            if now_deal == self.frame_num[key.split("/")[0]]:
-                is_first = 1
-                now_deal = 0
-            else:
-                is_first = 0
         return data_infos

@@ -77,11 +77,17 @@ class PairedRandomCrop(object):
     added or modified keys are "lq" and "gt".
 
     Args:
-        gt_patch_size (int): cropped gt patch size.
+        gt_patch_size ([int, int]): cropped gt patch size.
     """
 
-    def __init__(self, gt_patch_size):
-        self.gt_patch_size = gt_patch_size
+    def __init__(self, gt_patch_size, fix0=False):
+        if isinstance(gt_patch_size, int):
+            self.gt_patch_h = gt_patch_size
+            self.gt_patch_w = gt_patch_size
+        else:
+            self.gt_patch_h, self.gt_patch_w = gt_patch_size
+
+        self.fix0 = fix0
 
     def __call__(self, results):
         """Call function.
@@ -94,8 +100,9 @@ class PairedRandomCrop(object):
             dict: A dict containing the processed data and information.
         """
         scale = results['scale']
-        assert self.gt_patch_size % scale == 0
-        lq_patch_size = self.gt_patch_size // scale
+        assert self.gt_patch_h % scale == 0 and self.gt_patch_w % scale == 0
+        lq_patch_h = self.gt_patch_h // scale
+        lq_patch_w = self.gt_patch_w // scale
 
         lq_is_list = isinstance(results['lq'], list)
         if not lq_is_list:
@@ -115,25 +122,31 @@ class PairedRandomCrop(object):
             #     for v in results['gt']
             # ]
             
-        if h_lq < lq_patch_size or w_lq < lq_patch_size:
+        if h_lq < lq_patch_h or w_lq < lq_patch_w:
             raise ValueError(
                 f'LQ ({h_lq}, {w_lq}) is smaller than patch size ',
-                f'({lq_patch_size}, {lq_patch_size}). Please check '
+                f'({lq_patch_h}, {lq_patch_w}). Please check '
                 f'{results["lq_path"][0]} and {results["gt_path"][0]}.')
 
         # randomly choose top and left coordinates for lq patch
-        top = random.randint(0, h_lq - lq_patch_size)
-        left = random.randint(0, w_lq - lq_patch_size)
+        if self.fix0:
+            top = 0
+            left = 0
+        else:
+            top = random.randint(0, h_lq - lq_patch_h)
+            left = random.randint(0, w_lq - lq_patch_w)
+
+
         # crop lq patch
         results['lq'] = [
-            v[top:top + lq_patch_size, left:left + lq_patch_size, ...]
+            v[top:top + lq_patch_h, left:left + lq_patch_w, ...]
             for v in results['lq']
         ]
         # crop corresponding gt patch
         top_gt, left_gt = int(top * scale), int(left * scale)
         results['gt'] = [
-            v[top_gt:top_gt + self.gt_patch_size,
-              left_gt:left_gt + self.gt_patch_size, ...] for v in results['gt']
+            v[top_gt:top_gt + self.gt_patch_h,
+              left_gt:left_gt + self.gt_patch_w, ...] for v in results['gt']
         ]
 
         if not lq_is_list:
@@ -144,5 +157,5 @@ class PairedRandomCrop(object):
 
     def __repr__(self):
         repr_str = self.__class__.__name__
-        repr_str += f'(gt_patch_size={self.gt_patch_size})'
+        repr_str += f'(gt_patch_size={self.gt_patch_h}, {self.gt_patch_w})'
         return repr_str

@@ -55,15 +55,14 @@ class EvalIterHook(Hook):
         elif self.local_rank == 0:  # 全部交给rank0来处理
             for data in self.dataloader:
                 outputs = runner.model.test_step(data, save_image=self.save_image, save_path=save_path, ensemble=self.ensemble)
-                assert isinstance(outputs, list), "test step of model should return a list"
                 result = runner.model.cal_for_eval(outputs, data)
-                assert is_list_of(result, dict)
+                assert isinstance(result, list)
                 results += result
             self.evaluate(results, runner.iter+1)
         else:
             pass
 
-        if is_distributed:
+        if is_distributed():
             dist.group_barrier()
 
     def evaluate(self, results, iters):

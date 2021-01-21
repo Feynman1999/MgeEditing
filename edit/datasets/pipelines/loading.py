@@ -143,4 +143,3 @@ class LoadImageFromFileList(LoadImageFromFile):
             results[f'ori_{self.key}'] = ori_imgs
         
         return results
-

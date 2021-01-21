@@ -1,20 +1,28 @@
-exp_name = 'rsdn_v3'
+"""
+use transformer
+
+train:  select 6 frames 1+3+2
+
+eval and test:   both neighbor and distant are used(3 + x), and some frames are averaged many times
+
+"""
+exp_name = 'sttn_v1'
 
 scale = 4
 
 # model settings
 model = dict(
-    type='ManytoManyRestorer',
+    type='STTNRestorer',
     generator=dict(
-        type='RSDN',
+        type='STTN',
         in_channels=3,
         out_channels=3,
-        mid_channels=128,
-        hidden_channels = 48,
-        blocknums = 9,
+        channels= 80,
+        layers = 4,
+        heads = 2,
         upscale_factor = scale,
-        pixel_shuffle = True),
-    pixel_loss=dict(type='RSDNLoss'))
+        layer_norm = False),
+    pixel_loss=dict(type='CharbonnierLoss', reduction="sum"))
 
 # model training and testing settings
 train_cfg = None
@@ -27,8 +35,8 @@ eval_dataset_type = 'SRManyToManyDataset'
 test_dataset_type = 'SRManyToManyDataset'
 
 train_pipeline = [
-    dict(type='GenerateFrameIndices', interval_list=[1], many2many = True),
-    dict(type='TemporalReverse', keys=['lq_path', 'gt_path'], reverse_ratio=0.2),
+    dict(type='STTN_REDS_GenerateFrameIndices', interval_list=[1, 2], gap = 20),
+    # 加入color jitter
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
@@ -39,61 +47,49 @@ train_pipeline = [
         io_backend='disk',
         key='gt',
         flag='unchanged'),
-    dict(type='PairedRandomCrop', gt_patch_size=256),
+    dict(type='PairedRandomCrop', gt_patch_size=[90 * 4, 160 * 4]),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='horizontal'),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='vertical'),
-    dict(type='RandomTransposeHW', keys=['lq', 'gt'], transpose_ratio=0.5),
+    dict(type='RandomTransposeHW', keys=['lq', 'gt'], transpose_ratio=0),
     dict(type='FramesToTensor', keys=['lq', 'gt']),
-    dict(type='Collect', keys=['lq', 'gt'])
+    dict(type='Collect', keys=['lq', 'gt', 'lq_path', 'gt_path'])
 ]
 
 eval_pipeline = [
+    dict(type='GenerateFrameIndiceswithPadding', padding="reflection", many2many = False, index_start = 0, name_padding = True, dist_gap = 33),
     dict(
-        type='LoadImageFromFile',
+        type='LoadImageFromFileList',
         io_backend='disk',
         key='lq',
         flag='unchanged'),
     dict(
-        type='LoadImageFromFile',
+        type='LoadImageFromFileList',
         io_backend='disk',
         key='gt',
         flag='unchanged'),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
-    dict(type='ImageToTensor', keys=['lq', 'gt']),  # HWC -> CHW
-    dict(type='Collect', keys=['lq', 'is_first', 'gt'])
+    dict(type='FramesToTensor', keys=['lq', 'gt']),
+    dict(type='Collect', keys=['lq', 'gt', 'num_input_frames', 'LRkey', 'lq_path'])
 ]
 
-test_pipeline = [
-    dict(
-        type='LoadImageFromFile',
-        io_backend='disk',
-        key='lq',
-        flag='unchanged'),
-    dict(type='RescaleToZeroOne', keys=['lq']),
-    dict(type='Normalize', keys=['lq'], to_rgb=True, **img_norm_cfg),
-    dict(type='ImageToTensor', keys=['lq']), # HWC -> CHW
-    dict(type='Collect', keys=['lq', 'is_first'])
-]
-
-
-dataroot = "/opt/data/private/datasets"
+dataroot = "/data/home/songtt/chenyuxiang/datasets/REDS/train"
 repeat_times = 1
-eval_part = ("26", )
+eval_part =  ('000', '011', '015', '020')  # tuple(map(str, range(240,242)))
 data = dict(
     # train
-    samples_per_gpu=5,
-    workers_per_gpu=4,
+    samples_per_gpu=2,
+    workers_per_gpu=6,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
         dataset=dict(
             type=train_dataset_type,
-            lq_folder= dataroot + "/mge/train/pngs/LR",
-            gt_folder= dataroot + "/mge/train/pngs/HR",
-            num_input_frames=11,
+            lq_folder= dataroot + "/train_sharp_bicubic/X4",
+            gt_folder= dataroot + "/train_sharp",
+            num_input_frames=3,
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part)),
@@ -102,44 +98,35 @@ data = dict(
     eval_workers_per_gpu=4,
     eval=dict(
         type=eval_dataset_type,
-        lq_folder= dataroot + "/mge/train/pngs/LR",
-        gt_folder= dataroot + "/mge/train/pngs/HR",
+        lq_folder= dataroot + "/train_sharp_bicubic/X4",
+        gt_folder= dataroot + "/train_sharp",
+        num_input_frames=3,
         pipeline=eval_pipeline,
         scale=scale,
         mode="eval",
-        eval_part = eval_part),
-    # test
-    test_samples_per_gpu=1,
-    test_workers_per_gpu=4,
-    test=dict(
-        type=test_dataset_type,
-        lq_folder= "/home/megstudio/workspace/test/test",
-        pipeline=test_pipeline,
-        scale=scale,
-        mode="test")
+        eval_part = eval_part)
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=1e-5 *5/16, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=2 * 1e-4, betas=(0.9, 0.999))) # 0.5 -> 0.05
 
 # learning policy
-total_epochs = 100 // repeat_times
+total_epochs = 400 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
-checkpoint_config = dict(interval=total_epochs // 20)
+checkpoint_config = dict(interval=3)
 log_config = dict(
-    interval=200,
+    interval=10,
     hooks=[
-        dict(type='TextLoggerHook'),
+        dict(type='TextLoggerHook', average_length=50),
         # dict(type='VisualDLLoggerHook')
     ])
-visual_config = None
-evaluation = dict(interval=10000, save_image=True)  # false bug
+evaluation = dict(interval=2000, save_image=False, multi_process=False, ensemble=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20200902_093012/checkpoints/epoch_60'
+load_from = None # f'./workdirs/{exp_name}/20210120_191641/checkpoints/epoch_42'
 resume_from = None
 resume_optim = True
 workflow = 'train'

@@ -7,3 +7,4 @@ from .rsdn_v4 import RSDNV4
 from .mucan_v2 import MUCANV2
 from .rbpn import RBPN
 from .mucan import MUCAN
+from .sttn import STTN

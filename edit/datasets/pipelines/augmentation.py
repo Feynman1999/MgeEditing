@@ -160,7 +160,7 @@ class Flip(object):
 
 @PIPELINES.register_module()
 class GenerateFrameIndiceswithPadding(object):
-    """Generate frame index with padding for Many to One VSR when test and eval.
+    """Generate frame index with padding for Many to One or Many to Many dataset when test and eval.
 
     Required keys: lq_path, gt_path, key, num_input_frames, max_frame_num
     Added or modified keys: lq_path, gt_path
@@ -178,14 +178,16 @@ class GenerateFrameIndiceswithPadding(object):
                 circle: [3, 4, 0, 1, 2]
     """
 
-    def __init__(self, padding, index_start = 0, name_padding = True):
+    def __init__(self, padding, many2many = False, index_start = 0, name_padding = True, dist_gap = 0):
         if padding not in ('replicate', 'reflection', 'reflection_circle', 'circle'):
             raise ValueError(f'Wrong padding mode {padding}.'
                              'Should be "replicate", "reflection", '
                              '"reflection_circle",  "circle"')
         self.padding = padding
+        self.many2many = many2many
         self.index_start = index_start
         self.name_padding = name_padding
+        self.dist_gap = dist_gap
 
     def __call__(self, results):
         """Call function.
@@ -203,7 +205,7 @@ class GenerateFrameIndiceswithPadding(object):
             padding_length = len(frame_name)
         else:
             padding_length = 0
-        current_idx = int(frame_name) - self.index_start  # start from 0
+        current_idx = int(frame_name) - self.index_start  # start from 0, easy to cal
         max_frame_num = results['max_frame_num'] - 1  
         num_input_frames = results['num_input_frames']
         num_pad = num_input_frames // 2
@@ -231,18 +233,34 @@ class GenerateFrameIndiceswithPadding(object):
             else:
                 pad_idx = i
             frame_list.append(pad_idx)
+        
+        # add dist frames
+        if self.dist_gap > 0:
+            # select one frame every dist_gap frames
+            ref_index = []
+            for i in range(0, max_frame_num+1, self.dist_gap):
+                if not (i in frame_list):
+                    ref_index.append(i)
+            frame_list += ref_index
 
         lq_path_root = results['lq_path']
         lq_paths = [
-            osp.join(lq_path_root, clip_name,  str(idx + self.index_start).zfill(padding_length) +ext_name)
+            osp.join(lq_path_root, clip_name,  str(idx + self.index_start).zfill(padding_length) + ext_name)
             for idx in frame_list
         ]
         results['lq_path'] = lq_paths
-    
+        
+        # for eval 
         if 'HRkey' in results.keys():
             clip_name_HR, _ = results['HRkey'].split('/')
             gt_path_root = results['gt_path']
-            gt_paths = [osp.join(gt_path_root, clip_name_HR, frame_name + ext_name)]
+            if self.many2many:
+                gt_paths = [
+                    osp.join(gt_path_root, clip_name_HR, str(idx + self.index_start).zfill(padding_length) + ext_name)
+                    for idx in frame_list
+                ]
+            else:
+                gt_paths = [osp.join(gt_path_root, clip_name_HR, frame_name + ext_name)]
             results['gt_path'] = gt_paths
         return results
 
@@ -252,17 +270,67 @@ class GenerateFrameIndiceswithPadding(object):
 
 
 @PIPELINES.register_module()
+class STTN_REDS_GenerateFrameIndices(object):
+    def __init__(self, interval_list, gap = 20):
+        self.interval_list = interval_list
+        self.gap = gap # 前后的间隔
+
+    def __call__(self, results):
+        clip_name, frame_name = results['LRkey'].split('/')  # key example: 000/00000000.png
+        clip_name_HR, _ = results['HRkey'].split('/')  # key example: 000/00000000.png
+        frame_name, ext_name = osp.splitext(frame_name)  # 00000000    .png
+        padding_length = len(frame_name)
+        center_frame_idx = int(frame_name)
+        num_half_frames = results['num_input_frames'] // 2
+        interval = np.random.choice(self.interval_list)
+        start_frame_idx = center_frame_idx - num_half_frames * interval  # ensure not exceeding the borders
+        end_frame_idx = center_frame_idx + num_half_frames * interval
+        start = 0
+        end = start + results['max_frame_num']
+        while (start_frame_idx < start) or (end_frame_idx >= end):
+            center_frame_idx = np.random.randint(start, end)
+            start_frame_idx = center_frame_idx - num_half_frames * interval
+            end_frame_idx = center_frame_idx + num_half_frames * interval
+
+        neighbor_list = list(
+            range(center_frame_idx - num_half_frames * interval,
+                  center_frame_idx + num_half_frames * interval + 1, interval))
+
+        if self.gap >0:
+            # append to neighbor_list two frames (for reds)
+            now_end = neighbor_list[-1]
+            add_end_1 = min(now_end + self.gap, end-1)
+            add_end_2 = min(now_end + self.gap*2, end-1)
+            neighbor_list.append(add_end_1)
+            neighbor_list.append(add_end_2)
+
+            now_start = neighbor_list[0]
+            add_start_1 = max(0, now_start - self.gap)
+            neighbor_list.insert(0, add_start_1)
+
+        lq_path_root = results['lq_path']
+        gt_path_root = results['gt_path']
+        lq_paths = [
+            osp.join(lq_path_root, clip_name, str(v).zfill(padding_length) + ext_name)
+            for v in neighbor_list
+        ]
+        gt_paths = [
+            osp.join(gt_path_root, clip_name_HR, str(v).zfill(padding_length) + ext_name)
+            for v in neighbor_list
+        ]
+        results['lq_path'] = lq_paths
+        results['gt_path'] = gt_paths
+        results['interval'] = interval
+        return results
+
+@PIPELINES.register_module()
 class GenerateFrameIndices(object):
-    """Generate frame index for many to many or many to one datasets. It also performs
-    temporal augmention with random interval.
+    """
+        Generate frame index for many to many or many to one datasets. (for training)
+        It also performs temporal augmention with random interval.
 
-    Required keys: lq_path, gt_path, key, num_input_frames, max_frame_num
-    Added or modified keys:  lq_path, gt_path, interval
-
-    Args:
-        interval_list (list[int]): Interval list for temporal augmentation.
-            It will randomly pick an interval from interval_list and sample
-            frame index with the interval.
+        Required keys: lq_path, gt_path, key, num_input_frames, max_frame_num
+        Added or modified keys:  lq_path, gt_path, interval
     """
 
     def __init__(self, interval_list, many2many = False, index_start = 0, name_padding = True): # default is REDS dataset
@@ -308,20 +376,20 @@ class GenerateFrameIndices(object):
 
         lq_path_root = results['lq_path']
         gt_path_root = results['gt_path']
-        lq_path = [
+        lq_paths = [
             osp.join(lq_path_root, clip_name, str(v).zfill(padding_length) + ext_name)
             for v in neighbor_list
         ]
         if self.many2many:
-            gt_path = [
+            gt_paths = [
                 osp.join(gt_path_root, clip_name_HR, str(v).zfill(padding_length) + ext_name)
                 for v in neighbor_list
             ]
         else:
             frame_name = str(center_frame_idx).zfill(padding_length)
-            gt_path = [osp.join(gt_path_root, clip_name_HR, frame_name + ext_name)]
-        results['lq_path'] = lq_path
-        results['gt_path'] = gt_path
+            gt_paths = [osp.join(gt_path_root, clip_name_HR, frame_name + ext_name)]
+        results['lq_path'] = lq_paths
+        results['gt_path'] = gt_paths
         results['interval'] = interval
         return results
 

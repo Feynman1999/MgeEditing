@@ -1,9 +1,9 @@
-from megengine.data.dataset import MapDataset
+from megengine.data.dataset import Dataset
 from .registry import DATASETS
 
 
 @DATASETS.register_module()
-class RepeatDataset(MapDataset):
+class RepeatDataset(Dataset):
     """A wrapper of MapDataset dataset to repeat.
 
     The length of repeated dataset will be `times` larger than the original

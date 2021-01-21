@@ -1,6 +1,6 @@
 import megengine.functional as F
 import megengine.module as M
-from megengine.core import Tensor
+from megengine import Tensor
 from ..builder import LOSSES
 
 

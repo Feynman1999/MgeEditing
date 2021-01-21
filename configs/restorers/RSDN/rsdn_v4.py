@@ -13,7 +13,7 @@ model = dict(
         hidden_channels = 128,
         blocknums = 7,
         upscale_factor = scale),
-    pixel_loss=dict(type='RSDNLoss'))
+    pixel_loss=dict(type='RSDNLoss', a= 1, b=1, c =1))
 
 # model training and testing settings
 train_cfg = None
@@ -119,25 +119,25 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.5 * 1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=0.05 * 1e-4, betas=(0.9, 0.999))) # 0.5 -> 0.05
 
 # learning policy
-total_epochs = 100 // repeat_times
+total_epochs = 200 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=3)
 log_config = dict(
-    interval=10,
+    interval=1,
     hooks=[
-        dict(type='TextLoggerHook', average_length=20),
+        dict(type='TextLoggerHook', average_length=50),
         # dict(type='VisualDLLoggerHook')
     ])
 evaluation = dict(interval=2000, save_image=True, multi_process=False, ensemble=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20210115_140945/checkpoints/epoch_39'
+load_from = f'./workdirs/{exp_name}/20210116_123918/checkpoints/epoch_99'
 resume_from = None
 resume_optim = True
 workflow = 'train'

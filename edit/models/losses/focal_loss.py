@@ -1,5 +1,5 @@
 import megengine.functional as F
-from megengine.core import Tensor
+from megengine import Tensor
 import megengine
 import megengine.module as M
 import numpy as np

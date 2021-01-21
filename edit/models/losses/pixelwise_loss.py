@@ -2,26 +2,29 @@ import megengine.module as M
 import megengine.functional as F
 from ..builder import LOSSES
 
-
 @LOSSES.register_module()
 class L1Loss(M.Module):
     def __init__(self):
         super(L1Loss, self).__init__()
 
     def forward(self, pred, label):
-        return F.l1_loss(pred = pred, label = label)
-
+        return F.loss.l1_loss(pred = pred, label = label)
 
 @LOSSES.register_module()
 class CharbonnierLoss(M.Module):
-    def __init__(self):
+    def __init__(self, reduction="mean"):
         super(CharbonnierLoss, self).__init__()
         self.eps = 1e-6
+        self.reduction = reduction
+        assert self.reduction in ("sum", "mean")
 
     def forward(self, X, Y):
         diff = X - Y
         error = F.sqrt(diff * diff + self.eps)
-        loss = F.mean(error)
+        if self.reduction == "mean":
+            loss = F.mean(error)
+        else:
+            loss = F.sum(error)
         return loss
 
 
@@ -38,13 +41,3 @@ class RSDNLoss(M.Module):
             return self.a * self.charbonnierloss(HR_S, label_S) + \
                 self.b * self.charbonnierloss(HR_D, label_D) + \
                 self.c * self.charbonnierloss(HR_G, label)
-
-
-@LOSSES.register_module()
-class RSDNLossv2(M.Module):
-    def __init__(self):
-        super(RSDNLossv2, self).__init__()
-        self.charbonnierloss = CharbonnierLoss()
-
-    def forward(self, HR_G, label):
-        return self.charbonnierloss(HR_G, label)
