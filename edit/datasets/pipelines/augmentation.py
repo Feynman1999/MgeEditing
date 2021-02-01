@@ -306,7 +306,8 @@ class STTN_REDS_GenerateFrameIndices(object):
 
             now_start = neighbor_list[0]
             add_start_1 = max(0, now_start - self.gap)
-            neighbor_list.insert(0, add_start_1)
+            # neighbor_list.insert(0, add_start_1)
+            neighbor_list.append(add_start_1)
 
         lq_path_root = results['lq_path']
         gt_path_root = results['gt_path']

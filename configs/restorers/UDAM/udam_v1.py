@@ -1,27 +1,28 @@
 """
-use transformer
+Unsupervised Depth-Aware Meshflow for supervised video super resolution
 
-train:  select 5 frames  (1, 3, 5, 7, 9, 11) sample
-
-eval and test:   both neighbor and distant are used(5 + x), and some frames are averaged many times
-
+mask
+segmentation
+meshflow
 """
-exp_name = 'sttn_baseline'
+exp_name = 'udam_baseline'
 
 scale = 4
+frames = 7
 
 # model settings
 model = dict(
-    type='STTNRestorer',
+    type='ManytoOneRestorer_v2',
     generator=dict(
-        type='STTN',
-        in_channels=3,
-        out_channels=3,
-        channels = 8,
-        layers = 8,
-        heads = 4,
+        type='MUCANV2', # UDAM
+        ch=64,
+        nframes = frames,
+        input_nc = 3,
+        output_nc = 3,
         upscale_factor = scale,
-        layer_norm = False),
+        blocknums1 = 4,
+        blocknums2 = 8,
+        non_local = False),
     pixel_loss=dict(type='CharbonnierLoss', reduction="sum"))
 
 # model training and testing settings
@@ -30,13 +31,12 @@ eval_cfg = dict(metrics=['PSNR'], crop_border=0)
 img_norm_cfg = dict(mean=[0, 0, 0], std=[1, 1, 1])
 
 # dataset settings
-train_dataset_type = 'SRManyToManyDataset'
-eval_dataset_type = 'SRManyToManyDataset'
-test_dataset_type = 'SRManyToManyDataset'
+train_dataset_type = 'SRManyToOneDataset'
+eval_dataset_type = 'SRManyToOneDataset'
+test_dataset_type = 'SRManyToOneDataset'
 
 train_pipeline = [
-    dict(type='STTN_REDS_GenerateFrameIndices', interval_list=[1, 5, 9, 13, 17], gap = 0),
-    # 加入color jitter
+    dict(type='GenerateFrameIndices', interval_list=[1, 4, 7, 10, 13], many2many = False),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
@@ -47,18 +47,18 @@ train_pipeline = [
         io_backend='disk',
         key='gt',
         flag='unchanged'),
-    dict(type='PairedRandomCrop', gt_patch_size=[108 * 4, 192 * 4]),
+    dict(type='PairedRandomCrop', gt_patch_size=[64 * 4, 64 * 4]),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='horizontal'),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='vertical'),
-    dict(type='RandomTransposeHW', keys=['lq', 'gt'], transpose_ratio=0),
+    dict(type='RandomTransposeHW', keys=['lq', 'gt'], transpose_ratio=0.5),
     dict(type='FramesToTensor', keys=['lq', 'gt']),
     dict(type='Collect', keys=['lq', 'gt', 'lq_path', 'gt_path'])
 ]
 
 eval_pipeline = [
-    dict(type='GenerateFrameIndiceswithPadding', padding="reflection", many2many = False, index_start = 0, name_padding = True, dist_gap = 33),
+    dict(type='GenerateFrameIndiceswithPadding', padding="reflection_circle", many2many = False, index_start = 0, name_padding = True),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
@@ -80,7 +80,7 @@ repeat_times = 1
 eval_part =  ('000', '011', '015', '020')  # tuple(map(str, range(240,242)))
 data = dict(
     # train
-    samples_per_gpu=3,
+    samples_per_gpu=16,
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
@@ -89,7 +89,7 @@ data = dict(
             type=train_dataset_type,
             lq_folder= dataroot + "/train_sharp_bicubic/X4",
             gt_folder= dataroot + "/train_sharp",
-            num_input_frames=5,
+            num_input_frames=frames,
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part)),
@@ -100,7 +100,7 @@ data = dict(
         type=eval_dataset_type,
         lq_folder= dataroot + "/train_sharp_bicubic/X4",
         gt_folder= dataroot + "/train_sharp",
-        num_input_frames=3,
+        num_input_frames=frames,
         pipeline=eval_pipeline,
         scale=scale,
         mode="eval",
@@ -122,7 +122,7 @@ log_config = dict(
         dict(type='TextLoggerHook', average_length=50),
         # dict(type='VisualDLLoggerHook')
     ])
-evaluation = dict(interval=2000, save_image=False, multi_process=False, ensemble=False)
+evaluation = dict(interval=1000, save_image=False, multi_process=False, ensemble=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'

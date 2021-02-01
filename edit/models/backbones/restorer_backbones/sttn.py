@@ -33,20 +33,18 @@ class FeedForward(M.Module):
             self.conv = M.Sequential(
                 M.Conv2d(d_model, d_model, kernel_size=3, padding=2, dilation=2, stride=1),
                 M.normalization.LayerNorm(d_model),
-                M.PReLU(),
+                M.ReLU(),
                 M.Conv2d(d_model, d_model, kernel_size=3, padding=1, dilation=1, stride=1),
             )
         else:
             self.conv = M.Sequential(
-                M.Conv2d(d_model, d_model, kernel_size=3, padding=2, dilation=2, stride=1),
-                M.PReLU(),
+                M.ConvRelu2d(d_model, d_model, kernel_size=3, padding=2, dilation=2, stride=1),
                 M.Conv2d(d_model, d_model, kernel_size=3, padding=1, dilation=1, stride=1),
             )
 
     def forward(self, x):
-        x = F.relu(x + self.conv(x))
-        return x
-
+        return x + self.conv(x)
+        
 def do_attention(query, key, value):
     # print(query.shape, key.shape)
     scores = F.matmul(query, key.transpose(0, 2, 1)) / math.sqrt(query.shape[-1]) # b, t*out_h*out_w, t*out_h*out_w
@@ -57,35 +55,31 @@ def do_attention(query, key, value):
     return p_val, p_attn
 
 class MultiHeadedAttention(M.Module):
-    def __init__(self, patchsize, hidden, layer_norm):
+    def __init__(self, heads, hidden, layer_norm):
         super(MultiHeadedAttention, self).__init__()
-        self.patchsize = patchsize
-        self.headnums = len(patchsize)
+        self.headnums = heads
         self.query_embedding = M.Conv2d(hidden, hidden, kernel_size=1, padding=0)
-        self.value_embedding = M.Conv2d(hidden, hidden, kernel_size=1, padding=0)
         self.key_embedding = M.Conv2d(hidden, hidden, kernel_size=1, padding=0)
+        self.value_embedding = M.Conv2d(hidden, hidden, kernel_size=1, padding=0)
+        
         if layer_norm:
             self.output_linear = M.Sequential(
                                     M.Conv2d(hidden, hidden, kernel_size=3, padding=1, stride=1),
                                     M.normalization.LayerNorm(hidden),
-                                    M.PReLU()
+                                    M.ReLU()
                                 )
         else:
-            self.output_linear = M.Sequential(
-                                    M.Conv2d(hidden, hidden, kernel_size=3, padding=1, stride=1),
-                                    M.PReLU()
-                                )
+            self.output_linear = M.ConvRelu2d(hidden, hidden, kernel_size=3, padding=1, stride=1)
 
-    def forward(self, x, b, c):
-        bt, _, h, w = x.shape
-        t = bt // b
-        d_k = c // self.headnums # 每一组的通道数
+    def forward(self, x, t, b):
+        bt, c, h, w = x.shape
+        d_k = c // self.headnums  # 每个head的通道数
         outputs = []
         _query = self.query_embedding(x)
         _key = self.key_embedding(x)
         _value = self.value_embedding(x)
         for idx in range(self.headnums):
-            height, width = self.patchsize[idx]
+            height, width = 18, 16
             query, key, value = _query[:, (idx*d_k):(idx*d_k + d_k), ...], _key[:, (idx*d_k):(idx*d_k + d_k), ...], _value[:, (idx*d_k):(idx*d_k + d_k), ...]
             out_h, out_w = h // height, w // width
             # 1) embedding and reshape
@@ -110,16 +104,18 @@ class TransformerBlock(M.Module):
     """
     Transformer = MultiHead_Attention + Feed_Forward with sublayer connection
     """
-    def __init__(self, patchsize, hidden, layer_norm):
+    def __init__(self, heads, hidden, layer_norm):
         super(TransformerBlock, self).__init__()
-        self.attention = MultiHeadedAttention(patchsize, hidden, layer_norm)
+        self.attention = MultiHeadedAttention(heads, hidden, layer_norm)
         self.feed_forward = FeedForward(hidden, layer_norm)
 
-    def forward(self, x):
-        x, b, c = x['x'], x['b'], x['c']
-        x = x + self.attention(x, b, c)
+    def forward(self, Dict):
+        x = Dict['x']
+        t = Dict['t']
+        b = Dict['b']
+        x = x + self.attention(x, t, b)
         x = self.feed_forward(x)
-        return {'x': x, 'b': b, 'c': c}
+        return {'x':x, 'b':b, 't':t}
 
 
 @BACKBONES.register_module()
@@ -138,51 +134,38 @@ class STTN(M.Module):
         self.out_channels = out_channels
         self.layer_norm = layer_norm
 
-        if heads == 4:
-            patchsize = [(9, 16), (18, 32), (45, 80), (90, 160)]  # (72, 128), ,  (9, 16)     (18, 32), (36, 64), 
-        elif heads == 3:
-            patchsize = [(9, 16), (18, 32), (45, 80)]
-        elif heads == 2:
-            patchsize = [(9, 16), (18, 32)]
-        else:
-            raise NotImplementedError("do not support heads nums {}".format(heads))
-        
-        channels = channels * heads
+        self.channels = channels * heads
 
         blocks = []
         for _ in range(layers):
-            blocks.append(TransformerBlock(patchsize, hidden = channels, layer_norm = layer_norm))
+            blocks.append(TransformerBlock(heads = heads, hidden = self.channels, layer_norm = layer_norm))
 
         self.transformer = M.Sequential(*blocks)
 
         self.encoder = M.Sequential(
-            M.Conv2d(self.in_channels, 64, kernel_size=3, stride=1, padding=1),
-            M.PReLU(),
-            FeedForward(64),
-            M.Conv2d(64, channels, kernel_size=3, stride=1, padding=1),
-            M.PReLU(),
-            FeedForward(channels)
+            M.Conv2d(self.in_channels, 48, kernel_size = 3, stride=1, padding=1),
+            M.LeakyReLU(0.2),
+            FeedForward(48, layer_norm=False),
+            M.Conv2d(48, self.channels, kernel_size=3, stride=1, padding=1),
+            M.LeakyReLU(0.2),
+            FeedForward(self.channels, layer_norm=False),
+            FeedForward(self.channels, layer_norm=False)
         )
 
         self.decoder = M.Sequential(
-            M.Conv2d(channels, 128, kernel_size=3, stride=1, padding=1),
-            M.PReLU(),
-            M.Conv2d(128, 512, kernel_size=3, stride=1, padding=1),
-            M.PReLU(),
+            M.ConvRelu2d(self.channels, 256, kernel_size=3, stride=1, padding=1),
+            M.ConvRelu2d(256, 512, kernel_size=3, stride=1, padding=1),
             PixelShuffle(scale=2),
-            M.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            M.PReLU(),
+            M.ConvRelu2d(128, 256, kernel_size=3, stride=1, padding=1),
             PixelShuffle(scale=2),
-            M.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            M.PReLU(),
+            M.ConvRelu2d(64, 64, kernel_size=3, stride=1, padding=1),
             M.Conv2d(64, self.out_channels, kernel_size=3, stride=1, padding=1)
         )
 
     def forward(self, frames):
         b, t, c, h, w = frames.shape
         enc_feat = self.encoder(frames.reshape(b*t, c, h, w))
-        _, c, h, w = enc_feat.shape
-        enc_feat = self.transformer({'x':enc_feat, 'b': b, 'c': c})['x']
+        enc_feat = self.transformer({"x":enc_feat, "t":t, "b":b})['x'] # [bt,c,h,w]
         enc_feat = self.decoder(enc_feat)
         return enc_feat.reshape(b, t, self.out_channels, h*self.upscale_factor, w*self.upscale_factor)
 

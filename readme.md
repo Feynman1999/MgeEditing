@@ -26,6 +26,8 @@ MgeEditing is an open source image and video editing toolbox based on MegEngine.
 ### High
 * 配置 lr_config， 通过optimizer进行手动设置
 
+* 加入位置编码
+
 ### Mid
 * 完善init_weights(pretrained)的设计
 

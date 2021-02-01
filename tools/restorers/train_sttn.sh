@@ -1,2 +1,2 @@
-python tools/train.py configs/restorers/STTN/sttn_v1_reds.py --gpuids 0,1,2,3,4,5 -d
+python tools/train.py configs/restorers/STTN/sttn_v1_reds.py --gpuids 3,4 -d
 # nohup python -u tools/train.py configs/restorers/RSDN/rsdn_v4_2.py --gpuids 0,1,3,9 -d >> /data/home/songtt/chenyuxiang/3.log 2>&1 &

@@ -49,6 +49,7 @@ class SRManyToOneDataset(BaseVSRDataset):
             assert is_tuple_of(eval_part, str)
 
         self.data_infos = self.load_annotations()
+        self.logger.info("SRManyToOneDataset dataset load ok,   mode: {}   len:{}".format(self.mode, len(self.data_infos)))
 
     def load_annotations(self):
         # get keys
@@ -72,8 +73,6 @@ class SRManyToOneDataset(BaseVSRDataset):
             self.frame_num[key.split("/")[0]] += 1
 
         data_infos = []
-        is_first = 1
-        now_deal = 0
         for key in keys:
             # do some checks, to make sure the key for LR and HR is same. 
             if self.mode in ("train", "eval"):
@@ -99,8 +98,7 @@ class SRManyToOneDataset(BaseVSRDataset):
                         LRkey = key,
                         HRkey = key,
                         max_frame_num=self.frame_num[key.split("/")[0]],
-                        num_input_frames=self.num_input_frames,
-                        is_first = is_first
+                        num_input_frames=self.num_input_frames
                     )
                 )
             elif self.mode == "test":
@@ -109,18 +107,9 @@ class SRManyToOneDataset(BaseVSRDataset):
                         lq_path = self.lq_folder,
                         LRkey = key,
                         max_frame_num=self.frame_num[key.split("/")[0]],
-                        num_input_frames=self.num_input_frames,
-                        is_first = is_first
+                        num_input_frames=self.num_input_frames
                     )
                 )
             else:
                 raise NotImplementedError("")
-
-            # update is_first
-            now_deal += 1
-            if now_deal == self.frame_num[key.split("/")[0]]:
-                is_first = 1
-                now_deal = 0
-            else:
-                is_first = 0
         return data_infos

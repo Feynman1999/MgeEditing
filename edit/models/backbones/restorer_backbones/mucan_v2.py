@@ -27,7 +27,7 @@ class PixelShuffle(M.Module):
         # N C s s iH iW
         output = inputs.reshape(N, oC, self.scale, self.scale, iH, iW)
         # N C iH s iW s
-        output = F.dimshuffle(output, (0, 1, 4, 3, 5, 2))
+        output = output.transpose(0, 1, 4, 3, 5, 2)
         # N C oH oW
         output = output.reshape(N, oC, oH, oW)
         return output
@@ -57,7 +57,7 @@ class CARBBlock(M.Module):
         w = self.linear(w)
         w = F.expand_dims(w, axis = -1)
         w = F.expand_dims(w, axis = -1)  # [B,C,1,1]
-        x1 = F.concat((x1, F.multiply(x1, w)), axis = 1)  # [B, 2C, H, W]
+        x1 = F.concat((x1, F.mul(x1, w)), axis = 1)  # [B, 2C, H, W]
         del w
         x1 = self.conv2(x1)  # [B, C, H, W]
         return self.lrelu(x + x1)

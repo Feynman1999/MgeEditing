@@ -18,7 +18,7 @@ def train_generator_batch(image, label, *, gm, netG, netloss):
     netG.train()
     with gm:
         output = netG(image)
-        loss = netloss(output[:, 1:4, ...], label[:, 1:4, ...]) / (3 * (h/64) * (w/64) * (B/4) ) # same with official edvr           4*3*256*256
+        loss = netloss(output, label) / (T * (h/64) * (w/64) * (B/4) ) # same with official edvr   4*3*256*256
         gm.backward(loss)
         if dist.is_distributed():
             loss = dist.functional.all_reduce_sum(loss) / dist.get_world_size()
@@ -71,8 +71,9 @@ class STTNRestorer(BaseModel):
         # B,t,c,h,w = LR_tensor.shape
         # for i in range(B):
         #     for t in range(t):
-        #         imwrite(tensor2img(LR_tensor[i,t], min_max=(-0.5, 0.5)), file_path="LR_{}_{}.png".format(i, t))
-        #         imwrite(tensor2img(HR_tensor[i,t], min_max=(-0.5, 0.5)), file_path="HR_{}_{}.png".format(i, t))
+        #         print(i, t)
+        #         imwrite(tensor2img(LR_tensor[i,t], min_max=(-0.5, 0.5)), file_path="./haha/LR_{}_{}.png".format(i, t))
+        #         imwrite(tensor2img(HR_tensor[i,t], min_max=(-0.5, 0.5)), file_path="./haha/HR_{}_{}.png".format(i, t))
         loss = train_generator_batch(LR_tensor, HR_tensor, gm=self.gms['generator'], netG=self.generator, netloss=self.pixel_loss)
         # for key,_ in self.generator.encoder.named_parameters():
         #     print(key)
@@ -88,7 +89,7 @@ class STTNRestorer(BaseModel):
     def test_step(self, batchdata, **kwargs):
         start_time = time.time()
         lq = batchdata['lq']
-        gt = batchdata['gt'][0]  # [B,C,H,W]
+        gt = batchdata['gt'][0]
         lq_paths = [item[0] for item in batchdata['lq_path']]
         num_input_frames =  batchdata['num_input_frames'][0] # 3
 
@@ -106,16 +107,6 @@ class STTNRestorer(BaseModel):
         self.GT_frame_dict[ids[ num_input_frames//2 ]] = gt
 
         lq_tensor = mge.tensor(lq, dtype="float32") # [B,T,C,H,W]
-        '''
-        lq_tensor_list = []
-        dh = h // 2
-        dw = w // 2
-        # 将HW拆分到T上
-        for i in range(2):
-            for j in range(2):
-                lq_tensor_list.append(lq_tensor[..., (dh * i):(dh * i +dh), (dw * j) : (dw * j + dw)])
-        lq_tensor = F.concat(lq_tensor_list, axis = 1)  # [B, 4(3+T'), C, h, w]
-        '''
         output = test_generator_batch(lq_tensor, netG = self.generator)
         G = output[0, ...]  # [T,3,H,W]
         # get result
@@ -147,10 +138,10 @@ class STTNRestorer(BaseModel):
             for key in sorted(self.HR_frame_dict.keys()):
                 print("average {} times for {}".format(len(self.HR_frame_dict[key]), key))
                 G_key = np.mean(np.stack(self.HR_frame_dict[key], axis=0), axis=0, keepdims=False)
-                G_key = tensor2img(G_key, min_max=(-0.5, 0.5))
+                G_key = tensor2img(G_key, min_max=(0, 1))
                 # G_key_y = bgr2ycbcr(G_key, y_only=True)
                 gt = self.GT_frame_dict[key]
-                gt = tensor2img(gt, min_max=(-0.5, 0.5))
+                gt = tensor2img(gt, min_max=(0, 1))
                 # gt_y = bgr2ycbcr(gt, y_only=True)
 
                 eval_result = dict()
