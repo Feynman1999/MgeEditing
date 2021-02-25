@@ -52,7 +52,7 @@ def train_generator_batch(image, label, *, gm, netG, netloss):
         for i in range(T):
             res.append(netG.do_upsample(forward_hiddens[i], backward_hiddens[T-i-1]))
         res = F.stack(res, axis = 1) # [B,T,3,H,W]
-        loss = netloss(res+biup, label) * 256 #  * 4*3*256*256  # same with official edvr   目标5.5
+        loss = netloss(res+biup, label)  #  * 4*3*256*256  # same with official edvr   目标5.5
         gm.backward(loss)
         if dist.is_distributed():
             loss = dist.functional.all_reduce_sum(loss) / dist.get_world_size()

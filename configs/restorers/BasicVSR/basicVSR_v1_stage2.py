@@ -1,4 +1,4 @@
-exp_name = 'basicVSR_v1'
+exp_name = 'basicVSR_v1_stage2'
 
 scale = 4
 
@@ -65,13 +65,13 @@ eval_pipeline = [
     dict(type='Collect', keys=['lq', 'gt', 'num_input_frames', 'LRkey', 'lq_path'])
 ]
 
-dataroot = "/data/home/songtt/chenyuxiang/datasets/REDS/train"
+dataroot = "/work_base/datasets/REDS/train"
 repeat_times = 1
 eval_part =  ('000', '011', '015', '020')  # tuple(map(str, range(240,242)))
 data = dict(
     # train
-    samples_per_gpu=2,
-    workers_per_gpu=4,
+    samples_per_gpu=4,
+    workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
@@ -79,7 +79,7 @@ data = dict(
             type=train_dataset_type,
             lq_folder= dataroot + "/train_sharp_bicubic/X4",
             gt_folder= dataroot + "/train_sharp",
-            num_input_frames=9,
+            num_input_frames=11,
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part)),
@@ -98,9 +98,9 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=2 * 1e-4, betas=(0.9, 0.999), weight_decay = 2e-6,
+optimizers = dict(generator=dict(type='Adam', lr=1 * 1e-4, betas=(0.9, 0.999), weight_decay = 2e-6,
                                 paramwise_cfg=dict(custom_keys={
-                                                    'flownet': dict(lr_mult=0)})))
+                                                    'flownet': dict(lr_mult=0.1)})))
 
 # learning policy
 total_epochs = 400 // repeat_times
@@ -109,7 +109,7 @@ total_epochs = 400 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=1)
 log_config = dict(
-    interval=1,
+    interval=5,
     hooks=[
         dict(type='TextLoggerHook', average_length=50),
         # dict(type='VisualDLLoggerHook')
@@ -118,7 +118,7 @@ evaluation = dict(interval=2000000, save_image=False, multi_process=False, ensem
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = None
+load_from = f'./workdirs/{exp_name}/epoch_3'
 resume_from = None
 resume_optim = True
 workflow = 'train'
@@ -128,5 +128,5 @@ log_level = 'INFO'
 """
 分成两个阶段
 1.三个epoch，flow部分不更新，其余固定2 * 1e-4
-2.flow也更新，lr multi 0.1，其余初始2 * 1e-4，后面余弦退伙
+2.flow也更新，lr multi 0.1，其余初始2 * 1e-4，后面step或者余弦退伙
 """

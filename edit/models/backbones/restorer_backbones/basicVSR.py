@@ -92,46 +92,50 @@ class Spynet(M.Module):
 
 
 class ResBlock(M.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, activation='lrelu'):
+    def __init__(self, in_channels, out_channels, kernel_size=3):
         super(ResBlock, self).__init__()
+        self.conv1 = M.ConvRelu2d(in_channels, out_channels, kernel_size=kernel_size, stride=1, padding=(kernel_size//2))
+        self.conv2 = M.Conv2d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=(kernel_size//2))
+        self.init_weights()
 
-        if activation == 'relu':
-            self.act = M.ReLU()
-        elif activation == 'prelu':
-            self.act = M.PReLU(num_parameters=1, init=0.25)
-        elif activation == 'lrelu':
-            self.act = M.LeakyReLU(negative_slope=0.2)
-        else:
-            raise NotImplementedError("not implemented activation")
-
-        m = []
-        m.append(M.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=1, padding=(kernel_size//2)))
-        m.append(self.act)
-        m.append(M.Conv2d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=(kernel_size//2)))
-        self.body = M.Sequential(*m)
+    def init_weights(self):
+        for m in [self.conv1, self.conv2]:
+            default_init_weights(m, scale=0.1)
 
     def forward(self, x):
-        res = self.body(x)
-        res += x
-        return self.act(res)
+        identity = x
+        out = self.conv2(self.conv1(x))
+        return identity + out
 
 
 class ResBlocks(M.Module):
-    def __init__(self, channel_num, resblock_num, kernel_size=3, activation='lrelu'):
+    def __init__(self, channel_num, resblock_num, kernel_size=3):
         super(ResBlocks, self).__init__()
         self.model = M.Sequential(
-            self.make_layer(ResBlock, channel_num, resblock_num, kernel_size, activation),
+            self.make_layer(ResBlock, channel_num, resblock_num, kernel_size),
         )
 
-    def make_layer(self, block, ch_out, num_blocks, kernel_size, activation):
+    def make_layer(self, block, ch_out, num_blocks, kernel_size):
         layers = []
         for _ in range(num_blocks):
-            layers.append(block(ch_out, ch_out, kernel_size, activation))
+            layers.append(block(ch_out, ch_out, kernel_size))
         return M.Sequential(*layers)
 
     def forward(self, x):
         return self.model(x)
 
+def default_init_weights(module, scale=1, nonlinearity="relu"):
+    """
+        nonlinearity: leaky_relu
+    """
+    for m in module.modules():
+        if isinstance(m, M.Conv2d):
+            M.init.msra_normal_(m.weight, mode="fan_in", nonlinearity="relu")
+            m.weight *= scale
+            if m.bias is not None:
+                M.init.zeros_(m.bias)
+        else:
+            pass
 
 class PixelShuffle(M.Module):
     def __init__(self, scale=2):
@@ -152,41 +156,85 @@ class PixelShuffle(M.Module):
         output = output.reshape(N, oC, oH, oW)
         return output
 
+class PixelShufflePack(M.Module):
+    def __init__(self, in_channels, out_channels, scale_factor, upsample_kernel):
+        super(PixelShufflePack, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.scale_factor = scale_factor
+        self.upsample_kernel = upsample_kernel
+
+        self.upsample_conv = M.Conv2d(
+            self.in_channels,
+            self.out_channels * scale_factor * scale_factor,
+            self.upsample_kernel,
+            padding=(self.upsample_kernel - 1) // 2)
+        self.pixel_shuffle = PixelShuffle(scale_factor)
+
+        self.init_weights()
+
+    def init_weights(self):
+        """Initialize weights for PixelShufflePack.
+        """
+        default_init_weights(self, 1, nonlinearity="leaky_relu")
+
+    def forward(self, x):
+        """Forward function for PixelShufflePack.
+        Args:
+            x (Tensor): Input tensor with shape (n, c, h, w).
+        Returns:
+            Tensor: Forward results.
+        """
+        x = self.upsample_conv(x)
+        x = self.pixel_shuffle(x)
+        return x
 
 @BACKBONES.register_module()
 class BasicVSR(M.Module):
-    def __init__(self, in_channels, out_channels, hidden_channels, blocknums, upscale_factor, pretrained_optical_flow_path):
+    def __init__(self, in_channels, out_channels, hidden_channels, blocknums, reconstruction_blocks, upscale_factor, pretrained_optical_flow_path):
         super(BasicVSR, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.hidden_channels = hidden_channels
         self.blocknums = blocknums
         self.upscale_factor = upscale_factor
+        self.reconstruction_blocknums = reconstruction_blocks
 
         self.flownet = Spynet(num_layers=6, pretrain_ckpt_path=pretrained_optical_flow_path)
-        self.conv = Conv2d(in_channels=self.hidden_channels + self.in_channels, out_channels=self.hidden_channels, kernel_size=3, stride=1, padding=1)
-        self.feature_extracter = ResBlocks(channel_num=hidden_channels, resblock_num=self.blocknums)
-        self.upsampler =  M.Sequential(
-            M.ConvRelu2d(2*self.hidden_channels, self.hidden_channels, kernel_size=3, stride=1, padding=1),
-            M.ConvRelu2d(self.hidden_channels, 256, kernel_size=3, stride=1, padding=1),
-            M.ConvRelu2d(256, 512, kernel_size=3, stride=1, padding=1),
-            PixelShuffle(scale=2),
-            M.ConvRelu2d(128, 256, kernel_size=3, stride=1, padding=1),
-            PixelShuffle(scale=2),
-            M.ConvRelu2d(64, 64, kernel_size=3, stride=1, padding=1),
-            M.Conv2d(64, self.out_channels, kernel_size=3, stride=1, padding=1)
-        )
+
+        self.conv1 = M.ConvRelu2d(in_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
+        self.conv2 = ResBlocks(channel_num=hidden_channels, resblock_num=3)
+        self.conv3 = M.ConvRelu2d(2*hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
+        self.feature_extracter = ResBlocks(channel_num=hidden_channels, resblock_num=blocknums)
+
+        self.conv4 = M.ConvRelu2d(2*hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
+        self.reconstruction = ResBlocks(channel_num=hidden_channels, resblock_num=reconstruction_blocks)
+        self.upsample1 = PixelShufflePack(hidden_channels, hidden_channels, 2, upsample_kernel=3)
+        self.upsample2 = PixelShufflePack(hidden_channels, 64, 2, upsample_kernel=3)
+        self.conv_hr = M.Conv2d(64, 64, 3, 1, 1)  # need init
+        self.conv_last = M.Conv2d(64, out_channels, 3, 1, 1)
+        self.lrelu = M.LeakyReLU(negative_slope=0.01)
 
     def do_upsample(self, forward_hidden, backward_hidden):
         # 处理某一个time stamp的Hidden
-        return self.upsampler(F.concat([forward_hidden, backward_hidden], axis=1))  # [B, 3, 4*H, 4*W]
+        out = self.conv4(F.concat([forward_hidden, backward_hidden], axis=1))
+        out = self.reconstruction(out)
+        out = self.lrelu(self.upsample1(out))
+        out = self.lrelu(self.upsample2(out))
+        out = self.lrelu(self.conv_hr(out))
+        out = self.conv_last(out)
+        return out # [B, 3, 4*H, 4*W]
 
     def forward(self, hidden, flow, now_frame):
         # hidden [B, C, H, W]
+        now_frame = self.conv2(self.conv1(now_frame)) # [B, C, H, W]
         mid_hidden = backwarp(hidden, flow) # [B, C, H, W]
-        mid_hidden = self.conv(F.concat([now_frame, mid_hidden], axis=1))
+        mid_hidden = self.conv3(F.concat([now_frame, mid_hidden], axis=1))
         mid_hidden = self.feature_extracter(mid_hidden)
         return mid_hidden
 
     def init_weights(self, pretrained):
         self.flownet.init_weights()
+        for m in [self.conv1, self.conv3, self.conv4]:
+            default_init_weights(m)
+        default_init_weights(self.conv_hr, nonlinearity='leaky_relu')
