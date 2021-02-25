@@ -78,6 +78,7 @@ class DefaultOptimizerConstructor:
         self.paramwise_cfg = {} if paramwise_cfg is None else paramwise_cfg
         self.base_lr = optimizer_cfg.get('lr', None)
         self.base_wd = optimizer_cfg.get('weight_decay', None)
+        self.logger = get_root_logger()
         self._validate_cfg()
 
     def _validate_cfg(self):
@@ -125,87 +126,79 @@ class DefaultOptimizerConstructor:
             module (): The module to be added.
             prefix (str): The prefix of the module
         """
-        pass
-        # # get param-wise options
-        # custom_keys = self.paramwise_cfg.get('custom_keys', {})
-        # # first sort with alphabet order and then sort with reversed len of str
-        # sorted_keys = sorted(sorted(custom_keys.keys()), key=len, reverse=True)
-        # #TODO: 可以放到函数外面
+        # get param-wise options
+        custom_keys = self.paramwise_cfg.get('custom_keys', {})
+        # first sort with alphabet order and then sort with reversed len of str
+        sorted_keys = sorted(sorted(custom_keys.keys()), key=len, reverse=True)
+        #TODO: 可以放到函数外面
         # bias_lr_mult = self.paramwise_cfg.get('bias_lr_mult', 1.)
         # bias_decay_mult = self.paramwise_cfg.get('bias_decay_mult', 1.)
         # norm_decay_mult = self.paramwise_cfg.get('norm_decay_mult', 1.)
         # dwconv_decay_mult = self.paramwise_cfg.get('dwconv_decay_mult', 1.)
-        # bypass_duplicate = self.paramwise_cfg.get('bypass_duplicate', False)
-        #
-        # # special rules for norm layers and depth-wise conv layers
+        bypass_duplicate = self.paramwise_cfg.get('bypass_duplicate', False)
+        
+        # special rules for norm layers and depth-wise conv layers
         # is_norm = isinstance(module, (_BatchNorm, _InstanceNorm, GroupNorm, LayerNorm))
         # is_dwconv = (
         #     isinstance(module, torch.nn.Conv2d)
         #     and module.in_channels == module.groups)
-        #
-        # for name, param in module.named_parameters(recurse=False):
-        #     param_group = {'params': [param]}
-        #     if not param.requires_grad:
-        #         params.append(param_group)
-        #         continue
-        #     if bypass_duplicate and self._is_in(param_group, params):
-        #         warnings.warn(f'{prefix} is duplicate. It is skipped since '
-        #                       f'bypass_duplicate={bypass_duplicate}')
-        #         continue
-        #     # if the parameter match one of the custom keys, ignore other rules
-        #     is_custom = False
-        #     for key in sorted_keys:
-        #         if key in f'{prefix}.{name}':
-        #             is_custom = True
-        #             lr_mult = custom_keys[key].get('lr_mult', 1.)
-        #             param_group['lr'] = self.base_lr * lr_mult
-        #             # TODO: 这里应该对self.base_lr做一个validate，保证其不为none
-        #             if self.base_wd is not None:
-        #                 decay_mult = custom_keys[key].get('decay_mult', 1.)
-        #                 param_group['weight_decay'] = self.base_wd * decay_mult
-        #             break
-        #     if not is_custom:
-        #         # bias_lr_mult affects all bias parameters except for norm.bias
-        #         if name == 'bias' and not is_norm:
-        #             param_group['lr'] = self.base_lr * bias_lr_mult
-        #         # apply weight decay policies
-        #         if self.base_wd is not None:
-        #             # norm decay
-        #             if is_norm:
-        #                 param_group[
-        #                     'weight_decay'] = self.base_wd * norm_decay_mult
-        #             # depth-wise conv
-        #             elif is_dwconv:
-        #                 param_group[
-        #                     'weight_decay'] = self.base_wd * dwconv_decay_mult
-        #             # bias lr and decay
-        #             elif name == 'bias':
-        #                 param_group[
-        #                     'weight_decay'] = self.base_wd * bias_decay_mult
-        #     params.append(param_group)
-        #
-        # for child_name, child_mod in module.named_children():
-        #     child_prefix = f'{prefix}.{child_name}' if prefix else child_name
-        #     self.add_params(params, child_mod, prefix=child_prefix)
+        
+        for name, param in module.named_parameters(recursive=False):
+            param_group = {'params': [param]}
+
+            if bypass_duplicate and self._is_in(param_group, params):
+                self.logger.info(f'{prefix} is duplicate. It is skipped since '
+                              f'bypass_duplicate={bypass_duplicate}')
+                continue
+            
+            # if the parameter match one of the custom keys, ignore other rules
+            is_custom = False
+            for key in sorted_keys:
+                if key in f'{prefix}.{name}':
+                    is_custom = True
+                    self.logger.info("custom key: {} is in {}.{}".format(key, prefix, name))
+                    lr_mult = custom_keys[key].get('lr_mult', 1.)
+                    param_group['lr'] = self.base_lr * lr_mult
+                    # TODO: 这里应该对self.base_lr做一个validate，保证其不为none
+                    if self.base_wd is not None:
+                        decay_mult = custom_keys[key].get('decay_mult', 1.)
+                        param_group['weight_decay'] = self.base_wd * decay_mult
+                    break
+            if not is_custom:
+                pass
+                # # bias_lr_mult affects all bias parameters except for norm.bias
+                # if name == 'bias' and not is_norm:
+                #     param_group['lr'] = self.base_lr * bias_lr_mult
+                # # apply weight decay policies
+                # if self.base_wd is not None:
+                #     # norm decay
+                #     if is_norm:
+                #         param_group['weight_decay'] = self.base_wd * norm_decay_mult
+                #     # depth-wise conv
+                #     elif is_dwconv:
+                #         param_group['weight_decay'] = self.base_wd * dwconv_decay_mult
+                #     # bias lr and decay
+                #     elif name == 'bias':
+                #         param_group['weight_decay'] = self.base_wd * bias_decay_mult
+            params.append(param_group)
+        
+        for child_name, child_module in module.named_children():
+            child_prefix = f'{prefix}.{child_name}' if prefix else child_name
+            self.add_params(params, child_module, prefix=child_prefix)
 
     def __call__(self, model):
         optimizer_cfg = self.optimizer_cfg.copy()
         # if no paramwise option is specified, just use the global setting
-        logger = get_root_logger()
         param_nums = 0
         for item in model.parameters():
             param_nums += np.prod(np.array(item.shape))
-        logger.info("model: {} 's total parameter nums: {}".format(model.__class__.__name__, param_nums))
+        self.logger.info("model: {} 's total parameter nums: {}".format(model.__class__.__name__, param_nums))
         
         if not self.paramwise_cfg:
             optimizer_cfg['params'] = model.parameters()
-            return build_from_cfg(optimizer_cfg, OPTIMIZERS)
         else:
-            raise NotImplementedError("paramwise_cfg not implemented now")
-
             # set param-wise lr and weight decay recursively
             params = []
             self.add_params(params, model)
             optimizer_cfg['params'] = params
-
-            return build_from_cfg(optimizer_cfg, OPTIMIZERS)
+        return build_from_cfg(optimizer_cfg, OPTIMIZERS)

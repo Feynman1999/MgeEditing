@@ -1,9 +1,5 @@
 """
-Unsupervised Depth-Aware Meshflow for supervised video super resolution
-
-mask
-segmentation
-meshflow
+mucan
 """
 exp_name = 'udam_baseline'
 

@@ -14,11 +14,11 @@ class L1Loss(M.Module):
 class CharbonnierLoss(M.Module):
     def __init__(self, reduction="mean"):
         super(CharbonnierLoss, self).__init__()
-        self.eps = 1e-6
+        self.eps = 1e-8
         self.reduction = reduction
         assert self.reduction in ("sum", "mean")
 
-    def forward(self, X, Y):
+    def calc(self, X, Y):
         diff = X - Y
         error = F.sqrt(diff * diff + self.eps)
         if self.reduction == "mean":
@@ -26,6 +26,17 @@ class CharbonnierLoss(M.Module):
         else:
             loss = F.sum(error)
         return loss
+
+    def forward(self, X, Y):
+        if isinstance(X, list):
+            ans =  [self.calc(x,y) for x,y in zip(X,Y)]
+            if self.reduction == "mean":
+                loss = sum(ans) / len(ans)
+            else:
+                loss = sum(ans)
+            return loss
+        else:
+            return self.calc(X,Y)
 
 
 @LOSSES.register_module()

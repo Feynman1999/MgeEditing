@@ -20,7 +20,7 @@ class EpochBasedRunner(BaseRunner):
         for i, data_batch in enumerate(data_loader):
             self._inner_iter = i
             self.call_hook('before_train_iter')
-            self.losses = self.model.train_step(data_batch)
+            self.losses = self.model.train_step(data_batch, self._epoch)
             self.call_hook('after_train_iter')
             self._iter += 1
 

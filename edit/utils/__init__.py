@@ -9,6 +9,7 @@ from .img import tensor2img, imnormalize, imdenormalize, imflip_, bboxflip_, imr
 from .logger import get_root_logger, get_logger
 from .video import images2video
 from .average_pool import AVERAGE_POOL
+from .flow_viz import flow_to_image
 
 __all__ = [
     'Registry', 'build_from_cfg',

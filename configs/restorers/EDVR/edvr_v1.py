@@ -1,4 +1,4 @@
-exp_name = 'mucan_v3'
+exp_name = 'edvr_v1'
 
 scale = 4
 frames = 7
@@ -14,7 +14,8 @@ model = dict(
         output_nc = 3,
         upscale_factor = scale,
         blocknums1 = 5,
-        blocknums2 = 10),
+        blocknums2 = 12,
+        non_local = False),
     pixel_loss=dict(type='L1Loss'))
 
 # model training and testing settings
@@ -81,37 +82,38 @@ test_pipeline = [
     dict(type='Collect', keys=['lq'])
 ]
 
-
-dataroot = "/home/aistudio/work/datasets"
+dataroot = "/home/megstudio/dataset"
 repeat_times = 1
-eval_part = ("26", )
+eval_part = None
 data = dict(
     # train
-    samples_per_gpu=8,
-    workers_per_gpu=3,
+    samples_per_gpu=6,
+    workers_per_gpu=7,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
         dataset=dict(
             type=train_dataset_type,
-            lq_folder= dataroot + "/mge/train/LR",
-            gt_folder= dataroot + "/mge/train/HR",
+            lq_folder= dataroot + "/game1/train_png",
+            gt_folder= dataroot + "/game1/train_png",
             num_input_frames=frames,
             pipeline=train_pipeline,
             scale=scale,
-            eval_part = eval_part)),
+            eval_part = eval_part,
+            LR_symbol = "_down4x.mp4")),
     # eval
     eval_samples_per_gpu=1,
     eval_workers_per_gpu=0,
     eval=dict(
         type=eval_dataset_type,
-        lq_folder= dataroot + "/mge/train/LR",
-        gt_folder= dataroot + "/mge/train/HR",
+        lq_folder= dataroot + "/game1/train_png",
+        gt_folder= dataroot + "/game1/train_png",
         num_input_frames = frames,
         pipeline=eval_pipeline,
         scale=scale,
         mode="eval",
-        eval_part = eval_part),
+        eval_part = eval_part,
+        LR_symbol = "_down4x.mp4"),
     # test
     test_samples_per_gpu=1,
     test_workers_per_gpu=4,
@@ -125,14 +127,14 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=8/32 * 1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=0.06*1e-4, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 100 // repeat_times
 
 # hooks
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
-checkpoint_config = dict(interval=total_epochs // 50)
+checkpoint_config = dict(interval=total_epochs // 100)
 log_config = dict(
     interval=300,
     hooks=[
@@ -140,7 +142,7 @@ log_config = dict(
         # dict(type='VisualDLLoggerHook')
     ])
 visual_config = None
-evaluation = dict(interval=30000, save_image=True)
+evaluation = dict(interval=20000000, save_image=True)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'

@@ -8,3 +8,5 @@ from .mucan_v2 import MUCANV2
 from .rbpn import RBPN
 from .mucan import MUCAN
 from .sttn import STTN
+from .efc import EFC
+from .basicVSR import Spynet, BasicVSR

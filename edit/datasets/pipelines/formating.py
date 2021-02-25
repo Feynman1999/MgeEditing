@@ -13,9 +13,10 @@ class ImageToTensor(object):
         to_float32 (bool): Whether convert numpy image array to np.float32
             before converted to tensor. Default: True.
     """
-    def __init__(self, keys, to_float32=True):
+    def __init__(self, keys, to_float32=True, do_not_stack = False):
         self.keys = keys
         self.to_float32 = to_float32
+        self.do_not_stack = do_not_stack
 
     def __call__(self, results):
         """Call function.
@@ -74,9 +75,10 @@ class FramesToTensor(ImageToTensor):
                     v = v.astype(np.float32)
                 if len(v.shape) == 3:
                     results[key][idx] = v.transpose(2, 0, 1)
-            results[key] = np.stack(results[key], axis=0)
-            if results[key].shape[0] == 1:
-                results[key] = np.squeeze(results[key], axis=0)  # 如果只有一帧则变成图片
+            if not self.do_not_stack:
+                results[key] = np.stack(results[key], axis=0)
+                if results[key].shape[0] == 1:
+                    results[key] = np.squeeze(results[key], axis=0)  # 如果只有一帧则变成图片
         return results
 
 

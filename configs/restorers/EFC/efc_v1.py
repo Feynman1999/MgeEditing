@@ -1,24 +1,38 @@
 """
-use transformer
+Every Frame Counts - Content-Aware video super resolution with transformer
+目标： PSNR on REDS4  31.5
 
-train:  select 5 frames  (1, 3, 5, 7, 9, 11) sample
+block size: 9*8  for 180*320 (REDS dataset)
 
-eval and test:   both neighbor and distant are used(5 + x), and some frames are averaged many times
+training: (REDS dataset)
+0. pre-deal optical flow for all training dataset
 
+1. Select sub frames and sub class area(slic method) with different params(e.g. 30 in 100 frames, and n_segments or compactness)
+
+2. forward and backward training
+
+eval / test: 
+0. pre-deal optical flow for all eval / test dataset
+
+1. Select the same class area as long as possible (blocks), and to make sure that all blocks in 100 frames will be selected at least once
+
+2. forward
+
+3. Average the results by blocks
 """
-exp_name = 'sttn_baseline'
+exp_name = 'efc_baseline'
 
 scale = 4
 
 # model settings
 model = dict(
-    type='STTNRestorer',
+    type='EFCRestorer', # STTNRestorer  EFCRestorer
     generator=dict(
-        type='STTN',
+        type='EFC', # STTN  EFC
         in_channels=3,
         out_channels=3,
         channels = 8,
-        layers = 8,
+        layers = 6,
         heads = 4,
         upscale_factor = scale,
         layer_norm = False),
@@ -35,8 +49,7 @@ eval_dataset_type = 'SRManyToManyDataset'
 test_dataset_type = 'SRManyToManyDataset'
 
 train_pipeline = [
-    dict(type='STTN_REDS_GenerateFrameIndices', interval_list=[1, 5, 9, 13, 17], gap = 0),
-    # 加入color jitter
+    dict(type='STTN_REDS_GenerateFrameIndices', interval_list=[1], gap = 0),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
@@ -47,14 +60,15 @@ train_pipeline = [
         io_backend='disk',
         key='gt',
         flag='unchanged'),
-    dict(type='PairedRandomCrop', gt_patch_size=[108 * 4, 192 * 4]),
+    # dict(type='PairedRandomCrop', gt_patch_size=[108 * 4, 192 * 4]),
+    dict(type='MinimumBoundingBox_ByOpticalFlow', blocksizes = [9, 8], n_segments = (80, 120), compactness = (10, 20)),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='horizontal'),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='vertical'),
-    dict(type='RandomTransposeHW', keys=['lq', 'gt'], transpose_ratio=0),
-    dict(type='FramesToTensor', keys=['lq', 'gt']),
-    dict(type='Collect', keys=['lq', 'gt', 'lq_path', 'gt_path'])
+    dict(type='RandomTransposeHW', keys=['lq', 'gt'], transpose_ratio=0.5),
+    dict(type='FramesToTensor', keys=['lq', 'gt'], do_not_stack=True),
+    dict(type='Collect', keys=['lq', 'gt', 'lq_path', 'gt_path', 'transpose'])
 ]
 
 eval_pipeline = [
@@ -80,7 +94,7 @@ repeat_times = 1
 eval_part =  ('000', '011', '015', '020')  # tuple(map(str, range(240,242)))
 data = dict(
     # train
-    samples_per_gpu=3,
+    samples_per_gpu=1,
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
@@ -89,7 +103,7 @@ data = dict(
             type=train_dataset_type,
             lq_folder= dataroot + "/train_sharp_bicubic/X4",
             gt_folder= dataroot + "/train_sharp",
-            num_input_frames=5,
+            num_input_frames=17,
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part)),
@@ -108,7 +122,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.4 * 1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=4 * 1e-4, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 400 // repeat_times
@@ -117,16 +131,16 @@ total_epochs = 400 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=3)
 log_config = dict(
-    interval=10,
+    interval=1,
     hooks=[
         dict(type='TextLoggerHook', average_length=50),
         # dict(type='VisualDLLoggerHook')
     ])
-evaluation = dict(interval=2000, save_image=False, multi_process=False, ensemble=False)
+evaluation = dict(interval=20000000, save_image=False, multi_process=False, ensemble=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20210201_172055/checkpoints/epoch_21'
+load_from = None # f'./workdirs/{exp_name}/20210201_172055/checkpoints/epoch_21'
 resume_from = None
 resume_optim = True
 workflow = 'train'
