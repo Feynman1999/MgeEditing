@@ -9,8 +9,9 @@ model = dict(
         type='BasicVSR',
         in_channels=3,
         out_channels=3,
-        hidden_channels = 72,
-        blocknums = 30,
+        hidden_channels = 80,
+        blocknums = 24,
+        reconstruction_blocks = 10,
         upscale_factor = scale,
         pretrained_optical_flow_path = "./workdirs/spynet/spynet-sintel-final.mge"),
     pixel_loss=dict(type='CharbonnierLoss', reduction="mean"))
@@ -79,7 +80,7 @@ data = dict(
             type=train_dataset_type,
             lq_folder= dataroot + "/train_sharp_bicubic/X4",
             gt_folder= dataroot + "/train_sharp",
-            num_input_frames=11,
+            num_input_frames=21,
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part)),
@@ -111,14 +112,16 @@ checkpoint_config = dict(interval=1)
 log_config = dict(
     interval=5,
     hooks=[
-        dict(type='TextLoggerHook', average_length=50),
+        dict(type='TextLoggerHook', average_length=100),
         # dict(type='VisualDLLoggerHook')
     ])
-evaluation = dict(interval=2000000, save_image=False, multi_process=False, ensemble=False)
+evaluation = dict(interval=800, save_image=False, multi_process=False, ensemble=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/epoch_3'
+load_from = f'./workdirs/basicVSR_v1_stage2/20210226_113645/checkpoints/epoch_10' # f'./workdirs/basicVSR_v1_stage1/20210225_145856/checkpoints/epoch_2' # 
+# 2(fix flownet) +  1+7+10(batch 12, lr: 4*1e-4  for batch8)    +  8 (batch 16,  lr:2*1e-4  for batch8)
+#               +  5 (batch 16, lr:0.4*1e-4 for batch8)     
 resume_from = None
 resume_optim = True
 workflow = 'train'
@@ -127,6 +130,6 @@ workflow = 'train'
 log_level = 'INFO'
 """
 分成两个阶段
-1.三个epoch，flow部分不更新，其余固定2 * 1e-4
+1.5000iters，flow部分不更新，其余固定2 * 1e-4
 2.flow也更新，lr multi 0.1，其余初始2 * 1e-4，后面step或者余弦退伙
 """

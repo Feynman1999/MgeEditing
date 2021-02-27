@@ -51,7 +51,7 @@ class Basic(M.Module):
 class Spynet(M.Module):
     def __init__(self, num_layers, pretrain_ckpt_path = None):
         super(Spynet, self).__init__()
-        assert num_layers in (6, )
+        assert num_layers in (5, 6)
         self.pretrain_ckpt_path = pretrain_ckpt_path
         basic_list = [ Basic(intLevel) for intLevel in range(num_layers) ] # 在本次VSR任务中，最多只会用到0~4
         self.netBasic = M.Sequential(*basic_list)
@@ -66,15 +66,15 @@ class Spynet(M.Module):
         tenFirst = [self.preprocess(tenFirst)]
         tenSecond = [self.preprocess(tenSecond)]
 
-        # 构造图像金字塔,最多加5个，也就是一共6个
-        for intLevel in range(5):
-            if tenFirst[0].shape[2] > 4 or tenFirst[0].shape[3] > 4:
+        # 构造图像金字塔,最多加4个，也就是一共最多5个
+        for intLevel in range(4):
+            if tenFirst[0].shape[2] >= 8 or tenFirst[0].shape[3] >= 8:
                 tenFirst.insert(0, F.avg_pool2d(inp=tenFirst[0], kernel_size=2, stride=2))
                 tenSecond.insert(0, F.avg_pool2d(inp=tenSecond[0], kernel_size=2, stride=2))
         
         tenFlow = F.zeros([tenFirst[0].shape[0], 2, int(math.floor(tenFirst[0].shape[2] / 2.0)), int(math.floor(tenFirst[0].shape[3] / 2.0))])
         # print(len(tenFirst))
-        for intLevel in range(len(tenFirst)): # 5 for training (4*4, 8*8, 16*16, 32*32, 64*64)       6 for test  (6*10, 12*20, 24*40, 48*80, 96*160, 192*320)
+        for intLevel in range(len(tenFirst)): # 5 for training (4*4, 8*8, 16*16, 32*32, 64*64)  5 for test  (11*20, 22*40, 45*80, 90*160, 180*320)
             tenUpsampled = F.nn.interpolate(inp=tenFlow, scale_factor=2, mode='BILINEAR', align_corners=True) * 2.0
             if tenUpsampled.shape[2] != tenFirst[intLevel].shape[2]:
                 tenUpsampled = pad_H(tenUpsampled)
@@ -200,11 +200,12 @@ class BasicVSR(M.Module):
         self.upscale_factor = upscale_factor
         self.reconstruction_blocknums = reconstruction_blocks
 
-        self.flownet = Spynet(num_layers=6, pretrain_ckpt_path=pretrained_optical_flow_path)
+        self.flownet = Spynet(num_layers=5, pretrain_ckpt_path=pretrained_optical_flow_path)
 
         self.conv1 = M.ConvRelu2d(in_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
         self.conv2 = ResBlocks(channel_num=hidden_channels, resblock_num=3)
         self.conv3 = M.ConvRelu2d(2*hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
+        # 丰富conv3 比如搞成attention  搞成4*4小块  4个head  四层layer
         self.feature_extracter = ResBlocks(channel_num=hidden_channels, resblock_num=blocknums)
 
         self.conv4 = M.ConvRelu2d(2*hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
@@ -234,7 +235,7 @@ class BasicVSR(M.Module):
         return mid_hidden
 
     def init_weights(self, pretrained):
-        self.flownet.init_weights()
+        self.flownet.init_weights(strict=False)
         for m in [self.conv1, self.conv3, self.conv4]:
             default_init_weights(m)
         default_init_weights(self.conv_hr, nonlinearity='leaky_relu')

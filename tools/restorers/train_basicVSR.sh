@@ -1,1 +1,1 @@
-python tools/train.py configs/restorers/BasicVSR/basicVSR_v1_stage1.py --gpuids 0,1,2 -d
+python tools/train.py configs/restorers/BasicVSR/basicVSR_v1_stage2.py --gpuids 0,1,2,3 -d

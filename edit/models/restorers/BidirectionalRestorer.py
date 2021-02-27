@@ -10,7 +10,7 @@ from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de
 from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
-
+from tqdm import tqdm
 
 def get_bilinear(image):
     B,T,C,h,w = image.shape
@@ -58,8 +58,42 @@ def train_generator_batch(image, label, *, gm, netG, netloss):
             loss = dist.functional.all_reduce_sum(loss) / dist.get_world_size()
     return loss
 
-def test_generator_batch(image, pre_S, pre_D, pre_S_hat, pre_D_hat, pre_SD, *, netG):
-    pass
+def test_generator_batch(image, *, netG):
+    # image: [1,100,3,180,320]
+    # 要不要进行pad?
+    B,T,_,h,w = image.shape
+    biup = get_bilinear(image)
+    netG.eval()
+    forward_hiddens = []
+    backward_hiddens = []
+    res = []
+    # cal forward hiddens
+    hidden = F.zeros((B, netG.hidden_channels, h, w))
+    for i in tqdm(range(T)):
+        now_frame = image[:, i, ...]
+        if i==0:
+            flow = netG.flownet(now_frame, now_frame)
+            # print(F.max(flow), F.mean(flow))
+        else:
+            flow = netG.flownet(now_frame, image[:, i-1, ...])
+            # print(F.max(flow), F.mean(flow))
+        hidden = netG(hidden, flow, now_frame)
+        forward_hiddens.append(hidden)
+    # cal backward hiddens
+    hidden = F.zeros((B, netG.hidden_channels, h, w))
+    for i in tqdm(range(T-1, -1, -1)):
+        now_frame = image[:, i, ...]
+        if i==(T-1):
+            flow = netG.flownet(now_frame, now_frame)
+        else:
+            flow = netG.flownet(now_frame, image[:, i+1, ...])
+        hidden = netG(hidden, flow, now_frame)
+        backward_hiddens.append(hidden)
+    # do upsample for all frames
+    for i in tqdm(range(T)):
+        res.append(netG.do_upsample(forward_hiddens[i], backward_hiddens[T-i-1]))
+    res = F.stack(res, axis = 1) # [1,T,3,H,W]
+    return res+biup
 
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
@@ -96,30 +130,45 @@ class BidirectionalRestorer(BaseModel):
         self.optimizers['generator'].clear_grad()
         return loss
 
+    def get_img_id(self, key):
+        assert isinstance(key, str)
+        return int(key.split("/")[-1][:-4])
+
     def test_step(self, batchdata, **kwargs):
-        pass
+        # 在最后一帧时，统一进行处理
+        lq = batchdata['lq']  # [1,3,3,h,w]
+        gt = batchdata['gt']  # [1,3,h,w]
+        lq_paths = [item[0] for item in batchdata['lq_path']] # 3
+        now_id = self.get_img_id(lq_paths[1]) # 1对应中间帧
+        if now_id==0:
+            print("first frame: {}".format(lq_paths[1]))
+            self.LR_list = []
+            self.HR_list = []
+        
+        self.LR_list.append(mge.tensor(lq[:, 1, ...], dtype="float32")) # [1,3,h,w]
+        self.HR_list.append(gt) # numpy
+
+        if now_id == 99:
+            # 计算所有帧
+            # stack所有LR
+            print("start to forward and eval....")
+            self.HR_G = test_generator_batch(F.stack(self.LR_list, axis=1), netG=self.generator)
+        
+        return now_id == 99
 
     def cal_for_eval(self, gathered_outputs, gathered_batchdata):
-        """
-        :param gathered_outputs: list of tensor, [B,C,H,W]
-        :param gathered_batchdata: dict, include data
-        :return: eval result
-        """
-        crop_border = self.eval_cfg.crop_border
-        G = gathered_outputs[0]  # image, tensor
-        gt = gathered_batchdata['gt']  # label, numpy
-        assert list(G.shape) == list(gt.shape), "{} != {}".format(list(gt.shape), list(G.shape))
-
-        res = []
-        sample_nums = gt.shape[0]
-        for i in range(sample_nums):
-            G_i = tensor2img(G[i], min_max=(-0.5, 0.5))
-            G_i_y = bgr2ycbcr(G_i, y_only=True)
-            gt_i = tensor2img(gt[i], min_max=(-0.5, 0.5))
-            gt_i_y = bgr2ycbcr(gt_i, y_only=True)
-            eval_result = dict()
-            for metric in self.eval_cfg.metrics:
-                eval_result[metric+"_RGB"] = self.allowed_metrics[metric](G_i, gt_i, crop_border)
-                eval_result[metric+"_Y"] = self.allowed_metrics[metric](G_i_y, gt_i_y, crop_border)
-            res.append(eval_result)
-        return res
+        if gathered_outputs:
+            crop_border = self.eval_cfg.crop_border
+            assert len(self.HR_list) == 100
+            res = []
+            for i in range(len(self.HR_list)):
+                G = tensor2img(self.HR_G[0, i, ...], min_max=(0, 1))
+                gt = tensor2img(self.HR_list[i][0], min_max=(0, 1))
+                eval_result = dict()
+                for metric in self.eval_cfg.metrics:
+                    eval_result[metric+"_RGB"] = self.allowed_metrics[metric](G, gt, crop_border)
+                    # eval_result[metric+"_Y"] = self.allowed_metrics[metric](G_key_y, gt_y, crop_border)
+                res.append(eval_result)
+            return res
+        else:
+            return []

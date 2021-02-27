@@ -110,9 +110,9 @@ total_epochs = 400 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=1)
 log_config = dict(
-    interval=1,
+    interval=5,
     hooks=[
-        dict(type='TextLoggerHook', average_length=50),
+        dict(type='TextLoggerHook', average_length=100),
         # dict(type='VisualDLLoggerHook')
     ])
 evaluation = dict(interval=2000000, save_image=False, multi_process=False, ensemble=False)
