@@ -51,9 +51,11 @@ class Basic(M.Module):
 class Spynet(M.Module):
     def __init__(self, num_layers, pretrain_ckpt_path = None):
         super(Spynet, self).__init__()
-        assert num_layers in (5, 6)
+        assert num_layers in (3, 4, 5)
+        self.num_layers = num_layers
+        self.threshold = 8
         self.pretrain_ckpt_path = pretrain_ckpt_path
-        basic_list = [ Basic(intLevel) for intLevel in range(num_layers) ] # 在本次VSR任务中，最多只会用到0~4
+        basic_list = [ Basic(intLevel) for intLevel in range(num_layers) ]
         self.netBasic = M.Sequential(*basic_list)
 
     def preprocess(self, tenInput):
@@ -66,15 +68,16 @@ class Spynet(M.Module):
         tenFirst = [self.preprocess(tenFirst)]
         tenSecond = [self.preprocess(tenSecond)]
 
-        # 构造图像金字塔,最多加4个，也就是一共最多5个
-        for intLevel in range(4):
-            if tenFirst[0].shape[2] >= 8 or tenFirst[0].shape[3] >= 8:
+        for intLevel in range(self.num_layers - 1):
+            if tenFirst[0].shape[2] >= self.threshold or tenFirst[0].shape[3] >= self.threshold:
                 tenFirst.insert(0, F.avg_pool2d(inp=tenFirst[0], kernel_size=2, stride=2))
                 tenSecond.insert(0, F.avg_pool2d(inp=tenSecond[0], kernel_size=2, stride=2))
         
         tenFlow = F.zeros([tenFirst[0].shape[0], 2, int(math.floor(tenFirst[0].shape[2] / 2.0)), int(math.floor(tenFirst[0].shape[3] / 2.0))])
         # print(len(tenFirst))
-        for intLevel in range(len(tenFirst)): # 5 for training (4*4, 8*8, 16*16, 32*32, 64*64)  5 for test  (11*20, 22*40, 45*80, 90*160, 180*320)
+        for intLevel in range(len(tenFirst)): 
+            # normal:  5 for training  (4*4, 8*8, 16*16, 32*32, 64*64)  5 for test  (11*20, 22*40, 45*80, 90*160, 180*320)
+            # small:   3 for training  (16*16, 32*32, 64*64)       3 for test  (45*80, 90*160, 180*320)
             tenUpsampled = F.nn.interpolate(inp=tenFlow, scale_factor=2, mode='BILINEAR', align_corners=True) * 2.0
             if tenUpsampled.shape[2] != tenFirst[intLevel].shape[2]:
                 tenUpsampled = pad_H(tenUpsampled)
@@ -86,7 +89,7 @@ class Spynet(M.Module):
     def init_weights(self, strict=True):
         # load ckpt from path
         if self.pretrain_ckpt_path is not None:
-            print("loading pretrained model for Spynet...")
+            print("loading pretrained model for Spynet 🤡🤡🤡🤡🤡🤡...")
             state_dict = megengine.load(self.pretrain_ckpt_path)
             self.load_state_dict(state_dict, strict=strict)
 
@@ -130,7 +133,7 @@ def default_init_weights(module, scale=1, nonlinearity="relu"):
     """
     for m in module.modules():
         if isinstance(m, M.Conv2d):
-            M.init.msra_normal_(m.weight, mode="fan_in", nonlinearity="relu")
+            M.init.msra_normal_(m.weight, mode="fan_in", nonlinearity=nonlinearity)
             m.weight *= scale
             if m.bias is not None:
                 M.init.zeros_(m.bias)
@@ -191,7 +194,7 @@ class PixelShufflePack(M.Module):
 
 @BACKBONES.register_module()
 class BasicVSR(M.Module):
-    def __init__(self, in_channels, out_channels, hidden_channels, blocknums, reconstruction_blocks, upscale_factor, pretrained_optical_flow_path):
+    def __init__(self, in_channels, out_channels, hidden_channels, blocknums, reconstruction_blocks, upscale_factor, pretrained_optical_flow_path, flownet_layers = 5):
         super(BasicVSR, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -200,7 +203,7 @@ class BasicVSR(M.Module):
         self.upscale_factor = upscale_factor
         self.reconstruction_blocknums = reconstruction_blocks
 
-        self.flownet = Spynet(num_layers=5, pretrain_ckpt_path=pretrained_optical_flow_path)
+        self.flownet = Spynet(num_layers=flownet_layers, pretrain_ckpt_path=pretrained_optical_flow_path)
 
         self.conv1 = M.ConvRelu2d(in_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
         self.conv2 = ResBlocks(channel_num=hidden_channels, resblock_num=3)

@@ -18,7 +18,7 @@ model = dict(
 
 # model training and testing settings
 train_cfg = None
-eval_cfg = dict(metrics=['PSNR'], crop_border=0)
+eval_cfg = dict(metrics=['PSNR'], crop_border=0, multi_pad = 1, gap = 1)
 img_norm_cfg = dict(mean=[0, 0, 0], std=[1, 1, 1])
 
 # dataset settings
@@ -126,8 +126,3 @@ workflow = 'train'
 
 # logger
 log_level = 'INFO'
-"""
-分成两个阶段
-1.三个epoch，flow部分不更新，其余固定2 * 1e-4
-2.flow也更新，lr multi 0.1，其余初始2 * 1e-4，后面step或者余弦退伙
-"""

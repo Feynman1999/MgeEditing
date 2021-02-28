@@ -1,10 +1,18 @@
 import os
-from functools import lru_cache
 from ..registry import PIPELINES
 from edit.utils import FileClient, imfrombytes
 import numpy as np
+import pickle
 
-cache_dict = dict()
+def get_bin_path(path):
+    suffix = path.split(".")[-1]
+    bin_path = path[:-len(suffix)] + "pkl"
+    return bin_path
+
+def read_bin(bin_path):
+    with open(bin_path, 'rb') as _f:
+        img = pickle.load(_f)
+    return img
 
 @PIPELINES.register_module()
 class LoadImageFromFile(object):
@@ -27,15 +35,15 @@ class LoadImageFromFile(object):
                  flag='color',
                  channel_order='bgr',
                  save_original_img=False,
-                 use_mem = False,
+                 make_bin=False,
                  **kwargs):
         self.io_backend = io_backend
         self.key = key
         self.flag = flag
         self.save_original_img = save_original_img
         self.channel_order = channel_order
-        self.use_mem = use_mem
         self.kwargs = kwargs
+        self.make_bin = make_bin # 注意使用make_bin之前请先使用单gpu 单进程模式跑一个epoch，确保所有文件都已经创建bin
         self.file_client = None
 
     def __call__(self, results):
@@ -87,7 +95,6 @@ class LoadImageFromFileList(LoadImageFromFile):
         kwargs (dict): Args for file client.
     """
 
-    # @lru_cache(maxsize=None)
     def __call__(self, results):
         """Call function.
 
@@ -113,22 +120,19 @@ class LoadImageFromFileList(LoadImageFromFile):
         if self.save_original_img:
             ori_imgs = []
 
-        def get_cache_key(path):
-            l = path.split("/")
-            return os.path.join(l[-2], l[-1])
-
-        global cache_dict
         for filepath in filepaths:
-            if self.use_mem:
-                key = get_cache_key(filepath)
-                if cache_dict.__contains__(key):
-                    img_bytes = cache_dict.get(key)
+            if self.make_bin:
+                bin_path = get_bin_path(filepath)
+                if os.path.isfile(bin_path):
+                    img = read_bin(bin_path)
                 else:
-                    img_bytes = self.file_client.get(filepath)
-                    cache_dict[key] = img_bytes
+                    raise NotImplementedError("please make sure all pkl file exist first")
+                    # img_bytes = self.file_client.get(filepath)
+                    # img = imfrombytes(img_bytes, flag=self.flag, channel_order=self.channel_order)  # HWC, BGR
+                    # make_ndarray_bin(img, bin_path)
             else:
                 img_bytes = self.file_client.get(filepath)
-            img = imfrombytes(img_bytes, flag=self.flag)  # HWC, BGR
+                img = imfrombytes(img_bytes, flag=self.flag, channel_order=self.channel_order)  # HWC, BGR
             if img.ndim == 2:
                 img = np.expand_dims(img, axis=2)
             imgs.append(img)

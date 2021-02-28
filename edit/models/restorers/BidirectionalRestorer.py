@@ -7,6 +7,7 @@ import megengine.functional as F
 from megengine.autodiff import GradManager
 from edit.core.hook.evaluation import psnr, ssim
 from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de_multi_padding, ensemble_forward, ensemble_back
+from edit.utils import img_multi_padding, img_de_multi_padding
 from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
@@ -137,22 +138,42 @@ class BidirectionalRestorer(BaseModel):
     def test_step(self, batchdata, **kwargs):
         # 在最后一帧时，统一进行处理
         lq = batchdata['lq']  # [1,3,3,h,w]
-        gt = batchdata['gt']  # [1,3,h,w]
+        gt = batchdata['gt']  # [1,3,4*h,4*w]
         lq_paths = [item[0] for item in batchdata['lq_path']] # 3
         now_id = self.get_img_id(lq_paths[1]) # 1对应中间帧
         if now_id==0:
             print("first frame: {}".format(lq_paths[1]))
             self.LR_list = []
             self.HR_list = []
-        
-        self.LR_list.append(mge.tensor(lq[:, 1, ...], dtype="float32")) # [1,3,h,w]
+
+        # pad lq
+        _ ,_ ,origin_H, origin_W = lq[:, 1, ...].shape
+        lq = img_multi_padding(lq[:, 1, ...], padding_multi=self.eval_cfg.multi_pad, pad_method = "edge") #  edge  constant
+        self.LR_list.append(mge.tensor(lq, dtype="float32"))  # [1,3,h,w]
         self.HR_list.append(gt) # numpy
 
         if now_id == 99:
             # 计算所有帧
-            # stack所有LR
-            print("start to forward and eval....")
-            self.HR_G = test_generator_batch(F.stack(self.LR_list, axis=1), netG=self.generator)
+            print("start to forward all frames and eval....")
+            if self.eval_cfg.gap == 1:
+                self.HR_G = test_generator_batch(F.stack(self.LR_list, axis=1), netG=self.generator)
+            elif self.eval_cfg.gap == 2:
+                self.HR_G_1 = test_generator_batch(F.stack(self.LR_list[::2], axis=1), netG=self.generator)
+                self.HR_G_2 = test_generator_batch(F.stack(self.LR_list[1::2], axis=1), netG=self.generator) # [B,T,C,H,W]
+                # 交叉组成HR_G
+                res = []
+                _,T1,_,_,_ = self.HR_G_1.shape
+                _,T2,_,_,_ = self.HR_G_2.shape
+                assert T1 == T2
+                for i in range(T1):
+                    res.append(self.HR_G_1[:, i, ...])
+                    res.append(self.HR_G_2[:, i, ...])
+                self.HR_G = F.stack(res, axis=1) # [B,T,C,H,W]
+            else:
+                raise NotImplementedError("do not support eval&test gap value")
+            
+            scale = self.generator.upscale_factor
+            self.HR_G = img_de_multi_padding(self.HR_G.numpy(), origin_H=origin_H * scale, origin_W=origin_W * scale) # depad for HR_G   [B,T,C,H,W]
         
         return now_id == 99
 

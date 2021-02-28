@@ -207,7 +207,12 @@ def cal_pad_size(l, padding_multi):
     diff = padding_multi - diff
     return _half(diff)
 
-def img_multi_padding(img, padding_multi = 4, pad_value = -0.5):
+def img_multi_padding(img, padding_multi = 4, pad_value = 0, pad_method = "reflect"):
+    """
+        pad_method: reflect  edge  constant    
+    """
+    if padding_multi <= 1:
+        return img
     assert isinstance(img, np.ndarray)
     dimlen = len(img.shape)
     origin_H = img.shape[-2]
@@ -215,13 +220,13 @@ def img_multi_padding(img, padding_multi = 4, pad_value = -0.5):
     pad_H = cal_pad_size(origin_H, padding_multi)
     pad_W = cal_pad_size(origin_W, padding_multi)
     if dimlen == 5: # [B,N,C,H,W]
-        return np.pad(img, ((0,0), (0,0), (0,0), pad_H, pad_W), 'constant', constant_values=pad_value)
+        return np.pad(img, ((0,0), (0,0), (0,0), pad_H, pad_W), mode=pad_method)
     elif dimlen == 4:
-        return np.pad(img, ((0,0), (0,0), pad_H, pad_W), 'constant', constant_values=pad_value)
+        return np.pad(img, ((0,0), (0,0), pad_H, pad_W), mode=pad_method)
     elif dimlen == 3:
-        return np.pad(img, ((0,0), pad_H, pad_W), 'constant', constant_values=pad_value)
+        return np.pad(img, ((0,0), pad_H, pad_W), mode=pad_method)
     elif dimlen == 2:
-        return np.pad(img, (pad_H, pad_W), 'constant', constant_values=pad_value)
+        return np.pad(img, (pad_H, pad_W), mode=pad_method)
     else:
         raise NotImplementedError("dimlen: {} not implement".format(dimlen))
 
@@ -234,7 +239,7 @@ def img_de_multi_padding(img, origin_H, origin_W):
     paded_W = img.shape[-1]
     pad_H = _half(paded_H - origin_H)
     pad_W = _half(paded_W - origin_W)
-    if dimlen in (2, 3, 4):
+    if dimlen in (2, 3, 4, 5):
         return img[..., pad_H[0]: paded_H - pad_H[1], pad_W[0]: paded_W - pad_W[1]]
     else:
         raise NotImplementedError("dimlen: {} not implement".format(dimlen))

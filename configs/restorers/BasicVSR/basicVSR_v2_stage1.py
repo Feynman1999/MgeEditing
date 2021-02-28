@@ -1,4 +1,4 @@
-exp_name = 'basicVSR_v1_stage2'
+exp_name = 'basicVSR_v2_stage1_small'
 
 scale = 4
 
@@ -9,11 +9,12 @@ model = dict(
         type='BasicVSR',
         in_channels=3,
         out_channels=3,
-        hidden_channels = 80,
-        blocknums = 24,
-        reconstruction_blocks = 10,
+        hidden_channels = 32,
+        blocknums = 9,
+        reconstruction_blocks = 6,
         upscale_factor = scale,
-        pretrained_optical_flow_path = "./workdirs/spynet/spynet-sintel-final.mge"),
+        pretrained_optical_flow_path = "./workdirs/spynet/spynet-sintel-final.mge",
+        flownet_layers = 3),
     pixel_loss=dict(type='CharbonnierLoss', reduction="mean"))
 
 # model training and testing settings
@@ -32,13 +33,15 @@ train_pipeline = [
         type='LoadImageFromFileList',
         io_backend='disk',
         key='lq',
-        flag='unchanged'),
+        flag='unchanged',
+        make_bin=True),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
         key='gt',
-        flag='unchanged'),
-    dict(type='PairedRandomCrop', gt_patch_size=[64 * 4, 64 * 4]),
+        flag='unchanged',
+        make_bin=True),
+    dict(type='PairedRandomCrop', gt_patch_size=[96 * 4, 96 * 4]),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='horizontal'),
@@ -66,7 +69,7 @@ eval_pipeline = [
     dict(type='Collect', keys=['lq', 'gt', 'num_input_frames', 'LRkey', 'lq_path'])
 ]
 
-dataroot = "/work_base/datasets/REDS/train"
+dataroot = "/work_base/datasets/REDS/train" # "/data/home/songtt/chenyuxiang/datasets/REDS/train"
 repeat_times = 1
 eval_part =  ('000', '011', '015', '020')  # tuple(map(str, range(240,242)))
 data = dict(
@@ -80,7 +83,7 @@ data = dict(
             type=train_dataset_type,
             lq_folder= dataroot + "/train_sharp_bicubic/X4",
             gt_folder= dataroot + "/train_sharp",
-            num_input_frames=21,
+            num_input_frames=17,
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part)),
@@ -99,9 +102,9 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.00000001 * 1e-4, betas=(0.9, 0.999), weight_decay = 2e-6,
+optimizers = dict(generator=dict(type='Adam', lr=2 * 1e-4, betas=(0.9, 0.999), weight_decay = 2e-6,
                                 paramwise_cfg=dict(custom_keys={
-                                                    'flownet': dict(lr_mult=0.01)})))
+                                                    'flownet': dict(lr_mult=0)})))
 
 # learning policy
 total_epochs = 400 // repeat_times
@@ -115,13 +118,11 @@ log_config = dict(
         dict(type='TextLoggerHook', average_length=100),
         # dict(type='VisualDLLoggerHook')
     ])
-evaluation = dict(interval=1, save_image=False, multi_process=False, ensemble=False)
+evaluation = dict(interval=800, save_image=False, multi_process=False, ensemble=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/basicVSR_v1_stage2/20210228_051436/checkpoints/epoch_4' # f'./workdirs/basicVSR_v1_stage1/20210225_145856/checkpoints/epoch_2' # 
-# 2(fix flownet) +  1+7+10(batch 12, lr: 4*1e-4  for batch8)    +  8 (batch 16,  lr:2*1e-4  for batch8)
-#               +  4 (batch 16, lr:0.2*1e-4 for batch8)     
+load_from = None
 resume_from = None
 resume_optim = True
 workflow = 'train'
