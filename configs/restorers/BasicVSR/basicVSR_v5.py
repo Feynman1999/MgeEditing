@@ -1,20 +1,17 @@
-exp_name = 'basicVSR_v1_stage1'
+exp_name = 'basicVSR_last_v5'
 
 scale = 4
 
 # model settings
 model = dict(
-    type='BidirectionalRestorer',
+    type='BidirectionalRestorer_small',
     generator=dict(
-        type='BasicVSR',
+        type='BasicVSR_v5',
         in_channels=3,
         out_channels=3,
-        hidden_channels = 80,
-        blocknums = 24,
-        reconstruction_blocks = 10,
-        upscale_factor = scale,
-        pretrained_optical_flow_path = "./workdirs/spynet/spynet-sintel-final.mge"),
-    pixel_loss=dict(type='CharbonnierLoss', reduction="mean"))
+        hidden_channels = 8,
+        upscale_factor = scale),
+        pixel_loss=dict(type='L2Loss')) # L2Loss CharbonnierLoss
 
 # model training and testing settings
 train_cfg = None
@@ -27,18 +24,20 @@ eval_dataset_type = 'SRManyToManyDataset'  # 统一都用这个dataset
 test_dataset_type = 'SRManyToManyDataset'
 
 train_pipeline = [
-    dict(type='GenerateFrameIndices', interval_list=[1,2], many2many = True, index_start = 0, name_padding = True),
+    dict(type='GenerateFrameIndices', interval_list=[1], many2many = True, index_start = 0, name_padding = True),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
         key='lq',
-        flag='unchanged'),
+        flag='unchanged',
+        make_bin=True),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
         key='gt',
-        flag='unchanged'),
-    dict(type='PairedRandomCrop', gt_patch_size=[64 * 4, 64 * 4]),
+        flag='unchanged',
+        make_bin=True),
+    dict(type='PairedRandomCrop', gt_patch_size=[112 * 4, 112 * 4]),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='horizontal'),
@@ -66,12 +65,12 @@ eval_pipeline = [
     dict(type='Collect', keys=['lq', 'gt', 'num_input_frames', 'LRkey', 'lq_path'])
 ]
 
-dataroot = "/work_base/datasets/REDS/train" # "/data/home/songtt/chenyuxiang/datasets/REDS/train"
+dataroot = "/mnt/tmp/REDS/train" # "/data/home/songtt/chenyuxiang/datasets/REDS/train"
 repeat_times = 1
-eval_part =  ('000', '011', '015', '020')  # tuple(map(str, range(240,242)))
+eval_part =  tuple(map(str, range(240,270)))
 data = dict(
     # train
-    samples_per_gpu=4,
+    samples_per_gpu=1,
     workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
@@ -80,7 +79,7 @@ data = dict(
             type=train_dataset_type,
             lq_folder= dataroot + "/train_sharp_bicubic/X4",
             gt_folder= dataroot + "/train_sharp",
-            num_input_frames=21,
+            num_input_frames=17, # 15
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part)),
@@ -99,10 +98,8 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=2 * 1e-4, betas=(0.9, 0.999), weight_decay = 2e-6,
-                                paramwise_cfg=dict(custom_keys={
-                                                    'flownet': dict(lr_mult=0)})))
-
+optimizers = dict(generator=dict(type='SGD', lr=0.00000000000001)) # 2_23  1.5_12  1_10   sgd with momentum 搜最好结果，eval iter1 并且每次都保存
+# batch 8 8 1
 # learning policy
 total_epochs = 400 // repeat_times
 
@@ -115,11 +112,11 @@ log_config = dict(
         dict(type='TextLoggerHook', average_length=100),
         # dict(type='VisualDLLoggerHook')
     ])
-evaluation = dict(interval=2000000, save_image=False, multi_process=False, ensemble=False)
+evaluation = dict(interval=1, save_image=False, multi_process=False, ensemble=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = None
+load_from = f'./workdirs/{exp_name}/20210313_055329/checkpoints/epoch_12'   
 resume_from = None
 resume_optim = True
 workflow = 'train'

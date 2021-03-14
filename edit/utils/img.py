@@ -406,6 +406,13 @@ def imflip_(img, direction='horizontal'):
     else:
         return cv2.flip(img, 0, img)
 
+def flowflip_(flow, direction):
+    imflip_(flow, direction)
+    # 变负号
+    if direction == 'horizontal':
+        flow[:,:,1] *= (-1)
+    else:
+        flow[:,:,0] *= (-1)
 
 def imrotate(img,
              angle,

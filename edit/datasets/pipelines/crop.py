@@ -179,7 +179,8 @@ class PairedRandomCrop(object):
         gt_patch_size ([int, int]): cropped gt patch size.
     """
 
-    def __init__(self, gt_patch_size, fix0=False):
+    def __init__(self, gt_patch_size, fix0=False, crop_flow=False):
+        self.crop_flow = crop_flow
         if isinstance(gt_patch_size, int):
             self.gt_patch_h = gt_patch_size
             self.gt_patch_w = gt_patch_size
@@ -247,6 +248,14 @@ class PairedRandomCrop(object):
             v[top_gt:top_gt + self.gt_patch_h,
               left_gt:left_gt + self.gt_patch_w, ...] for v in results['gt']
         ]
+
+        # crop flow
+        if self.crop_flow:
+            # results['flow']    list of [h,w,2] 
+            results['flow'] = [
+                v[top:top + lq_patch_h, left:left + lq_patch_w, ...]
+                for v in results['flow']
+            ]
 
         if not lq_is_list:
             results['lq'] = results['lq'][0]

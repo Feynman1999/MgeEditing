@@ -10,3 +10,5 @@ from .mucan import MUCAN
 from .sttn import STTN
 from .efc import EFC
 from .basicVSR import Spynet, BasicVSR
+from .basicVSR_v5 import BasicVSR_v5
+from .basicVSR_edge import BasicVSR_edge

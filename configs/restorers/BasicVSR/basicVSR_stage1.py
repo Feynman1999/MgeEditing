@@ -1,4 +1,4 @@
-exp_name = 'basicVSR_v1_stage2'
+exp_name = 'basicVSR_track_1'
 
 scale = 4
 
@@ -9,12 +9,18 @@ model = dict(
         type='BasicVSR',
         in_channels=3,
         out_channels=3,
-        hidden_channels = 80,
+        hidden_channels = 96,
+        init_nums = 3, # 3
         blocknums = 24,
         reconstruction_blocks = 10,
         upscale_factor = scale,
-        pretrained_optical_flow_path = "./workdirs/spynet/spynet-sintel-final.mge"),
-    pixel_loss=dict(type='CharbonnierLoss', reduction="mean"))
+        pretrained_optical_flow_path = "./workdirs/spynet/spynet-sintel-final.mge",
+        flownet_layers = 4,
+        blocktype = "resblock",
+        Lambda = 1),
+    pixel_loss=dict(type='CharbonnierLoss'),
+    Fidelity_loss = None # dict(type='HeavisideLoss', t = 2)
+)
 
 # model training and testing settings
 train_cfg = None
@@ -27,18 +33,20 @@ eval_dataset_type = 'SRManyToManyDataset'  # 统一都用这个dataset
 test_dataset_type = 'SRManyToManyDataset'
 
 train_pipeline = [
-    dict(type='GenerateFrameIndices', interval_list=[1,2], many2many = True, index_start = 0, name_padding = True),
+    dict(type='GenerateFrameIndices', interval_list=[1, 2], many2many = True, index_start = 0, name_padding = True, load_flow = False),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
         key='lq',
-        flag='unchanged'),
+        flag='unchanged',
+        make_bin=True),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
         key='gt',
-        flag='unchanged'),
-    dict(type='PairedRandomCrop', gt_patch_size=[64 * 4, 64 * 4]),
+        flag='unchanged',
+        make_bin=True),
+    dict(type='PairedRandomCrop', gt_patch_size=[96 * 4, 96 * 4], crop_flow=False),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='horizontal'),
@@ -66,12 +74,12 @@ eval_pipeline = [
     dict(type='Collect', keys=['lq', 'gt', 'num_input_frames', 'LRkey', 'lq_path'])
 ]
 
-dataroot = "/work_base/datasets/REDS/train"
+dataroot = "/work_base/datasets/REDS/train"  #  "/work_base/datasets/REDS/train"
 repeat_times = 1
-eval_part =  ('000', '011', '015', '020')  # tuple(map(str, range(240,242)))
+eval_part = tuple(map(str, range(240,270)))
 data = dict(
     # train
-    samples_per_gpu=4,
+    samples_per_gpu=2,
     workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
@@ -80,18 +88,18 @@ data = dict(
             type=train_dataset_type,
             lq_folder= dataroot + "/train_sharp_bicubic/X4",
             gt_folder= dataroot + "/train_sharp",
-            num_input_frames=21,
+            num_input_frames=17,
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part)),
     # eval
-    eval_samples_per_gpu=1,
-    eval_workers_per_gpu=4,
+    eval_samples_per_gpu=10,
+    eval_workers_per_gpu=5,
     eval=dict(
         type=eval_dataset_type,
         lq_folder= dataroot + "/train_sharp_bicubic/X4",
         gt_folder= dataroot + "/train_sharp",
-        num_input_frames=3,
+        num_input_frames=1,
         pipeline=eval_pipeline,
         scale=scale,
         mode="eval",
@@ -99,9 +107,9 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=0.00000001 * 1e-4, betas=(0.9, 0.999), weight_decay = 2e-6,
+optimizers = dict(generator=dict(type='Adam', lr=2 * 1e-4, betas=(0.9, 0.999),
                                 paramwise_cfg=dict(custom_keys={
-                                                    'flownet': dict(lr_mult=0.01)})))
+                                                    'flownet': dict(lr_mult=0)})))
 
 # learning policy
 total_epochs = 400 // repeat_times
@@ -110,18 +118,16 @@ total_epochs = 400 // repeat_times
 lr_config = dict(policy='Step', step=[total_epochs // 10], gamma=0.7)
 checkpoint_config = dict(interval=1)
 log_config = dict(
-    interval=5,
+    interval=3,
     hooks=[
-        dict(type='TextLoggerHook', average_length=100),
+        dict(type='TextLoggerHook', average_length=50),
         # dict(type='VisualDLLoggerHook')
     ])
-evaluation = dict(interval=1, save_image=False, multi_process=False, ensemble=False)
+evaluation = dict(interval=10000, save_image=False, multi_process=False, ensemble=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/basicVSR_v1_stage2/20210228_051436/checkpoints/epoch_4' # f'./workdirs/basicVSR_v1_stage1/20210225_145856/checkpoints/epoch_2' # 
-# 2(fix flownet) +  1+7+10(batch 12, lr: 4*1e-4  for batch8)    +  8 (batch 16,  lr:2*1e-4  for batch8)
-#               +  4 (batch 16, lr:0.2*1e-4 for batch8)     
+load_from = None # "./workdirs/basicVSR_v2_stage2_small/20210302_235819/checkpoints/epoch_8"
 resume_from = None
 resume_optim = True
 workflow = 'train'

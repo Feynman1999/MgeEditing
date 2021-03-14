@@ -87,7 +87,14 @@ class SRManyToManyDataset(BaseVSRDataset):
                     )
                 )
             elif self.mode == "test":
-                raise NotImplementedError("not support test now")
+                data_infos.append(
+                    dict(
+                        lq_path = self.lq_folder,
+                        LRkey = key,
+                        max_frame_num = self.frame_num[key.split("/")[0]],                   
+                        num_input_frames = self.num_input_frames
+                    )
+                )
             else:
                 raise NotImplementedError("")
         return data_infos

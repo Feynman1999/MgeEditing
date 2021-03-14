@@ -84,9 +84,9 @@ class EpochBasedRunner(BaseRunner):
 
         time.sleep(0.05)  # wait for some hooks like loggers to finish
 
-        if workflow == 'test':
-            save_path = osp.join(self.work_dir, "test_results")
-            data_loaders[0].dataset.test_aggre(save_path)  # for video or match or others, we need to aggre the result at last
+        # if workflow == 'test':
+        #     save_path = osp.join(self.work_dir, "test_results")
+        #     data_loaders[0].dataset.test_aggre(save_path)  # for video or other tasks, we need to aggre the result at last
         
         self.call_hook('after_run')
 

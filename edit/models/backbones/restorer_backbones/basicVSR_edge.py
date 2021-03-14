@@ -7,6 +7,27 @@ from edit.models.common import ResBlocks, ShuffleV2Block, MobileNeXt, default_in
 from edit.models.builder import BACKBONES
 import math
 
+class SDBlock(M.Module):
+    def __init__(self, channel_nums):
+        super(SDBlock, self).__init__()
+        self.netS = M.Sequential(
+            M.ConvRelu2d(channel_nums, channel_nums, 3, 1, 1),
+            Conv2d(channel_nums, channel_nums, 3, 1, 1)
+        )
+        self.netD = M.Sequential(
+            M.ConvRelu2d(channel_nums, channel_nums, 3, 1, 1),
+            Conv2d(channel_nums, channel_nums, 3, 1, 1)
+        )
+        self.init_weights()
+
+    def forward(self, S, D):
+        SUM = self.netS(S) + self.netD(D)
+        return S + SUM, D + SUM
+
+    def init_weights(self):
+        for m in [self.netS, self.netD]:
+            default_init_weights(m, scale=0.1)
+
 backwarp_tenGrid = {}
 
 def pad_W(x):
@@ -50,37 +71,6 @@ class Basic(M.Module):
     def forward(self, tenInput):
         return self.netBasic(tenInput)
 
-class Basic_CA(M.Module):
-    def __init__(self, intLevel):
-        super(Basic_CA, self).__init__()
-        self.netBasic = M.Sequential(
-            Conv2d(in_channels=8, out_channels=16, kernel_size=7, stride=1, padding=3), # 8=3+3+2
-            MobileNeXt(16, 16, kernel_size=5),
-            MobileNeXt(16, 16, kernel_size=5),
-            MobileNeXt(16, 16, kernel_size=5),
-            Conv2d(in_channels=16, out_channels=2, kernel_size=7, stride=1, padding=3)
-        )
-
-    def forward(self, tenInput):
-        return self.netBasic(tenInput)
-
-class Basic_Shuffle(M.Module):
-    def __init__(self, intLevel):
-        super(Basic_Shuffle, self).__init__()
-        
-        self.netBasic = M.Sequential(
-            Conv2d(in_channels=8, out_channels=32, kernel_size=7, stride=1, padding=3), # 8=3+3+2
-            M.ReLU(),
-            # 连续3个32 kernel = 3
-            ShuffleV2Block(inp = 16, oup=32, mid_channels=16, ksize=3, stride=1),
-            ShuffleV2Block(inp = 16, oup=32, mid_channels=16, ksize=3, stride=1),
-            ShuffleV2Block(inp = 16, oup=32, mid_channels=16, ksize=3, stride=1),
-            Conv2d(in_channels=32, out_channels=2, kernel_size=5, stride=1, padding=2)
-        )
-
-    def forward(self, tenInput):
-        return self.netBasic(tenInput)
-
 class Spynet(M.Module):
     def __init__(self, num_layers, pretrain_ckpt_path = None, blocktype = None):
         super(Spynet, self).__init__()
@@ -110,8 +100,8 @@ class Spynet(M.Module):
         return F.concat([tenRed, tenGreen, tenBlue], axis=1) # [B,3,H,W]
 
     def forward(self, tenFirst, tenSecond):
-        tenFirst = [tenFirst]
-        tenSecond = [tenSecond]
+        tenFirst = [self.preprocess(tenFirst)]
+        tenSecond = [self.preprocess(tenSecond)]
 
         for intLevel in range(self.num_layers - 1):
             if tenFirst[0].shape[2] >= self.threshold or tenFirst[0].shape[3] >= self.threshold:
@@ -196,7 +186,7 @@ class PixelShufflePack(M.Module):
         return x
 
 @BACKBONES.register_module()
-class BasicVSR(M.Module):
+class BasicVSR_edge(M.Module):
     def __init__(self, in_channels, 
                         out_channels, 
                         hidden_channels,
@@ -208,7 +198,7 @@ class BasicVSR(M.Module):
                         flownet_layers = 5,
                         blocktype = "resblock",
                         Lambda = 0.002):
-        super(BasicVSR, self).__init__()
+        super(BasicVSR_edge, self).__init__()
         assert blocktype in ("resblock", "shuffleblock", "MobileNeXt")
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -220,23 +210,30 @@ class BasicVSR(M.Module):
 
         self.flownet = Spynet(num_layers=flownet_layers, pretrain_ckpt_path=pretrained_optical_flow_path, blocktype = blocktype)
 
-        self.conv1 = M.ConvRelu2d(in_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
-        self.conv2 = ResBlocks(channel_num=hidden_channels, resblock_num=init_nums, blocktype=blocktype)
+        self.conv_s = M.ConvRelu2d(in_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init 
+        self.conv_e = M.ConvRelu2d(in_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
+        self.conv_rgb = M.ConvRelu2d(in_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
+        
         self.border_mode = "REPLICATE"
-        self.feature_extracter = ResBlocks(channel_num=hidden_channels, resblock_num=blocknums, blocktype=blocktype)
+        SDBlocks = []
+        for _ in range(blocknums):
+            SDBlocks.append(SDBlock(hidden_channels))
+        self.SDBlocks = M.Sequential(*SDBlocks)  # 处理s 和 e
+        
         self.reconstruction = ResBlocks(channel_num=hidden_channels, resblock_num=reconstruction_blocks, blocktype=blocktype)
-        self.conv3 = M.ConvRelu2d(2*hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
-        self.conv4 = M.ConvRelu2d(2*hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
+        self.conv31 = M.ConvRelu2d(2*hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
+        self.conv32 = M.ConvRelu2d(2*hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
+        self.conv4 = M.ConvRelu2d(5*hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
         
         self.upsample1 = PixelShufflePack(hidden_channels, hidden_channels, 2, upsample_kernel=3)
-        self.upsample2 = PixelShufflePack(hidden_channels, 64, 2, upsample_kernel=3)
-        self.conv_hr = M.Conv2d(64, 64, 3, 1, 1)  # need init
+        self.upsample2 = PixelShufflePack(hidden_channels, hidden_channels, 2, upsample_kernel=3)
+        self.conv_hr = M.Conv2d(hidden_channels, 64, 3, 1, 1)  # need init
         self.conv_last = M.Conv2d(64, out_channels, 3, 1, 1)
-        self.lrelu = M.LeakyReLU(negative_slope=0.01)
+        self.lrelu = M.LeakyReLU(negative_slope=0.05)
 
-    def do_upsample(self, forward_hidden, backward_hidden):
+    def do_upsample(self, forward_hidden, backward_hidden, rgb_fea):
         # 处理某一个time stamp的Hidden
-        out = self.conv4(F.concat([forward_hidden, backward_hidden], axis=1))
+        out = self.conv4(F.concat([forward_hidden, backward_hidden, rgb_fea], axis=1))
         out = self.reconstruction(out)
         out = self.lrelu(self.upsample1(out))
         out = self.lrelu(self.upsample2(out))
@@ -244,17 +241,28 @@ class BasicVSR(M.Module):
         out = self.conv_last(out)
         return out # [B, 3, 4*H, 4*W]
 
-    def forward(self, hidden, flow, now_frame):
-        # hidden [B, C, H, W]
-        now_frame = self.conv2(self.conv1(now_frame)) # [B, C, H, W]
-        mid_hidden = backwarp(hidden, flow, self.border_mode) # [B, C, H, W]
-        mid_hidden = self.conv3(F.concat([now_frame, mid_hidden], axis=1))
-        mid_hidden = self.feature_extracter(mid_hidden)
-        return mid_hidden
+    def s_e_rgb(self, s, e, rgb):
+        return self.conv_s(s), self.conv_e(e), self.conv_rgb(rgb)
+
+    def aggr(self, hidden_s, hidden_e, flow, now_s, now_e):
+        # hidden [B, C, H, W]        
+        mid_hidden_s = backwarp(hidden_s, flow, self.border_mode) # [B, C, H, W]
+        mid_hidden_e = backwarp(hidden_e, flow, self.border_mode)
+        # s和s聚合
+        # e和e聚合
+        mid_hidden_s = self.conv31(F.concat([now_s, mid_hidden_s], axis=1))
+        mid_hidden_e = self.conv32(F.concat([now_e, mid_hidden_e], axis=1))
+        for i in range(self.blocknums):
+            mid_hidden_s,mid_hidden_e = self.SDBlocks[i](mid_hidden_s, mid_hidden_e)
+        return mid_hidden_s, mid_hidden_e
 
     def init_weights(self, pretrained):
         self.flownet.init_weights(strict=False)
 
-        for m in [self.conv1, self.conv3, self.conv4]:
+        for m in [self.conv_s, self.conv_e, self.conv_rgb, self.conv31, self.conv32, self.conv4]:
             default_init_weights(m)
+
         default_init_weights(self.conv_hr, nonlinearity='leaky_relu')
+    
+    def forward(x):
+        return x

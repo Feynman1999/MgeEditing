@@ -1,7 +1,7 @@
 import numpy as np
 import os.path as osp
 from ..registry import PIPELINES
-from edit.utils import imflip_, bboxflip_, img_shelter
+from edit.utils import imflip_, bboxflip_, img_shelter, flowflip_
 
 
 @PIPELINES.register_module()
@@ -76,6 +76,13 @@ class RandomTransposeHW(object):
                         tmp_bbox[0], tmp_bbox[1] = tmp_bbox[1], tmp_bbox[0]
                         tmp_bbox[2], tmp_bbox[3] = tmp_bbox[3], tmp_bbox[2]
                         results[key] = tmp_bbox
+                elif key in ('flow'):
+                    assert isinstance(results[key], list)
+                    tmp = []
+                    for item in results[key]:
+                        item1 = item.transpose(1,0,2)
+                        tmp.append(-1 * np.stack([item1[:,:,1], item1[:, :, 0]], axis=2))
+                    results[key] = tmp
                 else:
                     if isinstance(results[key], list):
                         results[key] = [v.transpose(1, 0, 2) for v in results[key]]
@@ -138,11 +145,15 @@ class Flip(object):
                     for v in results[key]:
                         if key in ('bbox', 'bboxes'):
                             bboxflip_(v, self.direction, self.Len)
+                        elif key in ('flow'):
+                            flowflip_(v, self.direction)
                         else:
                             imflip_(v, self.direction)
                 else:
                     if key in ('bbox', 'bboxes'):
                         bboxflip_(results[key], self.direction, self.Len)
+                    elif key in ('flow'):
+                        raise NotImplementedError("not implemented flow for just one frame")
                     else:
                         imflip_(results[key], self.direction)
 
@@ -334,11 +345,13 @@ class GenerateFrameIndices(object):
         Added or modified keys:  lq_path, gt_path, interval
     """
 
-    def __init__(self, interval_list, many2many = False, index_start = 0, name_padding = True): # default is REDS dataset
+    def __init__(self, interval_list, many2many = False, index_start = 0, name_padding = True, load_flow = False): # default is REDS dataset
         self.interval_list = interval_list
         self.many2many = many2many
         self.index_start = index_start
         self.name_padding = name_padding
+        self.load_flow = load_flow
+        self.flow_dir = "/work_base/datasets/REDS/train/train_sharp_bicubic/X4_RAFT_sintel"
 
     def __call__(self, results):
         """Call function.
@@ -392,6 +405,18 @@ class GenerateFrameIndices(object):
         results['lq_path'] = lq_paths
         results['gt_path'] = gt_paths
         results['interval'] = interval
+
+        if self.load_flow:
+            flows = []
+            flow_paths = [
+                osp.join(self.flow_dir, clip_name, str(v).zfill(padding_length)+"_"+ str(v+1).zfill(padding_length) + ".npy")
+                for v in neighbor_list[:-1]
+            ]
+            # load npy
+            for flowpath in flow_paths:
+                flows.append(np.load(flowpath))
+            results['flow'] = flows
+            
         return results
 
     def __repr__(self):

@@ -18,4 +18,19 @@ def get_xy_ctr_np(score_size):
     xy_ctr = mge.tensor(xy_list.astype(np.float32))
     return xy_ctr
 
-print(get_xy_ctr_np(5))
+def pixel_un_shuffle(inputs):
+    """
+        [b,c,h,w]  -> [b,4c,h//2, w//2]
+    """
+    b,c,h,w = inputs.shape
+    x = inputs.transpose(0, 2, 1, 3) # [B, H, C, W]
+    x = x.reshape(b, h//2, 2*c, w)
+    x = x.transpose(0, 1, 3, 2) # [B, h//2, w, 2*c]
+    x = x.reshape(b, h//2, w//2, 4*c)   
+    return x.transpose(0, 3, 1, 2)
+
+x = np.arange(0, 8)
+x = mge.tensor(x).reshape(1,2,2,2)
+print(x)
+y = pixel_un_shuffle(x)
+print(y)

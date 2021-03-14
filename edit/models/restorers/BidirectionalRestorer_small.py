@@ -7,11 +7,11 @@ import megengine.functional as F
 from megengine.autodiff import GradManager
 from edit.core.hook.evaluation import psnr, ssim
 from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de_multi_padding, ensemble_forward, ensemble_back
-from edit.utils import img_multi_padding, img_de_multi_padding, flow_to_image
 from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
 from tqdm import tqdm
+from megengine.jit import trace
 
 def get_bilinear(image):
     B,T,C,h,w = image.shape
@@ -21,71 +21,102 @@ def get_bilinear(image):
 def train_generator_batch(image, label, *, gm, netG, netloss):
     B,T,_,h,w = image.shape
     biup = get_bilinear(image)
+    # np_weight = [0,-1,0,-1,4,-1,0,-1,0]  # (1,1,3,3)
+    # conv_weight = mge.tensor(np.array(np_weight).astype(np.float32)).reshape(1,1,3,3)
+    # HR_mask = F.mean(label, axis=2, keepdims=False) # [B,T,H,W]       对T是做depthwise
+    # HR_mask = HR_mask.reshape(B*T, 1, 4*h, 4*w)
+    # HR_mask = F.conv2d(HR_mask, conv_weight, padding=1) # 
+    # HR_mask = (F.abs(HR_mask) > 0.1).astype("float32") # [B*T, 1, H, W]
+    # HR_mask = HR_mask.reshape(B, T, 1, 4*h, 4*w)
+    # HR_mask = 1 + HR_mask * 0.1
+    HR_mask = 1
     netG.train()
     with gm:
         forward_hiddens = []
         backward_hiddens = []
         res = []
-        hidden = F.zeros((2*B, netG.hidden_channels, h, w))
+        # 对所有的image提取特征
+        image = image.reshape(B*T, 3, h, w)
+        image = netG.rgb(image).reshape(B, T, -1, h, w)
+        # T=0
+        now_frame = image[:, 0, ...]
+        hidden = now_frame
+        forward_hiddens.append(now_frame)
+        for i in range(1,T):
+            now_frame = image[:, i, ...]
+            hidden = netG.aggr(F.concat([hidden, now_frame], axis=1))
+            forward_hiddens.append(hidden)
+        # T=-1
+        now_frame = image[:, T-1, ...]
+        hidden = now_frame
+        backward_hiddens.append(now_frame)
+        for i in range(T-2, -1, -1):
+            now_frame = image[:, i, ...]
+            hidden = netG.aggr(F.concat([hidden, now_frame], axis=1))
+            backward_hiddens.append(hidden)
+        # do upsample for all frames
         for i in range(T):
-            now_frame = F.concat([image[:, i, ...], image[:, T-i-1, ...]], axis=0)
-            if i==0:
-                flow = netG.flownet(now_frame, now_frame)
-            else:
-                ref = F.concat([image[:, i-1, ...], image[:, T-i, ...]], axis=0)
-                flow = netG.flownet(now_frame, ref)
-            hidden = netG(hidden, flow, now_frame)
-            forward_hiddens.append(hidden[0:B, ...])
-            backward_hiddens.append(hidden[B:2*B, ...])
-        for i in range(T):
-            res.append(netG.do_upsample(forward_hiddens[i], backward_hiddens[T-i-1]))
+            res.append(netG.upsample(F.concat([forward_hiddens[i], backward_hiddens[T-i-1]], axis=1)))
+
         res = F.stack(res, axis = 1) # [B,T,3,H,W]
-        loss = netloss(res+biup, label)
+        res = res+biup
+        loss = netloss(res, label, HR_mask)
+        # 加上edge损失
+        # 探测label的edge map
         gm.backward(loss)
         if dist.is_distributed():
             loss = dist.functional.all_reduce_sum(loss) / dist.get_world_size()
     return loss
 
 def test_generator_batch(image, *, netG):
-    # image: [1,100,3,180,320]
     B,T,_,h,w = image.shape
     biup = get_bilinear(image)
     netG.eval()
     forward_hiddens = []
     backward_hiddens = []
     res = []
-    hidden = F.zeros((2*B, netG.hidden_channels, h, w))
+    # 对所有的image提取特征
+    image = image.reshape(B*T, 3, h, w)
+    image = netG.rgb(image).reshape(B, T, -1, h, w)
+    # T=0
+    now_frame = image[:, 0, ...]
+    hidden = now_frame
+    forward_hiddens.append(now_frame)
+    for i in tqdm(range(1,T)):
+        now_frame = image[:, i, ...]
+        hidden = netG.aggr(F.concat([hidden, now_frame], axis=1))
+        forward_hiddens.append(hidden)
+    # T=-1
+    now_frame = image[:, T-1, ...]
+    hidden = now_frame
+    backward_hiddens.append(now_frame)
+    for i in tqdm(range(T-2, -1, -1)):
+        now_frame = image[:, i, ...]
+        hidden = netG.aggr(F.concat([hidden, now_frame], axis=1))
+        backward_hiddens.append(hidden)
+    # do upsample for all frames
     for i in tqdm(range(T)):
-        now_frame = F.concat([image[:, i, ...], image[:, T-i-1, ...]], axis=0)
-        if i==0:
-            flow = netG.flownet(now_frame, now_frame)
-        else:
-            ref = F.concat([image[:, i-1, ...], image[:, T-i, ...]], axis=0)
-            flow = netG.flownet(now_frame, ref)
-        hidden = netG(hidden, flow, now_frame)
-        forward_hiddens.append(hidden[0:B, ...])
-        backward_hiddens.append(hidden[B:2*B, ...])
-    for i in range(T):
-        res.append(netG.do_upsample(forward_hiddens[i], backward_hiddens[T-i-1]))
+        res.append(netG.upsample(F.concat([forward_hiddens[i], backward_hiddens[T-i-1]], axis=1)))
+
     res = F.stack(res, axis = 1) # [B,T,3,H,W]
-    return res + biup
+    res = res+biup
+    return res
 
 epoch_dict = {}
 
 def adjust_learning_rate(optimizer, epoch):
-    if epoch>=8 and epoch % 2 == 0  and epoch_dict.get(epoch, None) is None:
+    if epoch>=1 and epoch % 1 == 0  and epoch_dict.get(epoch, None) is None:
         epoch_dict[epoch] = True
         for param_group in optimizer.param_groups:
             param_group["lr"] = param_group["lr"] * 0.7
         print("adjust lr! , now lr: {}".format(param_group["lr"]))
-
-# TODO 可以再写一个父类，抽象一些公共方法，当大于1个模型时，代码重复了，如getimdid和test step
+    
 @MODELS.register_module()
-class BidirectionalRestorer(BaseModel):
+class BidirectionalRestorer_small(BaseModel):
     allowed_metrics = {'PSNR': psnr, 'SSIM': ssim}
 
-    def __init__(self, generator, pixel_loss, train_cfg=None, eval_cfg=None, pretrained=None, Fidelity_loss=None):
-        super(BidirectionalRestorer, self).__init__()
+    def __init__(self, generator, pixel_loss, train_cfg=None, eval_cfg=None, pretrained=None):
+        super(BidirectionalRestorer_small, self).__init__()
 
         self.train_cfg = train_cfg
         self.eval_cfg = eval_cfg
@@ -94,13 +125,9 @@ class BidirectionalRestorer(BaseModel):
         # loss
         self.pixel_loss = build_loss(pixel_loss)
 
-        if Fidelity_loss:
-            self.Fidelity_loss = build_loss(Fidelity_loss)
-        else:
-            self.Fidelity_loss = None
-
         # load pretrained
         self.init_weights(pretrained)
+
 
     def init_weights(self, pretrained=None):
         self.generator.init_weights(pretrained)
