@@ -1,9 +1,9 @@
 import numpy as np
 import megengine
 import megengine.module as M
-from megengine.module.conv import Conv2d, ConvTranspose2d
+from megengine.module.conv import Conv2d
 import megengine.functional as F
-from edit.models.common import ResBlocks, ShuffleV2Block, MobileNeXt, default_init_weights
+from edit.models.common import ResBlocks, default_init_weights
 from edit.models.builder import BACKBONES
 import math
 
@@ -164,7 +164,7 @@ class PixelShufflePack(M.Module):
         return x
 
 @BACKBONES.register_module()
-class BasicVSR(M.Module):
+class BasicVSR_Layer2(M.Module):
     def __init__(self, in_channels, 
                         out_channels, 
                         hidden_channels,
@@ -172,62 +172,65 @@ class BasicVSR(M.Module):
                         blocknums, 
                         reconstruction_blocks, 
                         upscale_factor, 
-                        pretrained_optical_flow_path, 
-                        flownet_layers = 5,
-                        blocktype = "resblock",
-                        Lambda = 0.002):
-        super(BasicVSR, self).__init__()
+                        pretrained_layer_1_path,
+                        flownet_layers = 4,
+                        blocktype = "resblock"):
+        super(BasicVSR_Layer2, self).__init__()
         assert blocktype in ("resblock", "shuffleblock", "MobileNeXt")
-        self.in_channels = in_channels
+        self.in_channels = in_channels # layer1's hidden_channels
         self.out_channels = out_channels
         self.hidden_channels = hidden_channels
         self.blocknums = blocknums
         self.upscale_factor = upscale_factor
         self.reconstruction_blocknums = reconstruction_blocks
-        self.Lambda = Lambda
-
-        self.flownet = Spynet(num_layers=flownet_layers, pretrain_ckpt_path=pretrained_optical_flow_path, blocktype = blocktype)
-
-        self.conv1 = M.ConvRelu2d(in_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
-        self.conv2 = ResBlocks(channel_num=hidden_channels, resblock_num=init_nums, blocktype=blocktype)
+        self.pretrained_layer_1_path = pretrained_layer_1_path
         self.border_mode = "REPLICATE"
-        self.feature_extracter = ResBlocks(channel_num=hidden_channels, resblock_num=blocknums, blocktype=blocktype)
-        self.reconstruction = ResBlocks(channel_num=hidden_channels, resblock_num=reconstruction_blocks, blocktype=blocktype)
-        self.conv3 = M.ConvRelu2d(2*hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
-        self.conv4 = M.ConvRelu2d(2*hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
+
+        self.flownet = Spynet(num_layers=flownet_layers, pretrain_ckpt_path=None, blocktype = blocktype) # 需要用layer1的做初始化
+
+        self.new_conv0 = M.ConvRelu2d(in_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # need init
+        self.new_conv1 = ResBlocks(channel_num=hidden_channels, resblock_num=init_nums, blocktype=blocktype) # msra init
+        self.new_conv2 = ResBlocks(channel_num=hidden_channels, resblock_num=init_nums, blocktype=blocktype) # msra init
+
+        self.new_conv3 = M.ConvRelu2d(3*hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # msra init
+        self.new_feature_extracter = ResBlocks(channel_num=hidden_channels, resblock_num=blocknums, blocktype=blocktype) # msra init
         
-        self.upsample1 = PixelShufflePack(hidden_channels, hidden_channels, 2, upsample_kernel=3)
-        self.upsample2 = PixelShufflePack(hidden_channels, 64, 2, upsample_kernel=3)
-        self.conv_hr = M.Conv2d(64, 64, 3, 1, 1)  # need init
-        self.conv_last = M.Conv2d(64, out_channels, 3, 1, 1)
+        self.new_conv4 = M.ConvRelu2d(2*hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1) # msra init
+        self.new_reconstruction = ResBlocks(channel_num=hidden_channels, resblock_num=reconstruction_blocks, blocktype=blocktype) # msra init
+
+        self.upsample1 = PixelShufflePack(hidden_channels, hidden_channels, 2, upsample_kernel=3) # 需要用layer1的做初始化
+        self.upsample2 = PixelShufflePack(hidden_channels, 64, 2, upsample_kernel=3) # 需要用layer1的做初始化
+        self.conv_hr = M.Conv2d(64, 64, 3, 1, 1)  # 需要用layer1的做初始化
+        self.conv_last = M.Conv2d(64, out_channels, 3, 1, 1) # 需要用layer1的做初始化
+        
         self.lrelu = M.LeakyReLU(negative_slope=0.01)
 
-    def do_upsample(self, forward_hidden, backward_hidden):
-        # 处理某一个time stamp的Hidden
-        out = self.conv4(F.concat([forward_hidden, backward_hidden], axis=1))
-        out = self.reconstruction(out)
+    def do_upsample(self, forward_hidden, backward_hidden, shortcut):
+        out = self.new_conv4(F.concat([forward_hidden, backward_hidden], axis=1))
+        out = self.new_reconstruction(out) + shortcut
+        # below: use original parameters
         out = self.lrelu(self.upsample1(out))
         out = self.lrelu(self.upsample2(out))
         out = self.lrelu(self.conv_hr(out))
         out = self.conv_last(out)
         return out # [B, 3, 4*H, 4*W]
 
-    def forward(self, hidden, flow, now_frame):
+    def forward(self, hidden, flow, now_frame, layer1_frame):
         # hidden [B, C, H, W]
-        now_frame = self.conv2(self.conv1(now_frame)) # [B, C, H, W]
+        now_frame = self.new_conv1(self.new_conv0(now_frame)) # [B, C, H, W]
+        layer1_frame = self.new_conv2(layer1_frame)
         mid_hidden = backwarp(hidden, flow, self.border_mode) # [B, C, H, W]
-        mid_hidden = self.conv3(F.concat([now_frame, mid_hidden], axis=1))
-        mid_hidden = self.feature_extracter(mid_hidden)
+        mid_hidden = self.new_conv3(F.concat([now_frame, mid_hidden, layer1_frame], axis=1))
+        mid_hidden = self.new_feature_extracter(mid_hidden)
         return mid_hidden
 
     def init_weights(self, pretrained):
-        self.flownet.init_weights(strict=False)
+        if self.pretrained_layer_1_path is not None:
+            print("loading pretrained model for layer2 (use layer1) 🤡🤡🤡🤡🤡🤡...")
+            state_dict = megengine.load(self.pretrained_layer_1_path) # 只加载那些匹配的
+            self.load_state_dict(state_dict, strict=strict)
+        else:
+            raise RuntimeError("layer2's some sub modules need layer1 to initialize!!!")
 
-        for m in [self.conv1, self.conv3, self.conv4]:
+        for m in [self.new_conv0, self.new_conv3, self.new_conv4]:
             default_init_weights(m)
-        default_init_weights(self.conv_hr, nonlinearity='leaky_relu')
-
-    def prepare_for_layer_2(self, forward_hidden, backward_hidden):
-        out = self.conv4(F.concat([forward_hidden, backward_hidden], axis=1))
-        out = self.reconstruction(out)
-        return out
