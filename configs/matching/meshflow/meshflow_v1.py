@@ -1,30 +1,33 @@
-exp_name = 'basicVSR_track_1'
+'''
+训练meshflow时，采用54 * 96的图片，采样相隔1，3，5，7，9，11帧的情况，
+分的格子数量为
+大level:  36*64 网格
+中level:  9*16  网格
+小level:  3*5   网格
+最后：统一resize到37 * 65的结果
+在basicVSR中，使用相邻1，5，10帧的信息的hidden（训练和测试，训练时对使用5和10帧的信息的帧，loss加权）
+'''
+exp_name = 'meshflow_v1'
 
 scale = 4
 
 # model settings
 model = dict(
-    type='BidirectionalRestorer',
+    type='MeshFlowMatching',
     generator=dict(
-        type='BasicVSR',
+        type='DeepMeshFlow',
         in_channels=3,
-        out_channels=3,
         hidden_channels = 96,
         init_nums = 3, # 3
-        blocknums = 24,
-        reconstruction_blocks = 10,
-        upscale_factor = scale,
-        pretrained_optical_flow_path = "./workdirs/spynet/spynet-sintel-final.mge",
-        flownet_layers = 4,
-        blocktype = "resblock",
-        Lambda = 1),
+        blocknums = 18,
+        blocktype = "resblock"),
     pixel_loss=dict(type='CharbonnierLoss'),
     Fidelity_loss = None # dict(type='HeavisideLoss', t = 2)
 )
 
 # model training and testing settings
 train_cfg = None
-eval_cfg = dict(metrics=['PSNR'], crop_border=0, multi_pad = 1, gap = 1)
+eval_cfg = dict(metrics=['PSNR'], crop_border=0, multi_pad = 1)
 img_norm_cfg = dict(mean=[0, 0, 0], std=[1, 1, 1])
 
 # dataset settings
@@ -127,7 +130,7 @@ evaluation = dict(interval=6000, save_image=False, multi_process=False, ensemble
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = "./workdirs/basicVSR_track_1/20210315_004951/checkpoints/epoch_1"
+load_from = None
 resume_from = None
 resume_optim = True
 workflow = 'train'

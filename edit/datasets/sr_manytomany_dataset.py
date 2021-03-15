@@ -46,10 +46,8 @@ class SRManyToManyDataset(BaseVSRDataset):
         if self.eval_part is not None:
             if self.mode == "train":
                 keys = [k for k in keys if k.split('/')[0] not in self.eval_part]
-            elif self.mode == "eval":
+            else: # eval和test都会只选择部分
                 keys = [k for k in keys if k.split('/')[0] in self.eval_part]
-            else:
-                pass
 
         self.frame_num = dict()
         for key in keys:

@@ -50,37 +50,6 @@ class Basic(M.Module):
     def forward(self, tenInput):
         return self.netBasic(tenInput)
 
-class Basic_CA(M.Module):
-    def __init__(self, intLevel):
-        super(Basic_CA, self).__init__()
-        self.netBasic = M.Sequential(
-            Conv2d(in_channels=8, out_channels=16, kernel_size=7, stride=1, padding=3), # 8=3+3+2
-            MobileNeXt(16, 16, kernel_size=5),
-            MobileNeXt(16, 16, kernel_size=5),
-            MobileNeXt(16, 16, kernel_size=5),
-            Conv2d(in_channels=16, out_channels=2, kernel_size=7, stride=1, padding=3)
-        )
-
-    def forward(self, tenInput):
-        return self.netBasic(tenInput)
-
-class Basic_Shuffle(M.Module):
-    def __init__(self, intLevel):
-        super(Basic_Shuffle, self).__init__()
-        
-        self.netBasic = M.Sequential(
-            Conv2d(in_channels=8, out_channels=32, kernel_size=7, stride=1, padding=3), # 8=3+3+2
-            M.ReLU(),
-            # 连续3个32 kernel = 3
-            ShuffleV2Block(inp = 16, oup=32, mid_channels=16, ksize=3, stride=1),
-            ShuffleV2Block(inp = 16, oup=32, mid_channels=16, ksize=3, stride=1),
-            ShuffleV2Block(inp = 16, oup=32, mid_channels=16, ksize=3, stride=1),
-            Conv2d(in_channels=32, out_channels=2, kernel_size=5, stride=1, padding=2)
-        )
-
-    def forward(self, tenInput):
-        return self.netBasic(tenInput)
-
 class Spynet(M.Module):
     def __init__(self, num_layers, pretrain_ckpt_path = None, blocktype = None):
         super(Spynet, self).__init__()
@@ -92,7 +61,6 @@ class Spynet(M.Module):
         self.blocktype = "resblock"
 
         if self.blocktype == "resblock":
-            # print("OK")
             basic_list = [ Basic(intLevel) for intLevel in range(num_layers) ]
             self.border_mode = "REPLICATE"
         elif self.blocktype == "shuffleblock":
@@ -110,8 +78,8 @@ class Spynet(M.Module):
         return F.concat([tenRed, tenGreen, tenBlue], axis=1) # [B,3,H,W]
 
     def forward(self, tenFirst, tenSecond):
-        tenFirst = [tenFirst]
-        tenSecond = [tenSecond]
+        tenFirst = [self.preprocess(tenFirst)]
+        tenSecond = [self.preprocess(tenSecond)]
 
         for intLevel in range(self.num_layers - 1):
             if tenFirst[0].shape[2] >= self.threshold or tenFirst[0].shape[3] >= self.threshold:

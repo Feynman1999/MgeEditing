@@ -32,18 +32,20 @@ test_pipeline = [
     dict(type='Collect', keys=['lq', 'num_input_frames', 'LRkey', 'lq_path'])
 ]
 
-dataroot = "/work_base/datasets/REDS/test"
+dataroot = "/mnt/tmp/REDS/train/train_sharp_bicubic" # "/work_base/datasets/REDS/test/test_sharp_bicubic"
 repeat_times = 1
+eval_part =  tuple(map(str, range(240,270)))
 data = dict(
     test_samples_per_gpu=10,
     test_workers_per_gpu=5,
     test=dict(
         type=test_dataset_type,
-        lq_folder= dataroot + "/test_sharp_bicubic/X4",
+        lq_folder= dataroot + "/X4",
         num_input_frames=1,
         pipeline=test_pipeline,
         scale=scale,
-        mode="test")
+        mode="test",
+        eval_part = eval_part)
 )
 
 # optimizer

@@ -144,7 +144,7 @@ class BidirectionalRestorer_small(BaseModel):
     def get_img_id(self, key):
         assert isinstance(key, str)
         L = key.split("/")
-        return int(L[-1][:-4]), L[-2] # id clip
+        return int(L[-1][:-4]), str(int(L[-2])-240).zfill(3) # id clip
 
     def test_step(self, batchdata, **kwargs):
         """

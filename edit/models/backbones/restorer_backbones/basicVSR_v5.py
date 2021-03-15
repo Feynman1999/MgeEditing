@@ -15,20 +15,6 @@ class SEL(M.Module):
     def forward(self, x):
         return x * F.sigmoid( self.conv(self.relu(x)) )
 
-# class GCT(M.Module):
-#     def __init__(self, num_channels, epsilon=1e-5):
-#         super(GCT, self).__init__()
-#         self.alpha = megengine.Parameter(np.ones((1, num_channels, 1, 1), dtype=np.float32))
-#         self.gamma = megengine.Parameter(np.zeros((1, num_channels, 1, 1), dtype=np.float32))
-#         self.beta = megengine.Parameter(np.zeros((1, num_channels, 1, 1), dtype=np.float32))
-#         self.epsilon = epsilon
-
-#     def forward(self, x):
-#         embedding = ((F.sum((x**2), axis=[2,3], keepdims=True) + self.epsilon)**(0.5)) * self.alpha
-#         norm = self.gamma / ((F.mean((embedding**2), axis=1, keepdims=True) + self.epsilon)**(0.5))
-#         gate = 1. + F.tanh(embedding * norm + self.beta)
-#         return x * gate
-
 def default_init_weights(module, scale=1, nonlinearity="relu"):
     """
         nonlinearity: leaky_relu

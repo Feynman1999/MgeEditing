@@ -55,7 +55,7 @@ def test_generator_batch(image, *, netG):
     backward_hiddens = []
     res = []
     hidden = F.zeros((2*B, netG.hidden_channels, h, w))
-    for i in tqdm(range(T)):
+    for i in range(T):
         now_frame = F.concat([image[:, i, ...], image[:, T-i-1, ...]], axis=0)
         if i==0:
             flow = netG.flownet(now_frame, now_frame)
@@ -73,10 +73,10 @@ def test_generator_batch(image, *, netG):
 epoch_dict = {}
 
 def adjust_learning_rate(optimizer, epoch):
-    if epoch>=8 and epoch % 2 == 0  and epoch_dict.get(epoch, None) is None:
+    if epoch>=8 and epoch % 1 == 0  and epoch_dict.get(epoch, None) is None:
         epoch_dict[epoch] = True
         for param_group in optimizer.param_groups:
-            param_group["lr"] = param_group["lr"] * 0.7
+            param_group["lr"] = param_group["lr"] * 0.8
         print("adjust lr! , now lr: {}".format(param_group["lr"]))
 
 # TODO 可以再写一个父类，抽象一些公共方法，当大于1个模型时，代码重复了，如getimdid和test step
@@ -178,7 +178,7 @@ class BidirectionalRestorer(BaseModel):
                 B,T,_,_,_ = self.HR_G.shape
                 assert B == 1
                 assert T == 100
-                for i in tqdm(range(T)):
+                for i in range(T):
                     if (i+1)%10 == 0:
                         imwrite(tensor2img(self.HR_G[0, i, ...], min_max=(0, 1)), file_path=os.path.join(save_path, f"{clip}_{str(i).zfill(8)}.png"))
 
