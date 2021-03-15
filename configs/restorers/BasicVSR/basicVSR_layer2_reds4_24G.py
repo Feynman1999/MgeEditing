@@ -50,13 +50,13 @@ train_pipeline = [
         io_backend='disk',
         key='lq',
         flag='unchanged',
-        make_bin=True),
+        make_bin=False),
     dict(
         type='LoadImageFromFileList',
         io_backend='disk',
         key='gt',
         flag='unchanged',
-        make_bin=True),
+        make_bin=False),
     dict(type='PairedRandomCrop', gt_patch_size=[96 * 4, 96 * 4], crop_flow=False),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
@@ -85,12 +85,12 @@ eval_pipeline = [
     dict(type='Collect', keys=['lq', 'gt', 'num_input_frames', 'LRkey', 'lq_path'])
 ]
 
-dataroot = "/mnt/tmp/REDS/train"  #  "/work_base/datasets/REDS/train"
+dataroot = "/data/home/songtt/chenyuxiang/datasets/REDS/train"  #  "/work_base/datasets/REDS/train"
 repeat_times = 1
 eval_part = ('000', '011', '015', '020')
 data = dict(
     # train
-    samples_per_gpu=2,
+    samples_per_gpu=1,
     workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',
@@ -99,7 +99,7 @@ data = dict(
             type=train_dataset_type,
             lq_folder= dataroot + "/train_sharp_bicubic/X4",
             gt_folder= dataroot + "/train_sharp",
-            num_input_frames=19,
+            num_input_frames=15,
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part)),
@@ -118,7 +118,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator2=dict(type='Adam', lr=1 * 1e-4, betas=(0.9, 0.999),
+optimizers = dict(generator2=dict(type='Adam', lr=1 * 1e-8, betas=(0.9, 0.999),
                                 paramwise_cfg=dict(custom_keys={
                                                     'flownet': dict(lr_mult=0.1)})))
 

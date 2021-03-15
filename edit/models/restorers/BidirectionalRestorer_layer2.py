@@ -135,6 +135,7 @@ class BidirectionalRestorer_layer2(BaseModel):
         self.init_weights(pretrained)
 
     def init_weights(self, pretrained=None):
+        print("🤡 loading for layer1")
         state_dict = megengine.load(self.generator2.pretrained_layer_1_path)
         self.generator1.load_state_dict(state_dict, strict=False)
         self.generator2.init_weights(pretrained)
@@ -185,7 +186,7 @@ class BidirectionalRestorer_layer2(BaseModel):
             print("start to forward all frames....")
             if self.eval_cfg.gap == 1:
                 self.LR_list = F.concat(self.LR_list, axis=0) # [100, 3,h,w]
-                self.HR_G = test_generator_batch(F.expand_dims(self.LR_list, axis=0), netG=self.generator)
+                self.HR_G = test_generator_batch(F.expand_dims(self.LR_list, axis=0), netG1=self.generator1, netG2=self.generator2)
             elif self.eval_cfg.gap == 2:
                 raise NotImplementedError("not implement gap != 1 now")
                 # self.HR_G_1 = test_generator_batch(F.stack(self.LR_list[::2], axis=1), netG=self.generator)

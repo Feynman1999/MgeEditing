@@ -228,7 +228,7 @@ class BasicVSR_Layer2(M.Module):
         if self.pretrained_layer_1_path is not None:
             print("loading pretrained model for layer2 (use layer1) 🤡🤡🤡🤡🤡🤡...")
             state_dict = megengine.load(self.pretrained_layer_1_path) # 只加载那些匹配的
-            self.load_state_dict(state_dict, strict=strict)
+            self.load_state_dict(state_dict, strict=False)
         else:
             raise RuntimeError("layer2's some sub modules need layer1 to initialize!!!")
 
