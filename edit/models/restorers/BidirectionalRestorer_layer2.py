@@ -136,7 +136,7 @@ class BidirectionalRestorer_layer2(BaseModel):
 
     def init_weights(self, pretrained=None):
         print("🤡 loading for layer1")
-        state_dict = megengine.load(self.generator2.pretrained_layer_1_path)
+        state_dict = mge.load(self.generator2.pretrained_layer_1_path)
         self.generator1.load_state_dict(state_dict, strict=False)
         self.generator2.init_weights(pretrained)
 
@@ -203,7 +203,7 @@ class BidirectionalRestorer_layer2(BaseModel):
             else:
                 raise NotImplementedError("do not support eval&test gap value")
             
-            scale = self.generator.upscale_factor
+            scale = self.generator2.upscale_factor
             # get numpy
             self.HR_G = img_de_multi_padding(self.HR_G.numpy(), origin_H=origin_H * scale, origin_W=origin_W * scale) # depad for HR_G   [B,T,C,H,W]
 
