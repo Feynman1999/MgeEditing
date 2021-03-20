@@ -9,7 +9,7 @@ import math
 class SEL(M.Module):
     def __init__(self, hidden):
         super(SEL, self).__init__()
-        self.conv = M.Conv2d(hidden, hidden, 1, 1)
+        self.conv = M.Conv2d(hidden, hidden, 3, 1, padding=1)
         self.relu = M.ReLU()
 
     def forward(self, x):
@@ -29,14 +29,14 @@ def default_init_weights(module, scale=1, nonlinearity="relu"):
             pass
 
 class IMDModule(M.Module):
-    def __init__(self, c1= 20, c2=12, c3=4, in_channels=12, distillation_rate=0.5):
+    def __init__(self, in_channels, c1= 20, c2=12, c3=4, distillation_rate=0.5):
         super(IMDModule, self).__init__()
         self.distilled_channels = int(in_channels * distillation_rate)
         self.remaining_channels = int(in_channels - self.distilled_channels)
         self.c1 = M.Conv2d(in_channels, c1, 3, stride=1, padding=1)
         self.c2 = M.Conv2d(c1 - self.distilled_channels, c2, 3, stride=1, padding=1)
         self.c3 = M.Conv2d(c2 - self.distilled_channels, c3, 3, stride=1, padding=1)
-        self.act = M.LeakyReLU(negative_slope=0.05)
+        self.act = M.LeakyReLU(negative_slope=0.1)
         self.c5 = M.Conv2d(2*self.distilled_channels + c3 + in_channels, in_channels, 1, stride=1, padding=0)
         self.sel =SEL(in_channels)
         # self.gct = GCT(2*self.distilled_channels + c3 + in_channels)
@@ -67,7 +67,7 @@ class Upsample(M.Module):
         self.conv_last = M.Conv2d(hidden, 3, kernel_size=3, stride=1, padding=1)
         self.conv_hr1 = M.Conv2d(hidden, hidden, kernel_size=3, stride=1, padding=1)
         self.conv_hr2 = M.Conv2d(hidden, hidden, kernel_size=3, stride=1, padding=1)
-        self.lrelu = M.LeakyReLU(negative_slope=0.05)
+        self.lrelu = M.LeakyReLU(negative_slope=0.1)
         self.init_weights()
 
     def forward(self, inputs):
@@ -98,8 +98,9 @@ class BasicVSR_v5(M.Module):
         self.hidden_channels = hidden_channels
         self.upscale_factor = upscale_factor
 
-        self.conv1 = M.Conv2d(in_channels, hidden_channels, kernel_size=3, stride=1, padding=1)
+        self.conv1 = M.Conv2d(in_channels, hidden_channels, kernel_size=5, stride=1, padding=2)
         self.feature_extracter_rgb1 = IMDModule(in_channels=hidden_channels)
+        self.feature_extracter_rgb2 = IMDModule(in_channels=hidden_channels)
         self.shirking1 = M.Conv2d(4*hidden_channels, 2*hidden_channels, kernel_size=1, stride=1, padding=0)
         self.feature_extracter_aggr1 = IMDModule(in_channels=2*hidden_channels)
         self.upsample = Upsample(hidden_channels) # need init
@@ -107,13 +108,14 @@ class BasicVSR_v5(M.Module):
     def rgb(self, x):
         x = self.conv1(x)   # [B, 12, h, w]
         x1 = self.feature_extracter_rgb1(x)
-        out = F.concat([x, x1], axis=1)
+        x2 = self.feature_extracter_rgb2(x1)
+        out = F.concat([x1, x2], axis=1)
         return out
 
     def aggr(self, x):
         x = self.shirking1(x)
-        x1 = self.feature_extracter_aggr1(x)
-        return x1
+        x2 = self.feature_extracter_aggr1(x)
+        return x2
 
     def init_weights(self, pretrained):
         pass

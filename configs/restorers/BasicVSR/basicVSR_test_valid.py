@@ -1,8 +1,12 @@
-exp_name = 'basicVSR_track1_test'
+load_path = './workdirs/basicVSR_track_1/20210318_043618/checkpoints/epoch_24'
+dataroot = "/work_base/datasets/REDS/train/train_sharp_bicubic"
+exp_name = 'basicVSR_track1_test_for_validation'
+
+# you can custom values before, for the following params do not change if you are new to this project
+###########################################################################################
 
 scale = 4
 
-# model settings
 model = dict(
     type='BidirectionalRestorer',
     generator=dict(
@@ -10,7 +14,7 @@ model = dict(
         in_channels=3,
         out_channels=3,
         hidden_channels = 96,
-        init_nums = 3, # 3
+        init_nums = 3,
         blocknums = 24,
         reconstruction_blocks = 10,
         upscale_factor = scale,
@@ -19,11 +23,11 @@ model = dict(
         blocktype = "resblock",
         Lambda = 1),
     pixel_loss=dict(type='CharbonnierLoss'),
-    Fidelity_loss = None # dict(type='HeavisideLoss', t = 2)
+    Fidelity_loss = None
 )
 # model training and testing settings
 train_cfg = None
-eval_cfg = dict(metrics=['PSNR'], crop_border=0, multi_pad = 1, gap = 1)
+eval_cfg = dict(metrics=['PSNR'], crop_border=0, multi_pad = 1, gap = 1, save_shift = 240) # save_shift is for validation (NTIRE2021), when test ,set to zero
 img_norm_cfg = dict(mean=[0, 0, 0], std=[1, 1, 1])
 
 test_dataset_type = 'SRManyToManyDataset'
@@ -40,11 +44,11 @@ test_pipeline = [
     dict(type='Collect', keys=['lq', 'num_input_frames', 'LRkey', 'lq_path'])
 ]
 
-dataroot = "/data/home/songtt/chenyuxiang/datasets/REDS/train/train_sharp_bicubic"  # "/work_base/datasets/REDS/test/test_sharp_bicubic"
+
 repeat_times = 1
 eval_part =  tuple(map(str, range(240,270)))
 data = dict(
-    test_samples_per_gpu=10,
+    test_samples_per_gpu=5,  # make sure 5 | 100, thus 1,2,5,10,20... can be set
     test_workers_per_gpu=5,
     test=dict(
         type=test_dataset_type,
@@ -56,10 +60,7 @@ data = dict(
         eval_part = eval_part)
 )
 
-# optimizer
-optimizers = dict(generator=dict(type='SGD', lr=0.00000000000001)) # 2_23  1.5_12  1_10   sgd with momentum 搜最好结果，eval iter1 并且每次都保存
-# batch 8 8 1
-# learning policy
+optimizers = dict(generator=dict(type='Adam', lr=0.00001))
 total_epochs = 400 // repeat_times
 
 # hooks
@@ -75,7 +76,7 @@ evaluation = dict(interval=1, save_image=False, multi_process=False, ensemble=Fa
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = './workdirs/basicVSR_track1/epoch_3'
+load_from = load_path
 resume_from = None
 resume_optim = True
 workflow = 'test'

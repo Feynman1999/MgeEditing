@@ -105,7 +105,7 @@ class BidirectionalRestorer(BaseModel):
     def init_weights(self, pretrained=None):
         self.generator.init_weights(pretrained)
 
-    def train_step(self, batchdata, now_epoch):
+    def train_step(self, batchdata, now_epoch, now_iter):
         LR_tensor = mge.tensor(batchdata['lq'], dtype="float32")
         HR_tensor = mge.tensor(batchdata['gt'], dtype="float32")
         loss = train_generator_batch(LR_tensor, HR_tensor, gm=self.gms['generator'], netG=self.generator, netloss=self.pixel_loss)
@@ -115,9 +115,10 @@ class BidirectionalRestorer(BaseModel):
         return loss
 
     def get_img_id(self, key):
+        shift = self.eval_cfg.get('save_shift', 0)
         assert isinstance(key, str)
         L = key.split("/")
-        return int(L[-1][:-4]), L[-2] # id clip
+        return int(L[-1][:-4]), str(int(L[-2]) - shift).zfill(3) # id, clip
 
     def test_step(self, batchdata, **kwargs):
         """
@@ -133,6 +134,7 @@ class BidirectionalRestorer(BaseModel):
         now_start_id, clip = self.get_img_id(lq_paths[0])
         now_end_id, _ = self.get_img_id(lq_paths[-1])
         assert clip == _
+        
         if now_start_id==0:
             print("first frame: {}".format(lq_paths[0]))
             self.LR_list = []
@@ -179,9 +181,11 @@ class BidirectionalRestorer(BaseModel):
                 assert B == 1
                 assert T == 100
                 for i in range(T):
+                    img = tensor2img(self.HR_G[0, i, ...], min_max=(0, 1))
                     if (i+1)%10 == 0:
-                        imwrite(tensor2img(self.HR_G[0, i, ...], min_max=(0, 1)), file_path=os.path.join(save_path, f"{clip}_{str(i).zfill(8)}.png"))
-
+                        imwrite(img, file_path=os.path.join(save_path, "partframes", f"{clip}_{str(i).zfill(8)}.png"))
+                    imwrite(img, file_path=os.path.join(save_path, "allframes", f"{clip}_{str(i).zfill(8)}.png"))
+                    
         return now_end_id == 99
 
     def cal_for_eval(self, gathered_outputs, gathered_batchdata):

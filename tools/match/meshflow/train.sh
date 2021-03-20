@@ -1,0 +1,1 @@
+python tools/train.py configs/matching/meshflow/meshflow_v1.py --gpuids -1 -d

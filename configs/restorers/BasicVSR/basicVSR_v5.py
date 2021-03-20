@@ -37,12 +37,12 @@ train_pipeline = [
         key='gt',
         flag='unchanged',
         make_bin=True),
-    dict(type='PairedRandomCrop', gt_patch_size=[112 * 4, 112 * 4]),
+    dict(type='PairedRandomCrop', gt_patch_size=[90 * 4, 160 * 4]),
     dict(type='RescaleToZeroOne', keys=['lq', 'gt']),
     dict(type='Normalize', keys=['lq', 'gt'], to_rgb=True, **img_norm_cfg),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='horizontal'),
     dict(type='Flip', keys=['lq', 'gt'], flip_ratio=0.5, direction='vertical'),
-    dict(type='RandomTransposeHW', keys=['lq', 'gt'], transpose_ratio=0.5),
+    dict(type='RandomTransposeHW', keys=['lq', 'gt'], transpose_ratio=0),
     dict(type='FramesToTensor', keys=['lq', 'gt']),
     dict(type='Collect', keys=['lq', 'gt', 'lq_path', 'gt_path'])
 ]
@@ -65,13 +65,13 @@ eval_pipeline = [
     dict(type='Collect', keys=['lq', 'gt', 'num_input_frames', 'LRkey', 'lq_path'])
 ]
 
-dataroot = "/mnt/tmp/REDS/train" # "/data/home/songtt/chenyuxiang/datasets/REDS/train"
+dataroot = "/mnt/tmp/REDS/train" 
 repeat_times = 1
 eval_part =  tuple(map(str, range(240,270)))
 data = dict(
     # train
-    samples_per_gpu=1,
-    workers_per_gpu=8,
+    samples_per_gpu=8,
+    workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
@@ -79,7 +79,7 @@ data = dict(
             type=train_dataset_type,
             lq_folder= dataroot + "/train_sharp_bicubic/X4",
             gt_folder= dataroot + "/train_sharp",
-            num_input_frames=17, # 15
+            num_input_frames=21, # 15
             pipeline=train_pipeline,
             scale=scale,
             eval_part = eval_part)),
@@ -90,7 +90,7 @@ data = dict(
         type=eval_dataset_type,
         lq_folder= dataroot + "/train_sharp_bicubic/X4",
         gt_folder= dataroot + "/train_sharp",
-        num_input_frames=3,
+        num_input_frames=1,
         pipeline=eval_pipeline,
         scale=scale,
         mode="eval",
@@ -98,7 +98,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='SGD', lr=0.00000000000001)) # 2_23  1.5_12  1_10   sgd with momentum 搜最好结果，eval iter1 并且每次都保存
+optimizers = dict(generator=dict(type='Adam', lr=1 * 1e-3, betas=(0.9, 0.999))) # 2_23  1.5_12  1_10   sgd with momentum 搜最好结果，eval iter1 并且每次都保存
 # batch 8 8 1
 # learning policy
 total_epochs = 400 // repeat_times
@@ -112,11 +112,11 @@ log_config = dict(
         dict(type='TextLoggerHook', average_length=100),
         # dict(type='VisualDLLoggerHook')
     ])
-evaluation = dict(interval=1, save_image=False, multi_process=False, ensemble=False)
+evaluation = dict(interval=750, save_image=False, multi_process=False, ensemble=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20210313_055329/checkpoints/epoch_12'   
+load_from = f'./workdirs/{exp_name}/epoch_31'
 resume_from = None
 resume_optim = True
 workflow = 'train'

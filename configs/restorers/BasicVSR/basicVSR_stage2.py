@@ -127,7 +127,7 @@ evaluation = dict(interval=6000, save_image=False, multi_process=False, ensemble
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = "./workdirs/basicVSR_track_1/20210315_042412/checkpoints/epoch_1"
+load_from = "./workdirs/basicVSR_track_1/20210315_065457/checkpoints/epoch_24"
 resume_from = None
 resume_optim = True
 workflow = 'train'

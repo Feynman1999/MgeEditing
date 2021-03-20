@@ -105,7 +105,7 @@ def test_generator_batch(image, *, netG):
 epoch_dict = {}
 
 def adjust_learning_rate(optimizer, epoch):
-    if epoch>=1 and epoch % 1 == 0  and epoch_dict.get(epoch, None) is None:
+    if epoch>=6 and epoch % 2 == 0  and epoch_dict.get(epoch, None) is None:
         epoch_dict[epoch] = True
         for param_group in optimizer.param_groups:
             param_group["lr"] = param_group["lr"] * 0.7
@@ -132,7 +132,7 @@ class BidirectionalRestorer_small(BaseModel):
     def init_weights(self, pretrained=None):
         self.generator.init_weights(pretrained)
 
-    def train_step(self, batchdata, now_epoch):
+    def train_step(self, batchdata, now_epoch, now_iter):
         LR_tensor = mge.tensor(batchdata['lq'], dtype="float32")
         HR_tensor = mge.tensor(batchdata['gt'], dtype="float32")
         loss = train_generator_batch(LR_tensor, HR_tensor, gm=self.gms['generator'], netG=self.generator, netloss=self.pixel_loss)
