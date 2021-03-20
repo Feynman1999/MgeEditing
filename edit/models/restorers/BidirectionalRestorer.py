@@ -143,7 +143,7 @@ class BidirectionalRestorer(BaseModel):
         # pad lq
         B ,_ ,origin_H, origin_W = lq.shape
         lq = img_multi_padding(lq, padding_multi=self.eval_cfg.multi_pad, pad_method = "edge") #  edge  constant
-        self.LR_list.append(mge.tensor(lq, dtype="float32"))  # [1,3,h,w]
+        self.LR_list.append(lq)  # [1,3,h,w]
 
         if gt is not None:
             for i in range(B):
@@ -152,8 +152,14 @@ class BidirectionalRestorer(BaseModel):
         if now_end_id == 99:
             print("start to forward all frames....")
             if self.eval_cfg.gap == 1:
-                self.LR_list = F.concat(self.LR_list, axis=0) # [100, 3,h,w]
-                self.HR_G = test_generator_batch(F.expand_dims(self.LR_list, axis=0), netG=self.generator)
+                # do ensemble (8 times)
+                ensemble_res = []
+                self.LR_list = np.concatenate(self.LR_list, axis=0) # [100, 3,h,w]
+                for item in tqdm(range(8)): # do not have flip
+                    inp = mge.tensor(ensemble_forward(self.LR_list, Type=item), dtype="float32")
+                    oup = test_generator_batch(F.expand_dims(inp, axis=0), netG=self.generator)
+                    ensemble_res.append(ensemble_back(oup.numpy(), Type=item))
+                self.HR_G = sum(ensemble_res) / len(ensemble_res) # ensemble_res 结果取平均
             elif self.eval_cfg.gap == 2:
                 raise NotImplementedError("not implement gap != 1 now")
                 # self.HR_G_1 = test_generator_batch(F.stack(self.LR_list[::2], axis=1), netG=self.generator)
@@ -172,7 +178,7 @@ class BidirectionalRestorer(BaseModel):
             
             scale = self.generator.upscale_factor
             # get numpy
-            self.HR_G = img_de_multi_padding(self.HR_G.numpy(), origin_H=origin_H * scale, origin_W=origin_W * scale) # depad for HR_G   [B,T,C,H,W]
+            self.HR_G = img_de_multi_padding(self.HR_G, origin_H=origin_H * scale, origin_W=origin_W * scale) # depad for HR_G   [B,T,C,H,W]
 
             if kwargs.get('save_image', False):
                 print("saving images to disk ...")

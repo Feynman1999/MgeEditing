@@ -187,12 +187,12 @@ def ensemble_back(batchdata, Type = 0):
         batchdata = batchdata.to("cpu0").astype('float32').numpy()
     if len(batchdata.shape) == 4:
         return ensemble_back_for_dim_4(batchdata, Type)
-    else:
-        raise RuntimeError("ensemble back should for 4 dim not 5 dim usually!")
-        # L = []
-        # for i in range(batchdata.shape[1]):
-        #     L.append(ensemble_back_for_dim_4(batchdata[:, i, ...], Type=Type))
-        # return np.stack(L, axis = 1)  # B,T,C,H,W
+    elif len(batchdata.shape) == 5:
+        # raise RuntimeError("ensemble back should for 4 dim not 5 dim usually!")
+        L = []
+        for i in range(batchdata.shape[1]):
+            L.append(ensemble_back_for_dim_4(batchdata[:, i, ...], Type=Type))
+        return np.stack(L, axis = 1)  # B,T,C,H,W
 
 def _half(x):
     if x % 2 ==0:

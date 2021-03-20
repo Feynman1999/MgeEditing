@@ -1,9 +1,10 @@
-load_path = './workdirs/basicVSR_track_1/20210318_043618/checkpoints/epoch_24'
-dataroot = "/work_base/datasets/REDS/train/train_sharp_bicubic"
+load_path = './workdirs/epoch_24'
+dataroot = "/data/home/songtt/chenyuxiang/datasets/REDS/train/train_sharp_bicubic"
 exp_name = 'basicVSR_track1_test_for_validation'
-
+eval_part =  tuple(map(str, range(240,270)))
 # you can custom values before, for the following params do not change if you are new to this project
 ###########################################################################################
+# please make sure your gpu has 11GB memory at least, otherwise it will OOM
 
 scale = 4
 
@@ -18,7 +19,7 @@ model = dict(
         blocknums = 24,
         reconstruction_blocks = 10,
         upscale_factor = scale,
-        pretrained_optical_flow_path = "./workdirs/spynet/spynet-sintel-final.mge",
+        pretrained_optical_flow_path = None,
         flownet_layers = 4,
         blocktype = "resblock",
         Lambda = 1),
@@ -46,7 +47,6 @@ test_pipeline = [
 
 
 repeat_times = 1
-eval_part =  tuple(map(str, range(240,270)))
 data = dict(
     test_samples_per_gpu=5,  # make sure 5 | 100, thus 1,2,5,10,20... can be set
     test_workers_per_gpu=5,

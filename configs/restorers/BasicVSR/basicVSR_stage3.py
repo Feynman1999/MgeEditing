@@ -1,7 +1,7 @@
-load_from = "path_to_stage1_checkpoints/epoch_2"
+load_from = "path_to_stage2_checkpoints/epoch_24" # have trained 2(s1)+24(s2)
 path2spynet = None
 dataroot = "/work_base/datasets/REDS/train"
-exp_name = 'basicVSR_track_1_stage2'
+exp_name = 'basicVSR_track_1_stage3'
 
 # you can custom values before, for the following params do not change if you are new to this project
 ###########################################################################################

@@ -1,4 +1,10 @@
-exp_name = 'basicVSR_track_1'
+load_from = None
+path2spynet = "./workdirs/spynet/spynet-sintel-final.mge"
+dataroot = "/work_base/datasets/REDS/train"
+exp_name = 'basicVSR_track_1_stage1'
+
+# you can custom values before, for the following params do not change if you are new to this project
+###########################################################################################
 
 scale = 4
 
@@ -14,12 +20,12 @@ model = dict(
         blocknums = 24,
         reconstruction_blocks = 10,
         upscale_factor = scale,
-        pretrained_optical_flow_path = "./workdirs/spynet/spynet-sintel-final.mge",
+        pretrained_optical_flow_path = path2spynet,
         flownet_layers = 4,
         blocktype = "resblock",
         Lambda = 1),
     pixel_loss=dict(type='CharbonnierLoss'),
-    Fidelity_loss = None # dict(type='HeavisideLoss', t = 2)
+    Fidelity_loss = None
 )
 
 # model training and testing settings
@@ -74,7 +80,6 @@ eval_pipeline = [
     dict(type='Collect', keys=['lq', 'gt', 'num_input_frames', 'LRkey', 'lq_path'])
 ]
 
-dataroot = "/work_base/datasets/REDS/train"  #  "/work_base/datasets/REDS/train"
 repeat_times = 1
 eval_part = tuple(map(str, range(240,270)))
 data = dict(
@@ -127,7 +132,6 @@ evaluation = dict(interval=6000, save_image=False, multi_process=False, ensemble
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = "./workdirs/basicVSR_track_1/20210315_004951/checkpoints/epoch_1"
 resume_from = None
 resume_optim = True
 workflow = 'train'
