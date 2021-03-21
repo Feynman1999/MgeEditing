@@ -1,8 +1,13 @@
-exp_name = 'basicVSR_v5_test'
+load_path = './workdirs/basicVSR_last_v5/20210321_065841/checkpoints/epoch_16'
+dataroot = "/mnt/tmp/REDS/train/train_sharp_bicubic"
+exp_name = 'mai_test_for_validation'
+eval_part =  tuple(map(str, range(240,270)))
+
+# you can custom values before, for the following params do not change if you are new to this project
+###########################################################################################
 
 scale = 4
 
-# model settings
 model = dict(
     type='BidirectionalRestorer_small',
     generator=dict(
@@ -11,11 +16,11 @@ model = dict(
         out_channels=3,
         hidden_channels = 8,
         upscale_factor = scale),
-        pixel_loss=dict(type='L2Loss')) # L2Loss CharbonnierLoss
+    pixel_loss=dict(type='L2Loss')) # L2Loss CharbonnierLoss
 
 # model training and testing settings
 train_cfg = None
-eval_cfg = dict(metrics=['PSNR'], crop_border=0, multi_pad = 1, gap = 1)
+eval_cfg = dict(metrics=['PSNR'], crop_border=0, multi_pad = 1, gap = 1, save_shift = 240) # save_shift is for validation (NTIRE2021), when test ,set to zero
 img_norm_cfg = dict(mean=[0, 0, 0], std=[1, 1, 1])
 
 test_dataset_type = 'SRManyToManyDataset'
@@ -32,11 +37,10 @@ test_pipeline = [
     dict(type='Collect', keys=['lq', 'num_input_frames', 'LRkey', 'lq_path'])
 ]
 
-dataroot = "/mnt/tmp/REDS/train/train_sharp_bicubic" # "/work_base/datasets/REDS/test/test_sharp_bicubic"
+
 repeat_times = 1
-eval_part =  tuple(map(str, range(240,270)))
 data = dict(
-    test_samples_per_gpu=10,
+    test_samples_per_gpu=5,  # make sure 5 | 100, thus 1,2,5,10,20... can be set
     test_workers_per_gpu=5,
     test=dict(
         type=test_dataset_type,
@@ -48,10 +52,7 @@ data = dict(
         eval_part = eval_part)
 )
 
-# optimizer
-optimizers = dict(generator=dict(type='SGD', lr=0.00000000000001)) # 2_23  1.5_12  1_10   sgd with momentum 搜最好结果，eval iter1 并且每次都保存
-# batch 8 8 1
-# learning policy
+optimizers = dict(generator=dict(type='Adam', lr=0.00001))
 total_epochs = 400 // repeat_times
 
 # hooks
@@ -67,7 +68,7 @@ evaluation = dict(interval=1, save_image=False, multi_process=False, ensemble=Fa
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = './workdirs/basicVSR_last_v5/20210313_055329/checkpoints/epoch_12'   # 提高一次学习率之后的
+load_from = load_path
 resume_from = None
 resume_optim = True
 workflow = 'test'

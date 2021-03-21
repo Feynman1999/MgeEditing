@@ -1,4 +1,12 @@
-exp_name = 'basicVSR_last_v5'
+exp_name = 'mai_training' # can be changed to any you want
+dataroot = "/mnt/tmp/REDS/train" # path to training data
+load_path = None # load pretrained
+samples_per_gpu = 8 # batchsize per gpu, according to your GPU memory
+workers_per_gpu = 4 # according to your CPUs and shm size
+init_lr = 2 * 1e-3 # fix it when you change the 'samples_per_gpu'
+
+# you can custom values before, for the following params do not change if you are new to this project
+###########################################################################################
 
 scale = 4
 
@@ -20,8 +28,7 @@ img_norm_cfg = dict(mean=[0, 0, 0], std=[1, 1, 1])
 
 # dataset settings
 train_dataset_type = 'SRManyToManyDataset'
-eval_dataset_type = 'SRManyToManyDataset'  # 统一都用这个dataset
-test_dataset_type = 'SRManyToManyDataset'
+eval_dataset_type = 'SRManyToManyDataset'
 
 train_pipeline = [
     dict(type='GenerateFrameIndices', interval_list=[1], many2many = True, index_start = 0, name_padding = True),
@@ -65,13 +72,12 @@ eval_pipeline = [
     dict(type='Collect', keys=['lq', 'gt', 'num_input_frames', 'LRkey', 'lq_path'])
 ]
 
-dataroot = "/mnt/tmp/REDS/train" 
 repeat_times = 1
 eval_part =  tuple(map(str, range(240,270)))
 data = dict(
     # train
-    samples_per_gpu=8,
-    workers_per_gpu=4,
+    samples_per_gpu=samples_per_gpu,
+    workers_per_gpu=workers_per_gpu,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
@@ -98,8 +104,8 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=1 * 1e-3, betas=(0.9, 0.999))) # 2_23  1.5_12  1_10   sgd with momentum 搜最好结果，eval iter1 并且每次都保存
-# batch 8 8 1
+optimizers = dict(generator=dict(type='Adam', lr=init_lr, betas=(0.9, 0.999)))
+
 # learning policy
 total_epochs = 400 // repeat_times
 
@@ -116,7 +122,7 @@ evaluation = dict(interval=750, save_image=False, multi_process=False, ensemble=
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/epoch_31'
+load_from = load_path
 resume_from = None
 resume_optim = True
 workflow = 'train'

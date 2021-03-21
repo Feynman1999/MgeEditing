@@ -142,10 +142,11 @@ class BidirectionalRestorer_small(BaseModel):
         return loss
 
     def get_img_id(self, key):
+        shift = self.eval_cfg.get('save_shift', 0)
         assert isinstance(key, str)
         L = key.split("/")
-        return int(L[-1][:-4]), str(int(L[-2])-240).zfill(3) # id clip
-
+        return int(L[-1][:-4]), str(int(L[-2]) - shift).zfill(3) # id, clip
+        
     def test_step(self, batchdata, **kwargs):
         """
             possible kwargs:
@@ -206,9 +207,11 @@ class BidirectionalRestorer_small(BaseModel):
                 assert B == 1
                 assert T == 100
                 for i in tqdm(range(T)):
+                    img = tensor2img(self.HR_G[0, i, ...], min_max=(0, 1))
                     if (i+1)%10 == 0:
-                        imwrite(tensor2img(self.HR_G[0, i, ...], min_max=(0, 1)), file_path=os.path.join(save_path, f"{clip}_{str(i).zfill(8)}.png"))
-
+                        imwrite(img, file_path=os.path.join(save_path, "partframes", f"{clip}_{str(i).zfill(8)}.png"))
+                    imwrite(img, file_path=os.path.join(save_path, "allframes", f"{clip}_{str(i).zfill(8)}.png"))
+                    
         return now_end_id == 99
 
     def cal_for_eval(self, gathered_outputs, gathered_batchdata):
