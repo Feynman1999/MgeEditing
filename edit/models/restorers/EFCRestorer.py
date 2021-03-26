@@ -11,6 +11,7 @@ from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de
 from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
+from skimage.segmentation import slic, mark_boundaries
 
 def train_generator_batch(image, label, trans_flags, *, gm, netG, netloss):
     """
@@ -28,6 +29,14 @@ def train_generator_batch(image, label, trans_flags, *, gm, netG, netloss):
         gm.backward(loss)
         if dist.is_distributed():
             loss = dist.functional.all_reduce_sum(loss) / dist.get_world_size()
+    # 可视化三个东西
+    # LR G HR
+    # global now_viz
+    # for i in range(T):
+    #     # imwrite(tensor2img(biup[i][0, ...], min_max=(-0.5, 0.5)), file_path="./viz/{}/LR_{}.png".format(now_viz,i))
+    #     # imwrite(tensor2img(output[i][0, ...], min_max=(-0.5, 0.5)), file_path="./viz/{}/G_{}.png".format(now_viz,i))
+    #     imwrite(tensor2img(F.concat([biup[i][0, ...], output[i][0, ...], label[i][0, ...]], axis=1), min_max=(-0.5, 0.5)), file_path="./viz/{}/{}.png".format(now_viz,i))
+    # now_viz+=1
     return loss
 
 def test_generator_batch(image, *, netG):
@@ -100,29 +109,115 @@ class EFCRestorer(BaseModel):
         L = key.split("/")
         return int(L[-1][:-4]), str(int(L[-2]) - shift).zfill(3) # id, clip
 
-    def test_step_block_by_block(self, inp, ans):
+    def check_valid(self, x):
+        if x[0]<0 or x[0] >= 180:
+            return False
+        if x[1]<0 or x[1] >= 320:
+            return False
+        return True
+
+    def test_step_block_by_block(self, inp, ans, clip):
         """
-            ans: (1, 100, 3, 4*now_h, 4*now_w) ndarray
-            inp: (100, 3, now_h, now_w) tensor
+            inp: (100, 3, now_h, now_w) ndarray
+            ans: (1, 100, 3, 4*now_h, 4*now_w) ndarray, need to be filled
         """
         # 20帧一组，分4*4块处理，结果放到ans中
         T, _, now_h, now_w = inp.shape
-        block_h = now_h // 2
-        block_w = now_w // 2
-        for seg in range(0,T,20):# seg: seg+20
-            for i in range(2):
-                for j in range(2):
-                    print("seg: {}-{},  i:{},  j:{}".format(seg, seg+20-1, i, j))
-                    inp_list = []
-                    for t in range(seg, seg+20):
-                        inp_list.append(inp[t:t+1, :, i*block_h:(i*block_h+block_h), j*block_w:(j*block_w+block_w)])
-                    oup_list = test_generator_batch(inp_list, netG = self.generator)
-                    # 可视化
-                    # if i==0 and j==0:
-                    #     imwrite(tensor2img(oup_list[0][0, ...], min_max=(-0.5, 0.5)), file_path="./xxx_seg_{}.png".format(seg))
-                    # set ans
-                    for t in range(20):
-                        ans[0:1, seg + t, :, i*4*block_h:(i*4*block_h+4*block_h), j*4*block_w:(j*4*block_w+4*block_w)] = oup_list[t].numpy()
+        method = self.eval_cfg.get("method", "flow_crop")
+        assert method in ("normal_crop", "flow_crop") 
+        if method == "normal_crop":
+            gap = 1
+            block_h = now_h // gap
+            block_w = now_w // gap
+            for seg in range(0,T,20):# seg: seg+20
+                for i in range(gap):
+                    for j in range(gap):
+                        print("seg: {}-{},  i:{},  j:{}".format(seg, seg+20-1, i, j))
+                        inp_list = []
+                        for t in range(seg, seg+20):
+                            inp_list.append(mge.tensor(inp[t:t+1, :, i*block_h:(i*block_h+block_h), j*block_w:(j*block_w+block_w)], dtype="float32"))
+                        oup_list = test_generator_batch(inp_list, netG = self.generator)
+                        # 可视化
+                        # if i==0 and j==0:
+                        #     imwrite(tensor2img(oup_list[0][0, ...], min_max=(-0.5, 0.5)), file_path="./xxx_seg_{}.png".format(seg))
+                        # set ans
+                        for t in range(20):
+                            ans[0:1, seg + t, :, i*4*block_h:(i*4*block_h+4*block_h), j*4*block_w:(j*4*block_w+4*block_w)] = oup_list[t].numpy()
+        else: # flow_crop
+            tong = np.zeros_like(ans) # 计数矩阵,统计每个像素点被算了多少次，最后算平均
+            tong = np.mean(tong, axis=2, keepdims=True) # [1, 100, 1, 4*h, 4*w]
+            n_segments = 160 # super params of slic
+            compactness = 15 # super params of slic
+            name_padding_len = 8
+            threthld = 8*9
+            blocksizes = [9, 8]
+            ref_len = 19
+            flow_dir = "/work_base/datasets/REDS/train/train_sharp_bicubic/X4_RAFT_sintel"
+            for t in range(T): # 确保这一帧已经被填满后，进入下一帧
+                # 对当前帧进行slic算法
+                segments_lq_first_frame = slic(tensor2img(inp[t, ...], min_max=(-0.5, 0.5)), n_segments=n_segments, compactness=compactness, start_label=0) # [180, 320]
+                max_class_id = np.max(segments_lq_first_frame)
+                # 对于ans中计数为0的部分，选择一块，进行推理, 注意坐标除4
+                for i in range(now_h):
+                    for j in range(now_w):
+                        # check tong of now frame
+                        if tong[0, t, 0, 4*i, 4*j] < 0.5: # 不用==0 防止精度出问题
+                            print("now deal t: {},  i: {},  j: {}".format(t, i, j))
+                            # 选择当前帧对应的class_id
+                            select_class_id = segments_lq_first_frame[i, j]
+                            # 往后一共选19帧或者因过小提前结束
+                            lq_masks = []
+                            mask_lq_first_frame = np.argwhere(select_class_id == segments_lq_first_frame)  # e.g. (672, 2) int64
+                            lq_masks.append(mask_lq_first_frame)
+                            first_frame_idx = t
+                            for idx in range(first_frame_idx, min(T-1, first_frame_idx + ref_len - 1)):
+                                # according    idx -> idx+1      flow   solve   idx+1  mask
+                                flowpath = os.path.join(flow_dir, clip, "{}_{}.npy".format(str(idx).zfill(name_padding_len), str(idx+1).zfill(name_padding_len)))
+                                flow = np.load(flowpath)
+                                L = []
+                                for h,w in lq_masks[-1]:
+                                    res = [int(flow[h,w,1]+0.5) + h, int(flow[h,w,0]+0.5) + w]
+                                    if self.check_valid(res):
+                                        L.append(res)
+                                if len(L) < threthld:
+                                    break
+                                new_mask = np.array(L)
+                                lq_masks.append(new_mask)
+                            # crop for lq
+                            lq_crops = []
+                            record_tl = []
+                            record_length_h = []
+                            record_length_w = []
+                            for idx in range(0, len(lq_masks)):
+                                tl = np.min(lq_masks[idx], axis=0) # top-left
+                                br = np.max(lq_masks[idx], axis=0) # bottom-right
+                                # make tl and br    are integral multiple of the block size
+                                tl = (np.floor(tl / blocksizes) * blocksizes ).astype(np.int64)
+                                br = (np.ceil((br+1) / blocksizes) * blocksizes ).astype(np.int64) - 1
+                                length_h = br[0] - tl[0] + 1
+                                length_w = br[1] - tl[1] + 1
+                                lq_crops.append(mge.tensor(inp[(idx+t):(idx+t+1), :, tl[0]:tl[0] + length_h, tl[1]:tl[1] + length_w], dtype="float32"))
+                                # 更新tong
+                                tong[0, idx + t, 0, 4*tl[0]:4*(tl[0] + length_h), 4*tl[1]: 4*(tl[1] + length_w)] += 1.0
+                                # record tl
+                                record_tl.append(tl)
+                                record_length_h.append(length_h)
+                                record_length_w.append(length_w)
+                            # 处理lq_crops，并将结果加到ans上
+                            print(lq_crops[0].shape)
+                            oup_list = test_generator_batch(lq_crops, netG = self.generator)
+                            # 将结果加到ans上
+                            for idx in range(0, len(oup_list)):
+                                tl = record_tl[idx]
+                                length_h = record_length_h[idx]
+                                length_w = record_length_w[idx]
+                                ans[0, (idx+t):(idx+t+1), :, 4*tl[0]:4*(tl[0] + length_h), 4*tl[1]: 4*(tl[1] + length_w)] += oup_list[idx].numpy()
+                        else:
+                            pass
+            print(np.argwhere(tong<0.5)) # should be none
+            # 所有帧处理完之后，求平均
+            ans /= tong
+            
 
     def test_step(self, batchdata, **kwargs):
         """
@@ -170,10 +265,10 @@ class EFCRestorer(BaseModel):
                 self.LR_list = np.concatenate(self.LR_list, axis=0) # [100, 3,h,w]
                 for item in range(1): # do not have flip
                     print("do ensemble for {}".format(item))
-                    inp = mge.tensor(ensemble_forward(self.LR_list, Type=item), dtype="float32")
+                    inp = ensemble_forward(self.LR_list, Type=item)
                     _, _, now_h, now_w = inp.shape
                     self.HR_G = np.zeros((1, 100, 3, 4*now_h, 4*now_w)) # 往里面进行填充
-                    self.test_step_block_by_block(inp, self.HR_G)
+                    self.test_step_block_by_block(inp, self.HR_G, clip)
                     ensemble_res.append(ensemble_back(self.HR_G, Type=item))
                 self.HR_G = sum(ensemble_res) / len(ensemble_res) # ensemble_res 结果取平均
             elif self.eval_cfg.gap == 2:

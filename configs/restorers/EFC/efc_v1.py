@@ -40,7 +40,7 @@ model = dict(
 
 # model training and testing settings
 train_cfg = None
-eval_cfg = dict(metrics=['PSNR'], crop_border=0)
+eval_cfg = dict(metrics=['PSNR'], crop_border=0, multi_pad = 1, gap = 1)
 img_norm_cfg = dict(mean=[0.5, 0.5, 0.5], std=[1, 1, 1])
 
 # dataset settings
@@ -123,7 +123,7 @@ data = dict(
 )
 
 # optimizer
-optimizers = dict(generator=dict(type='Adam', lr=1 * 1e-4, betas=(0.9, 0.999)))
+optimizers = dict(generator=dict(type='Adam', lr=0.1 * 1e-4, betas=(0.9, 0.999)))
 
 # learning policy
 total_epochs = 400 // repeat_times
@@ -137,11 +137,11 @@ log_config = dict(
         dict(type='TextLoggerHook', average_length=2000),
         # dict(type='VisualDLLoggerHook')
     ])
-evaluation = dict(interval=20000000, save_image=False, multi_process=False, ensemble=False)
+evaluation = dict(interval=10000, save_image=False, multi_process=False, ensemble=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20210324_044704/checkpoints/epoch_12'
+load_from = f'./workdirs/{exp_name}/20210325_125953/checkpoints/epoch_13' # 12 + 13
 resume_from = None
 resume_optim = True
 workflow = 'train'
