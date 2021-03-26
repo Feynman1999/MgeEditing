@@ -10,7 +10,7 @@ class AVERAGE_POOL(ABC):
     """
     def __init__(self, average_length=10):
         assert average_length >= 1 and isinstance(average_length, int)
-        assert average_length <= 1000 , 'average length should not too large'
+        assert average_length <= 3000 , 'average length should not too large'
         self.average_length = average_length
         self.pool = defaultdict(list)
 

@@ -14,7 +14,7 @@ class MinimumBoundingBox_ByOpticalFlow(object):
         self.blocksizes = blocksizes
         self.n_segments = n_segments  # for skimage slic
         self.compactness = compactness  # for skimage slic
-        self.flow_dir = "/data/home/songtt/chenyuxiang/datasets/REDS/train/train_sharp_bicubic/X4_RAFT_sintel"
+        self.flow_dir = "/work_base/datasets/REDS/train/train_sharp_bicubic/X4_RAFT_sintel"
         self.name_padding_len = 8
         self.max_pixel_num = 48**2
         self.threthld = 8*9

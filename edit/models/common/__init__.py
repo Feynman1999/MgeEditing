@@ -7,4 +7,5 @@ from .coordi_attention import CoordAtt
 from .shuffle import ShuffleV2Block
 from .net import MobileNeXt
 from .net import ResBlocks
-
+from .net import ResBlock
+from .upsample import PixelShufflePack, PixelShuffle

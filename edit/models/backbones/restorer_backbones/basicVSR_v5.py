@@ -73,7 +73,6 @@ class Upsample(M.Module):
     def forward(self, inputs):
         out = self.sel(self.shirking(inputs))
         out = self.reconstruction(out)
-
         out = F.nn.interpolate(inp=out, scale_factor=2, mode='BILINEAR', align_corners=False)
         out = self.lrelu(self.conv_hr1(out))
         out = F.nn.interpolate(inp=out, scale_factor=2, mode='BILINEAR', align_corners=False)

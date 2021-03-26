@@ -57,15 +57,16 @@ class MobileNeXt(M.Module):
         return identity + out
 
 class ResBlock(M.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3):
+    def __init__(self, in_channels, out_channels, kernel_size=3, init_scale = 0.1):
         super(ResBlock, self).__init__()
+        self.init_scale = init_scale
         self.conv1 = M.ConvRelu2d(in_channels, out_channels, kernel_size=kernel_size, stride=1, padding=(kernel_size//2))
         self.conv2 = M.Conv2d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=(kernel_size//2))
         self.init_weights()
 
     def init_weights(self):
         for m in [self.conv1, self.conv2]:
-            default_init_weights(m, scale=0.1)
+            default_init_weights(m, scale=self.init_scale)
 
     def forward(self, x):
         identity = x
