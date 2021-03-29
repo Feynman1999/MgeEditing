@@ -62,7 +62,7 @@ class STTNRestorer(BaseModel):
         """
         self.generator.init_weights(pretrained)
 
-    def train_step(self, batchdata):
+    def train_step(self, batchdata, now_epoch, now_iter):
         """train step.
 
         Args:
@@ -97,10 +97,10 @@ class STTNRestorer(BaseModel):
         lq = batchdata['lq']
         gt = batchdata['gt'][0]
         lq_paths = [item[0] for item in batchdata['lq_path']]
-        num_input_frames =  batchdata['num_input_frames'][0] # 3
+        num_input_frames =  batchdata['num_input_frames'][0] # 5
 
         # get ids
-        ids = [ self.get_img_id(path) for path in lq_paths]
+        ids = [ tuple(self.get_img_id(path))[0] for path in lq_paths]
 
         B,T,_,h,w = lq.shape
         assert B == 1, "only support batchsize==1 for test and eval now"

@@ -148,9 +148,9 @@ class STTN(M.Module):
 
     def forward(self, frames):
         b, t, c, h, w = frames.shape
-        enc_feat = self.encoder(frames.reshape(b*t, c, h, w))
+        enc_feat = self.encoder(self.conv1(frames.reshape(b*t, c, h, w)))
         enc_feat = self.transformer({"x":enc_feat, "t":t, "b":b})['x'] # [bt,c,h,w]
-        enc_feat = self.decoder(enc_feat)
+        enc_feat = self.do_upsample(enc_feat)
         return enc_feat.reshape(b, t, self.out_channels, h*self.upscale_factor, w*self.upscale_factor)
 
     def init_weights(self, pretrained=None, strict=True):

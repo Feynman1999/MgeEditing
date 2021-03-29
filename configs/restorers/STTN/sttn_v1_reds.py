@@ -7,6 +7,7 @@ eval and test:   both neighbor and distant are used(5 + x), and some frames are 
 
 """
 exp_name = 'sttn_baseline'
+dataroot = "/work_base/datasets/REDS/train"
 
 scale = 4
 
@@ -77,13 +78,13 @@ eval_pipeline = [
     dict(type='Collect', keys=['lq', 'gt', 'num_input_frames', 'LRkey', 'lq_path'])
 ]
 
-dataroot = "/data/home/songtt/chenyuxiang/datasets/REDS/train"
+
 repeat_times = 1
 eval_part =  ('000', '011', '015', '020')  # tuple(map(str, range(240,242)))
 data = dict(
     # train
-    samples_per_gpu=1,
-    workers_per_gpu=4,
+    samples_per_gpu=6,
+    workers_per_gpu=6,
     train=dict(
         type='RepeatDataset',
         times=repeat_times,
@@ -124,7 +125,7 @@ log_config = dict(
         dict(type='TextLoggerHook', average_length=100),
         # dict(type='VisualDLLoggerHook')
     ])
-evaluation = dict(interval=2000, save_image=True, multi_process=False, ensemble=False)
+evaluation = dict(interval=2000000000, save_image=True, multi_process=False, ensemble=False)
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
