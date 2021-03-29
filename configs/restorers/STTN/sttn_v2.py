@@ -1,3 +1,0 @@
-"""
-Multi-scale Deformable transformer
-"""

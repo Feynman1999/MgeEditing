@@ -141,7 +141,7 @@ evaluation = dict(interval=1, save_image=True, multi_process=False, ensemble=Fal
 
 # runtime settings
 work_dir = f'./workdirs/{exp_name}'
-load_from = f'./workdirs/{exp_name}/20210324_044704/checkpoints/epoch_12'
+load_from = f'./workdirs/efc_baseline/20210326_105542/checkpoints/epoch_2'
 resume_from = None
 resume_optim = True
 workflow = 'train'

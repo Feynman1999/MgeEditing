@@ -4,27 +4,8 @@ import megengine.module as M
 from megengine.module.conv import Conv2d, ConvTranspose2d
 import megengine.functional as F
 from edit.models.builder import BACKBONES
-from edit.models.common import add_H_W_Padding
+from edit.models.common import add_H_W_Padding, default_init_weights, ResBlock, ResBlocks, PixelShufflePack
 import math
-
-class PixelShuffle(M.Module):
-    def __init__(self, scale=2):
-        super(PixelShuffle, self).__init__()
-        self.scale = scale
-
-    def forward(self, inputs):
-        # N C iH iW
-        N, C, iH, iW = inputs.shape
-        oH = iH * self.scale
-        oW = iW * self.scale
-        oC = C // (self.scale ** 2)
-        # N C s s iH iW
-        output = inputs.reshape(N, oC, self.scale, self.scale, iH, iW)
-        # N C iH s iW s
-        output = output.transpose(0, 1, 4, 3, 5, 2)
-        # N C oH oW
-        output = output.reshape(N, oC, oH, oW)
-        return output
 
 class FeedForward(M.Module):
     def __init__(self, d_model, layer_norm = False):
@@ -37,14 +18,11 @@ class FeedForward(M.Module):
                 M.Conv2d(d_model, d_model, kernel_size=3, padding=1, dilation=1, stride=1),
             )
         else:
-            self.conv = M.Sequential(
-                M.ConvRelu2d(d_model, d_model, kernel_size=3, padding=2, dilation=2, stride=1),
-                M.Conv2d(d_model, d_model, kernel_size=3, padding=1, dilation=1, stride=1),
-            )
+            self.conv = ResBlock(d_model, d_model, init_scale=0.1)
 
     def forward(self, x):
-        return x + self.conv(x)
-        
+        return self.conv(x)
+
 def do_attention(query, key, value):
     # print(query.shape, key.shape)
     scores = F.matmul(query, key.transpose(0, 2, 1)) / math.sqrt(query.shape[-1]) # b, t*out_h*out_w, t*out_h*out_w
@@ -70,6 +48,7 @@ class MultiHeadedAttention(M.Module):
                                 )
         else:
             self.output_linear = M.ConvRelu2d(hidden, hidden, kernel_size=3, padding=1, stride=1)
+        self.init_weights()
 
     def forward(self, x, t, b):
         bt, c, h, w = x.shape
@@ -79,7 +58,7 @@ class MultiHeadedAttention(M.Module):
         _key = self.key_embedding(x)
         _value = self.value_embedding(x)
         for idx in range(self.headnums):
-            height, width = 18, 16
+            height, width = 9, 8
             query, key, value = _query[:, (idx*d_k):(idx*d_k + d_k), ...], _key[:, (idx*d_k):(idx*d_k + d_k), ...], _value[:, (idx*d_k):(idx*d_k + d_k), ...]
             out_h, out_w = h // height, w // width
             # 1) embedding and reshape
@@ -99,6 +78,9 @@ class MultiHeadedAttention(M.Module):
             outputs.append(y)
         outputs = F.concat(outputs, axis = 1)
         return self.output_linear(outputs)
+
+    def init_weights(self):
+        default_init_weights(self.output_linear, scale=0.1)
 
 class TransformerBlock(M.Module):
     """
@@ -123,7 +105,7 @@ class STTN(M.Module):
     def __init__(self,
                  in_channels=3,
                  out_channels=3,
-                 channels = 32,
+                 channels = 16,
                  layers = 6,
                  heads = 4,
                  upscale_factor=4,
@@ -142,25 +124,27 @@ class STTN(M.Module):
 
         self.transformer = M.Sequential(*blocks)
 
+        self.conv1 = M.Conv2d(self.in_channels, self.channels, kernel_size = 3, stride=1, padding=1)
         self.encoder = M.Sequential(
-            M.Conv2d(self.in_channels, 48, kernel_size = 3, stride=1, padding=1),
-            M.LeakyReLU(0.2),
-            FeedForward(48, layer_norm=False),
-            M.Conv2d(48, self.channels, kernel_size=3, stride=1, padding=1),
-            M.LeakyReLU(0.2),
-            FeedForward(self.channels, layer_norm=False),
-            FeedForward(self.channels, layer_norm=False)
+            FeedForward(self.channels, layer_norm=layer_norm),
+            FeedForward(self.channels, layer_norm=layer_norm),
+            FeedForward(self.channels, layer_norm=layer_norm)
         )
 
-        self.decoder = M.Sequential(
-            M.ConvRelu2d(self.channels, 256, kernel_size=3, stride=1, padding=1),
-            M.ConvRelu2d(256, 512, kernel_size=3, stride=1, padding=1),
-            PixelShuffle(scale=2),
-            M.ConvRelu2d(128, 256, kernel_size=3, stride=1, padding=1),
-            PixelShuffle(scale=2),
-            M.ConvRelu2d(64, 64, kernel_size=3, stride=1, padding=1),
-            M.Conv2d(64, self.out_channels, kernel_size=3, stride=1, padding=1)
-        )
+        self.reconstruction = ResBlocks(channel_num=self.channels, resblock_num=3)    
+        self.upsample1 = PixelShufflePack(self.channels, self.channels, 2, upsample_kernel=3)
+        self.upsample2 = PixelShufflePack(self.channels, 64, 2, upsample_kernel=3)
+        self.conv_hr = M.Conv2d(64, 64, 3, 1, 1)  # need init
+        self.conv_last = M.Conv2d(64, out_channels, 3, 1, 1)
+        self.lrelu = M.LeakyReLU(negative_slope=0.1)
+
+    def do_upsample(self, x):
+        out = self.reconstruction(x)
+        out = self.lrelu(self.upsample1(out))
+        out = self.lrelu(self.upsample2(out))
+        out = self.lrelu(self.conv_hr(out))
+        out = self.conv_last(out)
+        return out
 
     def forward(self, frames):
         b, t, c, h, w = frames.shape
@@ -170,19 +154,5 @@ class STTN(M.Module):
         return enc_feat.reshape(b, t, self.out_channels, h*self.upscale_factor, w*self.upscale_factor)
 
     def init_weights(self, pretrained=None, strict=True):
-        # 这里也可以进行参数的load，比如不在之前保存的路径中的模型（预训练好的）
-        pass
-        # """Init weights for models.
-        #
-        # Args:
-        #     pretrained (str, optional): Path for pretrained weights. If given None, pretrained weights will not be loaded. Defaults to None.
-        #     strict (boo, optional): Whether strictly load the pretrained model.
-        #         Defaults to True.
-        # """
-        # if isinstance(pretrained, str):
-        #     load_checkpoint(self, pretrained, strict=strict, logger=logger)
-        # elif pretrained is None:
-        #     pass  # use default initialization
-        # else:
-        #     raise TypeError('"pretrained" must be a str or None. '
-        #                     f'But received {type(pretrained)}.')
+        default_init_weights(self.conv1)
+        default_init_weights(self.conv_hr, nonlinearity='leaky_relu')

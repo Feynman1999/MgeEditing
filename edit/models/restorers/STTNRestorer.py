@@ -12,24 +12,28 @@ from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
 
+def get_bilinear(image):
+    B,T,C,h,w = image.shape
+    image = image.reshape(-1, C,h,w)
+    return F.nn.interpolate(image, scale_factor=4).reshape(B,T,C,4*h, 4*w)
 
 def train_generator_batch(image, label, *, gm, netG, netloss):
     B,T,C,h,w = image.shape
+    biup = get_bilinear(image)
     netG.train()
     with gm:
         output = netG(image)
-        loss = netloss(output, label) / (T * (h/64) * (w/64) * (B/4) ) # same with official edvr   4*3*256*256
+        loss = netloss(output + biup, label)
         gm.backward(loss)
         if dist.is_distributed():
             loss = dist.functional.all_reduce_sum(loss) / dist.get_world_size()
     return loss
 
-
 def test_generator_batch(image, *, netG):
+    biup = get_bilinear(image)
     netG.eval()
     output = netG(image)
-    return output
-
+    return output + biup
 
 @MODELS.register_module()
 class STTNRestorer(BaseModel):
@@ -83,8 +87,10 @@ class STTNRestorer(BaseModel):
         return loss
 
     def get_img_id(self, key):
+        shift = self.eval_cfg.get('save_shift', 0)
         assert isinstance(key, str)
-        return int(key.split("/")[-1][:-4])
+        L = key.split("/")
+        return int(L[-1][:-4]), str(int(L[-2]) - shift).zfill(3) # id, clip
 
     def test_step(self, batchdata, **kwargs):
         start_time = time.time()
