@@ -95,12 +95,15 @@ class STTNRestorer(BaseModel):
     def test_step(self, batchdata, **kwargs):
         start_time = time.time()
         lq = batchdata['lq']
+        if len(lq.shape) == 4:
+            lq = np.expand_dims(lq, 1) # [B,T,C,H,W]
         gt = batchdata['gt'][0]
         lq_paths = [item[0] for item in batchdata['lq_path']]
-        num_input_frames =  batchdata['num_input_frames'][0] # 5
+        num_input_frames =  batchdata['num_input_frames'][0]
 
         # get ids
         ids = [ tuple(self.get_img_id(path))[0] for path in lq_paths]
+        clip = self.get_img_id(lq_paths[0])[1]
 
         B,T,_,h,w = lq.shape
         assert B == 1, "only support batchsize==1 for test and eval now"
@@ -119,13 +122,12 @@ class STTNRestorer(BaseModel):
         for i in range(num_input_frames):
             self.HR_frame_dict[ ids[i] ].append(G[i, ...].numpy())
 
-        if kwargs.get('save_image'):
-            pass
-            # save_path = kwargs.get('save_path', None)
-            # if save_path is None:
-            #     raise RuntimeError("if save image in test_step, please set 'save_path' parameters")
-            # for idx in range(G.shape[0]):
-            #     imwrite(tensor2img(G[idx], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, LR_key[idx]))
+        if kwargs.get('save_image', False):
+            print("saving images to disk ...")
+            save_path = kwargs.get('save_path', None)
+            if save_path is None:
+                raise RuntimeError("if save image in test_step, please set 'save_path' parameters")
+            imwrite(tensor2img(G[num_input_frames//2, ...], min_max=(-0.5, 0.5)), file_path=os.path.join(save_path, "{}_{}.png".format(clip, ids[num_input_frames//2])))
 
         print("imgs {} ok  inference time: {} s".format(ids, time.time() - start_time))
         return ids[ num_input_frames//2 ] == 99
@@ -144,10 +146,10 @@ class STTNRestorer(BaseModel):
             for key in sorted(self.HR_frame_dict.keys()):
                 print("average {} times for {}".format(len(self.HR_frame_dict[key]), key))
                 G_key = np.mean(np.stack(self.HR_frame_dict[key], axis=0), axis=0, keepdims=False)
-                G_key = tensor2img(G_key, min_max=(0, 1))
+                G_key = tensor2img(G_key, min_max=(-0.5, 0.5))
                 # G_key_y = bgr2ycbcr(G_key, y_only=True)
                 gt = self.GT_frame_dict[key]
-                gt = tensor2img(gt, min_max=(0, 1))
+                gt = tensor2img(gt, min_max=(-0.5, 0.5))
                 # gt_y = bgr2ycbcr(gt, y_only=True)
 
                 eval_result = dict()
