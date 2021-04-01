@@ -201,7 +201,7 @@ def psnr(img1, img2, crop_border=0, input_order='HWC'):
         img1 = img1[crop_border:-crop_border, crop_border:-crop_border, None]
         img2 = img2[crop_border:-crop_border, crop_border:-crop_border, None]
 
-    mse = np.mean((img1 - img2)**2)
+    mse = np.mean((img1.astype(np.float32) - img2.astype(np.float32))**2)
     if mse == 0:
         return float('inf')
     return 20. * np.log10(255. / np.sqrt(mse))

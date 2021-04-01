@@ -7,7 +7,7 @@ import megengine.functional as F
 from collections import defaultdict
 from megengine.autodiff import GradManager
 from edit.core.hook.evaluation import psnr, ssim
-from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de_multi_padding, ensemble_forward, ensemble_back
+from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de_multi_padding, ensemble_forward, ensemble_back, imread
 from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
@@ -146,16 +146,18 @@ class EFCRestorer(BaseModel):
         else: # flow_crop
             tong = np.zeros_like(ans) # 计数矩阵,统计每个像素点被算了多少次，最后算平均
             tong = np.mean(tong, axis=2, keepdims=True) # [1, 100, 1, 4*h, 4*w]
-            n_segments = 160 # super params of slic
-            compactness = 15 # super params of slic
+            n_segments = 100 # super params of slic
+            compactness = 20 # super params of slic
             name_padding_len = 8
             threthld = 8*9
             blocksizes = [9, 8]
             ref_len = 19
             flow_dir = "/work_base/datasets/REDS/train/train_sharp_bicubic/X4_RAFT_sintel"
             for t in range(T): # 确保这一帧已经被填满后，进入下一帧
-                # 对当前帧进行slic算法
-                segments_lq_first_frame = slic(tensor2img(inp[t, ...], min_max=(-0.5, 0.5)), n_segments=n_segments, compactness=compactness, start_label=0) # [180, 320]
+                img = tensor2img(inp[t, ...], min_max=(-0.5, 0.5)) # bgr hwc uint8
+                segments_lq_first_frame = slic(img, n_segments=n_segments, compactness=compactness, start_label=0) # [180, 320]
+                # out1=mark_boundaries(img, segments_lq_first_frame)
+                # imwrite((out1*255).astype(np.uint8), "./workdirs/{}.png".format(t))
                 max_class_id = np.max(segments_lq_first_frame)
                 # 对于ans中计数为0的部分，选择一块，进行推理, 注意坐标除4
                 for i in range(now_h):
@@ -218,7 +220,6 @@ class EFCRestorer(BaseModel):
             # 所有帧处理完之后，求平均
             ans /= tong
             
-
     def test_step(self, batchdata, **kwargs):
         """
             每一次传入帧i和光流i->i+1，最后一帧为99，没有光流，将这些信息储存起来
@@ -237,6 +238,8 @@ class EFCRestorer(BaseModel):
         """
         lq = batchdata['lq']  #  [B,3,h,w]
         gt = batchdata.get('gt', None)  # if not None: [B,3,4*h,4*w]
+        assert len(lq.shape) == 4
+        assert len(gt.shape) == 4
         assert len(batchdata['lq_path']) == 1  # 每个sample所带的lq_path列表长度仅为1， 即自己
         lq_paths = batchdata['lq_path'][0] # length 为batch长度
         now_start_id, clip = self.get_img_id(lq_paths[0])
@@ -251,11 +254,11 @@ class EFCRestorer(BaseModel):
         # pad lq
         B ,_ ,origin_H, origin_W = lq.shape
         lq = img_multi_padding(lq, padding_multi=self.eval_cfg.multi_pad, pad_method = "edge") #  edge  constant
-        self.LR_list.append(lq)  # [1,3,h,w]
+        self.LR_list.append(lq)  # [B,3,h,w]
 
         if gt is not None:
             for i in range(B):
-                self.HR_list.append(gt[i:i+1, ...])
+                self.HR_list.append(gt[i:i+1, ...]) # [1 ,3 , x, x]
 
         if now_end_id == 99:
             print("start to forward all frames....")

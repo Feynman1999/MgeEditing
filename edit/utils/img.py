@@ -577,7 +577,6 @@ def tensor2img(tensor, out_type=np.uint8, min_max=(0, 1)):
         if out_type == np.uint8:
             # Unlike MATLAB, numpy.unit8() WILL NOT round by default.
             img_np = (img_np * 255.0).round()
-        img_np.astype(out_type)
-        result.append(img_np)
+        result.append(img_np.astype(out_type))
     result = result[0] if len(result) == 1 else result
     return result
