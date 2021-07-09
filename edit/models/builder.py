@@ -47,7 +47,7 @@ def build_loss(cfg):
     return build(cfg, LOSSES)
 
 
-def build_model(cfg, train_cfg=None, eval_cfg=None):
+def build_model(cfg, workdir, train_cfg=None, eval_cfg=None):
     """Build model.
 
     Args:
@@ -55,4 +55,4 @@ def build_model(cfg, train_cfg=None, eval_cfg=None):
         train_cfg (dict): Training configuration. Default: None.
         eval_cfg (dict): Testing configuration. Default: None.
     """
-    return build(cfg, MODELS, dict(train_cfg=train_cfg, eval_cfg=eval_cfg))
+    return build(cfg, MODELS, dict(train_cfg=train_cfg, eval_cfg=eval_cfg, workdir = workdir))

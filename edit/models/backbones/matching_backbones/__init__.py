@@ -6,3 +6,14 @@ from .siamfcpp_two_sota import SIAMFCPP_two_sota
 from .siamfcpp_one_sota import SIAMFCPP_one_sota
 from .siamfcpp_one_bam_sota import SIAMFCPP_one_sota_bam
 from .deepmeshflow import DeepMeshFlow
+from .transformer_meshflow import TMF
+from .siamfcpp_one_layernorm import SIAMFCPP_one_layernorm
+from .siamfcpp_two_insnorm import SIAMFCPP_two_insnorm
+from .siamfcpp_two_insnorm_deform import SIAMFCPP_two_insnorm_deform
+from .siamfcpp_two_involution import SIAMFCPP_two_insnorm_involution
+from .siamfcpp_one_insnorm_deform import SIAMFCPP_one_insnorm_deform
+from .siamfcpp_one_neXt_coordinate import SIAMFCPP_one_neXt_coordinate
+from .siamfcpp_one_insnorm_attention import SIAMFCPP_one_insnorm_attention
+from .siamfcpp_one_syncbn import SIAMFCPP_one_syncbn
+from .siamfcpp_one_bn_deform import SIAMFCPP_one_bn_deform
+from .siamfcpp_one_disweight import SIAMFCPP_one_disweight

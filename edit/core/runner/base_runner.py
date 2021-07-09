@@ -105,12 +105,11 @@ class BaseRunner(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def register_training_hooks(self, lr_config, checkpoint_config, log_config):
+    def register_training_hooks(self, checkpoint_config, log_config):
         """Register default hooks for training.
 
             Default hooks include:
 
-            - LrUpdaterHook
             - CheckpointSaverHook
             - log_config
         """
@@ -123,6 +122,7 @@ class BaseRunner(metaclass=ABCMeta):
         if dist.is_distributed():
             self.logger.info("syncing the model's parameters...")
             dist.bcast_list_(self.model.parameters(), dist.WORLD)
+            dist.bcast_list_(self.model.buffers(), dist.WORLD)
         else:
             pass  # do nothing
 
@@ -144,36 +144,6 @@ class BaseRunner(metaclass=ABCMeta):
         # else:
         #     raise RuntimeError('lr is not applicable because optimizer does not exist.')
         # return lr
-
-    def current_momentum(self):
-        """Get current momentums.
-
-        Returns:
-            list[float] | dict[str, list[float]]: Current momentums of all
-                param groups. If the runner has a dict of optimizers, this
-                method will return a dict.
-        """
-        raise NotImplementedError("")
-        # def _get_momentum(optimizer):
-        #     momentums = []
-        #     for group in optimizer.param_groups:
-        #         if 'momentum' in group.keys():
-        #             momentums.append(group['momentum'])
-        #         elif 'betas' in group.keys():
-        #             momentums.append(group['betas'][0])
-        #         else:
-        #             momentums.append(0)
-        #     return momentums
-        #
-        # if self.optimizer is None:
-        #     raise RuntimeError('momentum is not applicable because optimizer does not exist.')
-        # elif isinstance(self.optimizer, Optimizer):
-        #     momentums = _get_momentum(self.optimizer)
-        # elif isinstance(self.optimizer, dict):
-        #     momentums = dict()
-        #     for name, optim in self.optimizer.items():
-        #         momentums[name] = _get_momentum(optim)
-        # return momentums
 
     def register_hook(self, hook, priority='NORMAL'):
         """Register a hook into the hook list.
@@ -237,54 +207,6 @@ class BaseRunner(metaclass=ABCMeta):
                 optim_state_dict = mge.load(osp.join(path2checkpoint, submodule_name + optim_ckpt_suffix))
                 res[submodule_name] = optim_state_dict
         return res
-
-    def register_momentum_hook(self, momentum_config):
-        if momentum_config is None:
-            return
-        if isinstance(momentum_config, dict):
-            assert 'policy' in momentum_config
-            policy_type = momentum_config.pop('policy')
-            # If the type of policy is all in lower case, e.g., 'cyclic',
-            # then its first letter will be capitalized, e.g., to be 'Cyclic'.
-            # This is for the convenient usage of momentum updater.
-            # Since this is not applicable for `CosineAnealingMomentumUpdater`,
-            # the string will not be changed if it contains capital letters.
-            if policy_type == policy_type.lower():
-                policy_type = policy_type.title()
-            hook_type = policy_type + 'MomentumUpdaterHook'
-            momentum_config['type'] = hook_type
-            hook = build_from_cfg(momentum_config, HOOKS)
-        else:
-            hook = momentum_config
-        self.register_hook(hook)
-
-    def register_optimizer_hook(self, optimizer_config):
-        if optimizer_config is None:
-            return
-        if isinstance(optimizer_config, dict):
-            optimizer_config.setdefault('type', 'OptimizerHook')
-            hook = build_from_cfg(optimizer_config, HOOKS)
-        else:
-            hook = optimizer_config
-        self.register_hook(hook)
-
-    def register_lr_hook(self, lr_config):
-        if isinstance(lr_config, dict):
-            assert 'policy' in lr_config
-            policy_type = lr_config.pop('policy')
-            # If the type of policy is all in lower case, e.g., 'cyclic',
-            # then its first letter will be capitalized, e.g., to be 'Cyclic'.
-            # This is for the convenient usage of Lr updater.
-            # Since this is not applicable for `CosineAnealingLrUpdater`,
-            # the string will not be changed if it contains capital letters.
-            if policy_type == policy_type.lower():
-                policy_type = policy_type.title()
-            hook_type = policy_type + 'LrUpdaterHook'
-            lr_config['type'] = hook_type
-            hook = build_from_cfg(lr_config, HOOKS)
-        else:
-            hook = lr_config
-        self.register_hook(hook)
 
     def register_checkpoint_hook(self, checkpoint_config):
         if isinstance(checkpoint_config, dict):

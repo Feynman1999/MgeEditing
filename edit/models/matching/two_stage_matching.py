@@ -43,8 +43,10 @@ def test_generator_batch(optical, sar, *, G1, G2):
     G2.eval()
     tmp = G1.z_size
     G1.z_size = G1.test_z_size # 512
-    # stage1
-    cls_score, offsets = G1(sar, optical)  # [B,1,19,19]  [B,2,19,19]  [B,1,19,19]
+    """
+        stage1
+    """
+    cls_score, offsets = G1(sar, optical)
     B1, _, H1, W1 = cls_score.shape
     cls_score = cls_score.reshape((B1, -1))
     pred_box = G1.test_fm_ctr - offsets  # (B,2,H,W)
@@ -65,21 +67,6 @@ def test_generator_batch(optical, sar, *, G1, G2):
             # method1, use 520 512 but too slow
             stage2_optical.append(optical[i, :, x-4 : x+516, y-4 : y+516])
             stage2_sar.append(sar[i, ...])
-
-            # method2, use up left 260 256, fast but bad result  (0.8 -> 0.93)
-            # stage2_optical.append(optical[i, :, x-2 : x+258, y-2 : y+258])
-            # stage2_sar.append(sar[i, :, 0:256, 0:256])
-
-            # method3, find grad change most 256 in 512 sar
-            # sar_x, sar_y = get_location_by_sobel(sar[i, ...])  # [0, 254]
-            # sar_256 = sar[i, :, (1+sar_x):(1+sar_x+256), (1+sar_y):(1+sar_y+256)]
-            # # write sar and sar_256
-            # imwrite(tensor2img(sar_256, min_max=(-0.64, 1.36)), file_path="./workdirs/{}_{}.png".format(sar_x, sar_y))
-            # imwrite(tensor2img(sar[i,:,:,:], min_max=(-0.64, 1.36)), file_path="./workdirs/{}_{}_large.png".format(sar_x, sar_y))
-            # optical_260 = optical[i, :, x+1+sar_x-2 : x+1+sar_x + 256 + 2, y+1+sar_y-2 : y+1+sar_y + 256 + 2]
-            # stage2_optical.append(optical_260)
-            # stage2_sar.append(sar_256)
-
             flag.append(1)
         else:
             flag.append(0)
@@ -122,7 +109,7 @@ class TwoStageMatching(BaseModel):
     """
     allowed_metrics = {'dis': eval_distance}
 
-    def __init__(self, generator1, generator2, train_cfg=None, eval_cfg=None, pretrained=None):
+    def __init__(self, generator1, generator2, train_cfg=None, eval_cfg=None, pretrained=None, workdir = None):
         super(TwoStageMatching, self).__init__()
 
         self.train_cfg = train_cfg
@@ -146,11 +133,11 @@ class TwoStageMatching(BaseModel):
         """
         pass
 
-    def train_step(self, batchdata):
+    def train_step(self, batchdata, now_epoch, now_iter):
         """train step.
 
         Args:
-            batchdata: list for train_batch, numpy.ndarray, length up to Collect class.
+            batchdata: dict for train_batch, numpy.ndarray
         Returns:
             list: loss
         """
@@ -161,21 +148,22 @@ class TwoStageMatching(BaseModel):
         """test step.
 
         Args:
-            batchdata: list for train_batch, numpy.ndarray or variable, length up to Collect class.
+            batchdata: dict for test_batch, numpy.ndarray or variable.
 
         Returns:
             list: outputs (already gathered from all threads)
         """
-        optical = batchdata[0]  # [B ,1 , H, W]
-        sar = batchdata[1]
-        class_id = batchdata[-2]
-        file_id = batchdata[-1]
-
-        ensemble_flag = kwargs.get('ensemble_flag', False)
+        optical = batchdata['opt']  # [B ,1 , H, W]
+        sar = batchdata['sar']
+        class_id = batchdata['class_id']
+        file_id = batchdata['file_id']
+        # print(self.local_rank, class_id, file_id)
+        # print(self.local_rank, optical.shape, sar.shape)
+        ensemble_flag = kwargs.get('ensemble', False)
         epochs = [0]
         res = [] # item: [B,4]
         if ensemble_flag:
-            epochs = list(range(0,1))
+            epochs = list(range(0,8))
         for epoch in epochs:
             optical_now = ensemble_forward(optical, Type=epoch)
             sar_now = ensemble_forward(sar, Type=epoch)
@@ -220,15 +208,14 @@ class TwoStageMatching(BaseModel):
 
     def cal_for_eval(self, gathered_outputs, gathered_batchdata):
         """
-
         :param gathered_outputs: list of variable, [pre_bbox, ]
         :param gathered_batchdata: list of numpy, [optical, sar, bbox_gt, class_id, file_id]
         :return: eval result
         """
         pre_bbox = F.floor(gathered_outputs[0]+0.5)
-        bbox_gt = gathered_batchdata[2]
-        class_id = gathered_batchdata[-2]
-        file_id = gathered_batchdata[-1]
+        bbox_gt = gathered_batchdata["bbox"]
+        class_id = gathered_batchdata["class_id"]
+        file_id = gathered_batchdata["file_id"]
         assert list(bbox_gt.shape) == list(pre_bbox.shape), "{} != {}".format(list(bbox_gt.shape), list(pre_bbox.shape))
 
         res = []

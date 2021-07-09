@@ -1,0 +1,1 @@
+python tools/test.py configs/synthesizers/DSTT/dstt_mgtv_test.py --gpuids 7 -d

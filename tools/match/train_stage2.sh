@@ -1,0 +1,2 @@
+# python tools/train.py configs/matching/siamfcpp/sota_precise_24G.py --gpuids 0,1,6,7,9 -d
+nohup python -u tools/train.py configs/matching/siamfcpp/sota_precise_24G_insnorm_involution.py --gpuids 0,1,6,7,9 -d >> /data/home/songtt/chenyuxiang/MBRVSR/stage2_insnorm_involution.log 2>&1 &

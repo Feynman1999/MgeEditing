@@ -35,14 +35,8 @@ class PixelShufflePack(M.Module):
             self.out_channels * scale_factor * scale_factor,
             self.upsample_kernel,
             padding=(self.upsample_kernel - 1) // 2)
+            
         self.pixel_shuffle = PixelShuffle(scale_factor)
-
-        self.init_weights()
-
-    def init_weights(self):
-        """Initialize weights for PixelShufflePack.
-        """
-        default_init_weights(self, 1, nonlinearity="leaky_relu")
 
     def forward(self, x):
         """Forward function for PixelShufflePack.

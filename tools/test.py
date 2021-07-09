@@ -2,6 +2,7 @@
     test your model.
 """
 import os
+# os.environ['MGB_CUDA_RESERVE_MEMORY'] = '1'
 import sys
 base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(base_path)
@@ -41,6 +42,7 @@ def test(model, datasets, cfg, rank):
     data_loaders = [ get_loader(ds, cfg) for ds in datasets ]
     runner = EpochBasedRunner(model=model, optimizers_cfg=cfg.optimizers, work_dir=cfg.work_dir)
     runner.load_checkpoint(cfg.load_from, load_optim=False)
+    runner.sync_model_params()
     runner.run(data_loaders, cfg.workflow, 1)
 
 def worker(rank, world_size, cfg, gpu_id="0", port=23333):
@@ -57,7 +59,7 @@ def worker(rank, world_size, cfg, gpu_id="0", port=23333):
         )
         log_file = os.path.join(cfg.work_dir, 'rank{}_root.log'.format(rank))
         logger = get_root_logger(log_file=log_file, log_level=cfg.log_level)  # 给每个进程创立自己的root logger，但只有rank0的创建文件，其余的不创建且为error级别
-    model = build_model(cfg.model, eval_cfg=cfg.eval_cfg)  # eval cfg can provide some useful info, e.g. the padding multi
+    model = build_model(cfg.model, cfg.work_dir, eval_cfg=cfg.eval_cfg)  # eval cfg can provide some useful info, e.g. the padding multi
     datasets = [build_dataset(cfg.data.test)]
     test(model, datasets, cfg, rank)
 
@@ -97,7 +99,7 @@ def main():
         pass
     
     if world_size > 1:
-        port = dist.util.get_free_ports(1)[0]
+        port = 23333
         server = dist.Server(port)
         processes = []
         for rank in range(world_size):

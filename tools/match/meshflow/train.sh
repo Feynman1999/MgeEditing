@@ -1,1 +1,2 @@
-python tools/train.py configs/matching/meshflow/meshflow_v1.py --gpuids -1 -d
+# python tools/train.py configs/matching/meshflow/transformer_meshflow.py --gpuids 0,1,2 -d
+nohup python -u tools/train.py configs/matching/meshflow/transformer_meshflow.py --gpuids 0,1,2 -d >> /work_base/meshflow.log 2>&1 &

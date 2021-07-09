@@ -1,0 +1,1 @@
+python tools/train.py configs/restorers/FTVSR/viz_flow_mask.py --gpuids -1

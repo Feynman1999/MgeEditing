@@ -1,0 +1,1 @@
+python tools/train.py configs/synthesizers/STTN/sttn_mgtv.py --gpuids 4 -d

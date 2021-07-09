@@ -1,0 +1,2 @@
+# python tools/train.py configs/synthesizers/STTN/sttn_official_fvi.py --gpuids 0 -d
+nohup python -u tools/train.py configs/synthesizers/STTN/sttn_mgtv_flow.py --gpuids 4,5,6,7,8,9 -d >> ./sttn_mgtv_with_mask_flow.log 2>&1 &

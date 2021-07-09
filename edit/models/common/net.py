@@ -34,26 +34,46 @@ from . import default_init_weights
 #         default_init_weights(self.conv, scale=0.1)
 
 class MobileNeXt(M.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3):
+    def __init__(self, in_channels, out_channels, stride = 1, reduction = 4):
         """
             默认使用coordinate attention在第一个dwise之后
             https://github.com/Andrew-Qibin/CoordAttention/blob/main/coordatt.py
         """
         super(MobileNeXt, self).__init__()
-        self.dconv1 = M.ConvRelu2d(in_channels, out_channels, kernel_size=kernel_size, stride=1, padding=(kernel_size//2), groups=in_channels)
-        self.CA = CoordAtt(inp = out_channels, oup=out_channels)
-        self.conv1 = M.Conv2d(out_channels, out_channels, kernel_size=1, stride=1, padding=0)
-        self.conv2 = M.ConvRelu2d(out_channels, out_channels, kernel_size=1, stride=1, padding=0)
-        self.dconv2 = M.Conv2d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=(kernel_size//2), groups=out_channels)
+        self.stride = stride
+        assert stride in (1, 2)
+        assert in_channels % reduction == 0
+        mid_channel = in_channels // reduction
+
+        self.dconv1 = M.Sequential(
+            M.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1, groups=in_channels),
+            # M.InstanceNorm(in_channels),
+            M.ReLU()
+        )
+        self.CA = CoordAtt(inp = in_channels, oup = in_channels)
+        self.conv1 = M.Conv2d(in_channels, mid_channel, kernel_size=1, stride=1, padding=0)
+        self.conv2 = M.Sequential(
+            M.Conv2d(mid_channel, out_channels, kernel_size=1, stride=1, padding=0),
+            M.InstanceNorm(out_channels),
+            M.ReLU()
+        )
+        self.dconv2 = M.Conv2d(out_channels, out_channels, kernel_size=3, stride=stride, padding=1, groups=out_channels)
+        if stride > 1:
+            self.downsample = M.Sequential(
+                M.Conv2d(in_channels, out_channels, kernel_size=1, stride = stride, padding=0)
+            )
         self.init_weights()
 
     def init_weights(self):
-        for m in [self.conv1, self.conv2, self.dconv1, self.dconv2]:
+        for m in [self.conv2, self.dconv1]:
             default_init_weights(m, scale=0.1)
 
     def forward(self, x):
         identity = x
-        out = self.dconv2(self.conv2(self.conv1(self.CA(self.dconv1(x)))))
+        if self.stride > 1:
+            identity = self.downsample(identity)
+        x = self.CA(self.dconv1(x))
+        out = self.dconv2(self.conv2(self.conv1(x)))
         return identity + out
 
 class ResBlock(M.Module):
@@ -73,10 +93,47 @@ class ResBlock(M.Module):
         out = self.conv2(self.conv1(x))
         return identity + out
 
+class RK4_ResBlock(M.Module):
+    """
+        1block = 8 conv = 4 resblocks
+        https://arxiv.org/pdf/2103.15244.pdf
+    """
+    def __init__(self, chs, kernel_size=3, init_scale = 0.1):
+        super(RK4_ResBlock, self).__init__()
+        self.init_scale = init_scale
+        self.block1 = M.Sequential(
+            M.ConvRelu2d(chs, chs, kernel_size=kernel_size, stride=1, padding=(kernel_size//2)),
+            M.Conv2d(chs, chs, kernel_size=kernel_size, stride=1, padding=(kernel_size//2))
+        )
+        self.block2 = M.Sequential(
+            M.ConvRelu2d(chs, chs, kernel_size=kernel_size, stride=1, padding=(kernel_size//2)),
+            M.Conv2d(chs, chs, kernel_size=kernel_size, stride=1, padding=(kernel_size//2))
+        )
+        self.block3 = M.Sequential(
+            M.ConvRelu2d(chs, chs, kernel_size=kernel_size, stride=1, padding=(kernel_size//2)),
+            M.Conv2d(chs, chs, kernel_size=kernel_size, stride=1, padding=(kernel_size//2))
+        )
+        self.block4 = M.Sequential(
+            M.ConvRelu2d(chs, chs, kernel_size=kernel_size, stride=1, padding=(kernel_size//2)),
+            M.Conv2d(chs, chs, kernel_size=kernel_size, stride=1, padding=(kernel_size//2))
+        )
+        self.init_weights()
+
+    def init_weights(self):
+        for m in [self.block1, self.block2, self.block3, self.block4]:
+            default_init_weights(m, scale=self.init_scale)
+
+    def forward(self, x):
+        out1 = self.block1(x) + x
+        out2 = self.block2(0.5 * out1) + x
+        out3 = self.block3(0.5 * out2) + x
+        out4 = self.block4(out3) + x
+        return x + (out1 + 2*out2 + 2*out3 + out4) / 6
+
 class ResBlocks(M.Module):
     def __init__(self, channel_num, resblock_num, kernel_size=3, blocktype="resblock"):
         super(ResBlocks, self).__init__()
-        assert blocktype in ("resblock", "shuffleblock", "MobileNeXt")
+        assert blocktype in ("resblock", "shuffleblock", "MobileNeXt", "RK4")
         if blocktype == "resblock":
             self.model = M.Sequential(
                 self.make_resblock_layer(channel_num, resblock_num, kernel_size),
@@ -88,6 +145,11 @@ class ResBlocks(M.Module):
         elif blocktype == "MobileNeXt":
             self.model = M.Sequential(
                 self.make_MobileNeXt_layer(channel_num, resblock_num, kernel_size)
+            )
+        elif blocktype == "RK4":
+            assert resblock_num % 4 == 0, "you should make sure resblock_num is multiple of 4"
+            self.model = M.Sequential(
+                self.make_RK4_layer(channel_num, resblock_num // 4, kernel_size)
             )
         else:
             raise NotImplementedError("")
@@ -108,6 +170,12 @@ class ResBlocks(M.Module):
         layers = []
         for _ in range(num_blocks):
             layers.append(ShuffleV2Block(inp = ch_out//2, oup=ch_out, mid_channels=ch_out//2, ksize=kernel_size, stride=1))
+        return M.Sequential(*layers)
+
+    def make_RK4_layer(self, ch_out, num_blocks, kernel_size):
+        layers = []
+        for _ in range(num_blocks):
+            layers.append(RK4_ResBlock(chs = ch_out, kernel_size=kernel_size, init_scale=0.1))
         return M.Sequential(*layers)
 
     def forward(self, x):

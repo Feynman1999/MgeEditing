@@ -4,6 +4,26 @@ import numpy as np
 
 
 @PIPELINES.register_module()
+class PadAnnotations(object):
+    def __init__(self, max_len, keys):
+        self.max_len = max_len
+        self.keys = keys
+
+    def __call__(self, results):
+        for key in self.keys:
+            # [s, 2] or [s, 4] pad to max_len
+            value = results[key]
+            assert len(value) <= self.max_len
+            results[key + "_num"] = len(value)
+            value = np.pad(value, ((0, self.max_len - len(value)), (0, 0)), 'constant')
+            results[key] = value
+        return results
+
+    def __repr__(self):
+        return self.__class__.__name__ + (f'(keys={self.keys}, max_len={self.max_len})')
+
+
+@PIPELINES.register_module()
 class ImageToTensor(object):
     """
     [HWC] -> [CHW]
@@ -69,6 +89,7 @@ class FramesToTensor(ImageToTensor):
                                 f'but got {type(results[key])}')
             for idx, v in enumerate(results[key]):
                 # deal with gray scale img: expand a color channel
+                # print(key, v.shape, v.dtype, v.min(), v.max())
                 if len(v.shape) == 2:
                     v = v[..., None]
                 if self.to_float32 and not isinstance(v, np.float32):

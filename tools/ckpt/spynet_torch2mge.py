@@ -2,7 +2,7 @@
     convert torch spynet params to mge file
     test result for spynet
 """
-import torch
+# import torch
 import os
 import sys
 base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,7 +14,7 @@ import numpy as np
 import megengine.functional as F
 
 if __name__ == "__main__":
-    mge.set_default_device('gpu6')
+    mge.set_default_device('gpu0')
     """
         path = "./workdirs/spynet/network-sintel-final.pytorch"
         state_dict_torch = torch.load(path)
@@ -33,8 +33,8 @@ if __name__ == "__main__":
     net.load_state_dict(mge.load("./workdirs/spynet/spynet-sintel-final.mge"), strict=True)
     net.eval()
     # read two images
-    image1 = "./workdirs/spynet/2_64.png"
-    image2 = "./workdirs/spynet/3_64.png"
+    image1 = "./workdirs/spynet/000069.png"
+    image2 = "./workdirs/spynet/000074.png"
     image1 = imread(image1, channel_order='rgb').astype(np.float32) / 255.
     image2 = imread(image2, channel_order='rgb').astype(np.float32) / 255.
     image1 = F.expand_dims(mge.tensor(image1), axis=0).transpose(0, 3, 1, 2)
@@ -44,5 +44,5 @@ if __name__ == "__main__":
     # print(flow[0:10,0:10,0])
     print(np.max(flow), np.min(flow))
     flow = flow_to_image(flow)
-    save_path = "./workdirs/spynet/flow_reds_64_6.png"
+    save_path = "./workdirs/spynet/flow.png"
     imwrite(flow[:, :, [2,1,0]], save_path)

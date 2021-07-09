@@ -267,3 +267,291 @@ class PairedRandomCrop(object):
         repr_str = self.__class__.__name__
         repr_str += f'(gt_patch_size={self.gt_patch_h}, {self.gt_patch_w})'
         return repr_str
+
+
+@PIPELINES.register_module()
+class RandomCrop(object):
+    def __init__(self, keys, patch_size, fix0=False):
+        if isinstance(patch_size, int):
+            self.patch_h = patch_size
+            self.patch_w = patch_size
+        else:
+            self.patch_h, self.patch_w = patch_size
+
+        self.keys = keys
+        self.fix0 = fix0
+
+    def __call__(self, results):
+        for key in self.keys:
+            is_list = isinstance(results[key], list)
+            if not is_list:
+                results[key] = [results[key]]
+
+            h, w, _ = results[key][0].shape
+            
+            # randomly choose top and left coordinates for patch
+            if self.fix0:
+                top = 0
+                left = 0
+            else:
+                top = random.randint(0, h - self.patch_h)
+                left = random.randint(0, w - self.patch_w)
+
+            # crop lq patch
+            results[key] = [
+                v[top:top + self.patch_h, left:left + self.patch_w, ...]
+                for v in results[key]
+            ]
+
+            if not is_list:
+                results[key] = results[key][0]
+
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f'(patch_size={self.patch_h}, {self.patch_w})'
+        return repr_str
+
+
+@PIPELINES.register_module()
+class RandomCenterCropPadTwo(object):
+    """Random center crop and random around padding for CornerNet.
+    This operation generates randomly cropped image from the original image and
+    pads it simultaneously. Different from :class:`RandomCrop`, the output
+    shape may not equal to ``crop_size`` strictly. We choose a random value
+    from ``ratios`` and the output shape could be larger or smaller than
+    ``crop_size``. The padding operation is also different from :class:`Pad`,
+    here we use around padding instead of right-bottom padding.
+    The relation between output image (padding image) and original image:
+    .. code:: text
+                        output image
+               +----------------------------+
+               |          padded area       |
+        +------|----------------------------|----------+
+        |      |         cropped area       |          |
+        |      |         +---------------+  |          |
+        |      |         |    .   center |  |          | original image
+        |      |         |        range  |  |          |
+        |      |         +---------------+  |          |
+        +------|----------------------------|----------+
+               |          padded area       |
+               +----------------------------+
+    There are 5 main areas in the figure:
+    - output image: output image of this operation, also called padding
+      image in following instruction.
+    - original image: input image of this operation.
+    - padded area: non-intersect area of output image and original image.
+    - cropped area: the overlap of output image and original image.
+    - center range: a smaller area where random center chosen from.
+      center range is computed by ``border`` and original image's shape
+      to avoid our random center is too close to original image's border.
+    the summary pipeline is listed below.
+    Train pipeline:
+    1. Choose a ``random_ratio`` from ``ratios``, the shape of padding image
+       will be ``random_ratio * crop_size``.
+    2. Choose a ``random_center`` in center range.
+    3. Generate padding image with center matches the ``random_center``.
+    4. Initialize the padding image with pixel value equals to ``mean``.
+    5. Copy the cropped area to padding image.
+    6. Refine annotations.
+    Args:
+        ratios (tuple): random select a ratio from tuple and crop image to
+            (crop_size[0] * ratio) * (crop_size[1] * ratio).
+            Only available in train mode.
+        border (int): max distance from center select area to image border.
+            Only available in train mode.
+        mean (sequence): Mean values of 3 channels.
+        std (sequence): Std values of 3 channels.
+        to_rgb (bool): Whether to convert the image from BGR to RGB.
+        bbox_clip_border (bool, optional): Whether clip the objects outside
+            the border of the image. Defaults to True.
+    """
+    def __init__(self,
+                 ratios=(0.9, 1.0, 1.1),
+                 border=128,
+                 mean=None,
+                 std=None,
+                 to_rgb=None,
+                 bbox_clip_border=True):
+        assert isinstance(ratios, (list, tuple))
+        self.ratios = ratios
+        self.border = border
+        # We do not set default value to mean, std and to_rgb because these
+        # hyper-parameters are easy to forget but could affect the performance.
+        # Please use the same setting as Normalize for performance assurance.
+        assert mean is not None and std is not None and to_rgb is not None
+        self.to_rgb = to_rgb
+        self.input_mean = mean
+        self.input_std = std
+        if to_rgb:
+            self.mean = mean[::-1]
+            self.std = std[::-1]
+        else:
+            self.mean = mean
+            self.std = std
+        self.bbox_clip_border = bbox_clip_border
+
+    def _get_border(self, border, size):
+        """Get final border for the target size.
+        This function generates a ``final_border`` according to image's shape.
+        The area between ``final_border`` and ``size - final_border`` is the
+        ``center range``. We randomly choose center from the ``center range``
+        to avoid our random center is too close to original image's border.
+        Also ``center range`` should be larger than 0.
+        Args:
+            border (int): The initial border, default is 128.
+            size (int): The width or height of original image.
+        Returns:
+            int: The final border.
+        """
+        k = 2 * border / size
+        i = pow(2, np.ceil(np.log2(np.ceil(k))) + (k == int(k)))
+        return border // i
+
+    def _filter_boxes(self, patch, boxes):
+        """Check whether the center of each box is in the patch.
+        Args:
+            patch (list[int]): The cropped area, [left, top, right, bottom].
+            boxes (numpy array, (N x 4)): Ground truth boxes.
+        Returns:
+            mask (numpy array, (N,)): Each box is inside or outside the patch.
+        """
+        center = (boxes[:, :2] + boxes[:, 2:]) / 2
+        mask = (center[:, 0] > patch[0]) * (center[:, 1] > patch[1]) * (
+            center[:, 0] < patch[2]) * (
+                center[:, 1] < patch[3])
+        return mask
+
+    def _crop_image_and_paste(self, image, center, size):
+        """Crop image with a given center and size, then paste the cropped
+        image to a blank image with two centers align.
+        This function is equivalent to generating a blank image with ``size``
+        as its shape. Then cover it on the original image with two centers (
+        the center of blank image and the random center of original image)
+        aligned. The overlap area is paste from the original image and the
+        outside area is filled with ``mean pixel``.
+        Args:
+            image (np array, H x W x C): Original image.
+            center (list[int]): Target crop center coord.
+            size (list[int]): Target crop size. [target_h, target_w]
+        Returns:
+            cropped_img (np array, target_h x target_w x C): Cropped image.
+            border (np array, 4): The distance of four border of
+                ``cropped_img`` to the original image area, [top, bottom,
+                left, right]
+            patch (list[int]): The cropped area, [left, top, right, bottom].
+        """
+        center_y, center_x = center
+        target_h, target_w = size
+        img_h, img_w, img_c = image.shape
+
+        x0 = max(0, center_x - target_w // 2)
+        x1 = min(center_x + target_w // 2, img_w)
+        y0 = max(0, center_y - target_h // 2)
+        y1 = min(center_y + target_h // 2, img_h)
+        patch = np.array((int(x0), int(y0), int(x1), int(y1)))
+
+        left, right = center_x - x0, x1 - center_x
+        top, bottom = center_y - y0, y1 - center_y
+
+        cropped_center_y, cropped_center_x = target_h // 2, target_w // 2
+        cropped_img = np.zeros((target_h, target_w, img_c), dtype=image.dtype)
+        for i in range(img_c):
+            cropped_img[:, :, i] += self.mean[i]
+        y_slice = slice(cropped_center_y - top, cropped_center_y + bottom)
+        x_slice = slice(cropped_center_x - left, cropped_center_x + right)
+        cropped_img[y_slice, x_slice, :] = image[y0:y1, x0:x1, :]
+
+        border = np.array([
+            cropped_center_y - top, cropped_center_y + bottom,
+            cropped_center_x - left, cropped_center_x + right
+        ],dtype=np.float32)
+
+        return cropped_img, border, patch
+
+    def _train_aug(self, results, scale):
+        """Random crop and around padding the original image.
+        Args:
+            results (dict): Image infomations in the augment pipeline.
+        Returns:
+            results (dict): The updated dict.
+        """
+        img1 = results['img1']
+        h, w, c = img1.shape
+        img2 = results['img2']
+        h2, w2, c = img2.shape
+        assert h==h2 and w == w2
+
+        boxes1 = results['gt_bboxes1']
+        boxes2 = results['gt_bboxes2']
+        new_h = int(h * scale)
+        new_w = int(w * scale)
+        h_border = self._get_border(self.border, h)
+        w_border = self._get_border(self.border, w)
+        for i in range(30):
+            center_x = np.random.randint(low=w_border, high=w - w_border)
+            center_y = np.random.randint(low=h_border, high=h - h_border)
+
+            cropped_img1, border, patch1 = self._crop_image_and_paste(img1, [center_y, center_x], [new_h, new_w])
+            cropped_img2, border, patch2 = self._crop_image_and_paste(img2, [center_y, center_x], [new_h, new_w])
+
+            mask1 = self._filter_boxes(patch1, boxes1)
+            mask2 = self._filter_boxes(patch2, boxes2)
+
+            # if image do not have valid bbox, any crop patch is valid.
+            if not mask1.any() and len(boxes1) > 0:
+                continue
+            if not mask2.any() and len(boxes2) > 0:
+                continue
+
+            results['img1'] = cropped_img1
+            results['img2'] = cropped_img2            
+            results['img_shape'] = cropped_img1.shape
+            results['pad_shape'] = cropped_img1.shape
+
+            cropped_center_x, cropped_center_y = new_w // 2, new_h // 2
+
+            # crop bboxes accordingly and clip to the image boundary
+            for key in ['gt_bboxes1', 'gt_bboxes2']:
+                mask = self._filter_boxes(patch1, results[key])
+                bboxes = results[key][mask]
+                bboxes[:, 0:4:2] += cropped_center_x - center_x
+                bboxes[:, 1:4:2] += cropped_center_y - center_y
+                if self.bbox_clip_border:
+                    bboxes[:, 0:4:2] = np.clip(bboxes[:, 0:4:2], 0, new_w-1)
+                    bboxes[:, 1:4:2] = np.clip(bboxes[:, 1:4:2], 0, new_h-1)
+                keep = (bboxes[:, 2] > bboxes[:, 0]) & (bboxes[:, 3] > bboxes[:, 1])
+                bboxes = bboxes[keep]
+                results[key] = bboxes
+                if '1' in key:
+                    labels = results['gt_labels1'][mask]
+                    labels = labels[keep]
+                    results['gt_labels1'] = labels
+                else:
+                    labels = results['gt_labels2'][mask]
+                    labels = labels[keep]
+                    results['gt_labels2'] = labels
+
+            return results
+        raise RuntimeError("can not find one crop in 30 times random")
+
+    def __call__(self, results):
+        img = results['img1']
+        assert img.dtype == np.float32, (
+            'RandomCenterCropPad needs the input image of dtype np.float32,'
+            ' please set "to_float32=True" in "LoadImageFromFile" pipeline')
+        h, w, c = img.shape
+        assert c == len(self.mean)
+        scale = np.random.choice(self.ratios)
+        return self._train_aug(results, scale)
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f'ratios={self.ratios}, '
+        repr_str += f'border={self.border}, '
+        repr_str += f'mean={self.input_mean}, '
+        repr_str += f'std={self.input_std}, '
+        repr_str += f'to_rgb={self.to_rgb}, '
+        repr_str += f'bbox_clip_border={self.bbox_clip_border})'
+        return repr_str

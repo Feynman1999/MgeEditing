@@ -7,5 +7,7 @@ from .BidirectionalRestorer import BidirectionalRestorer
 from .BidirectionalRestorer_small import BidirectionalRestorer_small
 from .BidirectionalRestorer_edge import BidirectionalRestorer_edge
 from .BidirectionalRestorer_layer2 import BidirectionalRestorer_layer2
+from .MultilayerBidirectionalRestorer import MultilayerBidirectionalRestorer
+from .ftvsr_restorer import FTVSRRestorer
 
 __all__ = ['BasicRestorer']

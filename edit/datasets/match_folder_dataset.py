@@ -17,7 +17,9 @@ class MatchFolderDataset(BaseMatchDataset):
                  mode='train',
                  x_size = 800,
                  z_size = 512,
-                 balance_flag = "None"  # support None | uniform | test
+                 balance_flag = "None",  # support None | uniform | test
+                 ban_class = [],
+                 ban_old = False
                  ):
         super(MatchFolderDataset, self).__init__(pipeline, mode)
         self.data_path = str(data_path)
@@ -27,6 +29,8 @@ class MatchFolderDataset(BaseMatchDataset):
         self.x_size = x_size
         self.z_size = z_size
         self.balance_flag = balance_flag
+        self.ban_class = ban_class
+        self.ban_old = ban_old
         self.data_infos = self.load_annotations()
 
     def load_annotations(self):
@@ -55,14 +59,21 @@ class MatchFolderDataset(BaseMatchDataset):
                 top_left_y.append(float(infos[2]))
         f.close()
 
-        ban_dict=[(5,95), (5,19), (5,20), (5,10), (5 ,44), (5 ,9), (3 ,193), (3 ,61), (1 ,187), (1 ,185), (1 ,179), (1 ,30), (1 ,95), (1 ,59), (1 ,52), (1 ,94), (1 ,26),(1 ,24), (1 ,23), (1, 43), (1, 3), (1,82),(2,455), (6,375), (6,329)]
+        # ban_dict=[(5,95), (5,19), (5,20), (5,10), (5 ,44), (5 ,9), (3 ,193), (3 ,61), (1 ,187), (1 ,185), (1 ,179), (1 ,30), (1 ,95), (1 ,59), (1 ,52), (1 ,94), (1 ,26),(1 ,24), (1 ,23), (1, 43), (1, 3), (1,82),(2,455), (6,375), (6,329)]
+        
+        ban_dict=[(5, 225)]
+        ban_old_thr = {1:201, 2:550, 3:298, 4:600, 5:150, 6:551, 7:0, 8:0} # 2350张
         
         for i in range(len(opt_list)):
             if self.mode == "train":
                 assert opt_list[i][-4] == '.'
                 aaa = int(opt_list[i][0])
                 bbb = int(opt_list[i][:-4].split("_")[-1])
+                if bbb <= ban_old_thr[aaa] and self.ban_old:
+                    continue
                 if (aaa, bbb) in ban_dict:
+                    continue
+                if aaa in self.ban_class:
                     continue
                 data_infos.append(
                     dict(
@@ -77,6 +88,12 @@ class MatchFolderDataset(BaseMatchDataset):
                     )
                 )
             elif self.mode == "eval":
+                aaa = int(opt_list[i][0])
+                bbb = int(opt_list[i][:-4].split("_")[-1])
+                if (aaa, bbb) in ban_dict:
+                    continue
+                if aaa in self.ban_class:
+                    continue
                 data_infos.append(
                     dict(
                         opt_path=osp.join(self.opt_folder, opt_list[i]),
@@ -104,7 +121,7 @@ class MatchFolderDataset(BaseMatchDataset):
         if self.mode == "train":
             # 按照类别进行分类，分多个列表
             ans = []
-            for i in range(10):
+            for i in range(20):
                 ans.append([])
             for item in data_infos:
                 ans[item['class_id']].append(copy.deepcopy(item))

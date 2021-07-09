@@ -1,2 +1,2 @@
-# python tools/train.py configs/restorers/BasicVSR/basicVSR_stage1.py --gpuids 0,1,2,3 -d
-nohup python -u tools/train.py configs/restorers/BasicVSR/basicVSR_v5.py --gpuids 0,1,2,3 -d >> /work_base/track2_v5_stage3.log 2>&1 &
+# python tools/train.py configs/restorers/BasicVSR/basicVSR_multilayer_stage1.py --gpuids 0,1,2 -d
+nohup python -u tools/train.py configs/restorers/BasicVSR/basicVSR_multilayer_highway_stage2.py --gpuids 0,1,2 -d >> /work_base/basicVSR_multilayer_highway_stage2.log 2>&1 &

@@ -1,0 +1,1 @@
+python tools/train.py configs/synthesizers/BasicInpainting/basic_v1_stage1_viz.py --gpuids 1 -d

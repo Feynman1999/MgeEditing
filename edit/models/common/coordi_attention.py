@@ -24,14 +24,16 @@ class h_swish(M.Module):
 class CoordAtt(M.Module):
     def __init__(self, inp, oup, reduction=32):
         super(CoordAtt, self).__init__()
-        # self.pool_h = M.AdaptiveAvgPool2d((None, 1))
-        # self.pool_w = M.AdaptiveAvgPool2d((1, None))
-        mip = max(16, inp // reduction) # for inp<=256,  mip = 8
+        
+        mip = max(8, inp // reduction)
+        
         self.conv1 = M.Conv2d(inp, mip, kernel_size=1, stride=1, padding=0)
         # self.bn1 = M.BatchNorm2d(mip)
+        self.bn1 = M.InstanceNorm(mip)
         self.act = h_swish()
         self.conv_h = M.Conv2d(mip, oup, kernel_size=1, stride=1, padding=0)
         self.conv_w = M.Conv2d(mip, oup, kernel_size=1, stride=1, padding=0)
+
         self.init_weights()
 
     def forward(self, x):
@@ -41,7 +43,7 @@ class CoordAtt(M.Module):
         x_w = F.mean(x, axis=2, keepdims=True).transpose(0, 1, 3, 2) # [B,C,W,1]
         y = F.concat([x_h, x_w], axis = 2) # [B,C,H+W,1]
         y = self.conv1(y)
-        # y = self.bn1(y)
+        y = self.bn1(y)
         y = self.act(y) # [B, mip, H+W, 1]
         x_h = y[:, :, :h, :]  # [B,mip,H,1]
         x_w = y[:, :, h:, :]
@@ -52,4 +54,4 @@ class CoordAtt(M.Module):
         return out
 
     def init_weights(self):
-        default_init_weights(self, scale=0.1)
+        default_init_weights(self.conv1, scale=0.1)

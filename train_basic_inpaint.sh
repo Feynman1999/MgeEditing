@@ -1,0 +1,2 @@
+# python tools/train.py configs/synthesizers/BasicInpainting/basic_v1_stage1.py --gpuids 9 -d
+nohup python -u tools/train.py configs/synthesizers/BasicInpainting/basic_v1_stage1.py --gpuids 5,6,7,8,9 -d >> ./basic_mgtv_onlyg.log 2>&1 &

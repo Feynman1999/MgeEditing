@@ -1,5 +1,4 @@
 import shutil
-from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -81,11 +80,11 @@ class BaseMatchDataset(BaseDataset):
                 if "id" in metric:
                     continue 
                 eval_results[metric].append(val)
-                eval_results[metric+ "_" + str(class_id)].append(val)
+                eval_results[metric+ "_class_" + str(class_id)].append(val)
 
                 # 特殊打印
                 if val > 5:
-                    self.logger.info("{} value: {}".format(metric, val))
+                    self.logger.info("{} value: {}  class: {} file: {}".format(metric, val, class_id, file_id))
                     eval_results[metric+ "_" + str(class_id) + "_more_than_5_nums"].append(1.0)
                 else:
                     # val = int(val+0.5)
@@ -103,7 +102,7 @@ class BaseMatchDataset(BaseDataset):
         now_score = 0
         best_score = 0
         for class_id, diff_score in self.difficulty_score.items():
-            key = "dis_"+str(class_id)
+            key = "dis_class_"+str(class_id)
             if eval_results.get(key) is None:
                 self.logger.info("do not have class index: {}".format(class_id))
             else:

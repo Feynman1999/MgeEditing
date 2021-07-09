@@ -1,0 +1,1 @@
+nohup python -u tools/train.py configs/restorers/MBRVSR/baseline_stage1.py --gpuids 0,1,2,3 -d >> /work_base/MBRVSR_baseline_stage1.log 2>&1 &

@@ -133,7 +133,6 @@ class EpochBasedRunner(BaseRunner):
             pass
 
     def register_training_hooks(self,
-                                lr_config,
                                 checkpoint_config,
                                 log_config):
         """Register default hooks for epoch-based training.
@@ -144,15 +143,10 @@ class EpochBasedRunner(BaseRunner):
         - CheckpointSaverHook
         - logHook
         """
-        if lr_config is not None:
-            lr_config.setdefault('by_epoch', True)
         if checkpoint_config is not None:
             checkpoint_config.setdefault('by_epoch', True)
         if log_config is not None:
             log_config.setdefault('by_epoch', False)
 
-        # self.register_lr_hook(lr_config)
-        # register_momentum_hook
-        # register_optimizer_hook
         self.register_checkpoint_hook(checkpoint_config)
         self.register_logger_hooks(log_config)

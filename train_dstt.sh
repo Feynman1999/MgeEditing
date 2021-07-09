@@ -1,0 +1,2 @@
+# python tools/train.py configs/synthesizers/DSTT/dstt_mgtv.py --gpuids 0 -d
+nohup python -u tools/train.py configs/synthesizers/DSTT/dstt_mgtv.py --gpuids 0,1,2,3,4,5,6,7,8,9 -d >> ./dstt_mgtv.log 2>&1 &

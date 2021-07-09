@@ -26,13 +26,14 @@ class Focal_loss(M.Module):
         self.gamma = gamma
         self.norm_type = norm_type
 
-    def forward(self, pred, label):
-        return get_focal_loss(pred, label, self.ignore_label, self.background, self.alpha, self.gamma, self.norm_type)
+    def forward(self, pred, label, batch_weight = None):
+        return get_focal_loss(pred, label, batch_weight, self.ignore_label, self.background, self.alpha, self.gamma, self.norm_type)
 
 
 def get_focal_loss(
     logits: Tensor,
     labels: Tensor,
+    batch_weight: Tensor,
     ignore_label: int = -1,
     background: int = 0,
     alpha: float = 0.25,
@@ -78,6 +79,11 @@ def get_focal_loss(
     # pos_loss = (hard_labels == class_range).astype("float32") * loss * alpha
     # neg_loss = (hard_labels != class_range).astype("float32") * loss * (1 - alpha)
     
+    if batch_weight is not None:
+        # mul pos and neg, [B, A, 1]
+        pos_loss = pos_loss * batch_weight
+        neg_loss = neg_loss * batch_weight
+
     loss = (pos_loss + neg_loss).sum()
     
     if norm_type == "fg":

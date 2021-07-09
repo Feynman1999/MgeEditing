@@ -2,6 +2,7 @@
     train your model and support eval when training.
 """
 import os
+# os.environ['MGB_CUDA_RESERVE_MEMORY'] = '1'
 import sys
 base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(base_path)
@@ -65,7 +66,7 @@ def train(model, datasets, cfg, rank):
     runner.sync_model_params()
 
     # register some useful hooks
-    runner.register_training_hooks(lr_config=cfg.lr_config, checkpoint_config=cfg.checkpoint_config, log_config=cfg.log_config)
+    runner.register_training_hooks(checkpoint_config=cfg.checkpoint_config, log_config=cfg.log_config)
 
     # register evaluation hook
     if cfg.get('evaluation', None) is not None:
@@ -77,8 +78,8 @@ def train(model, datasets, cfg, rank):
     runner.run(data_loaders, cfg.workflow, cfg.total_epochs)
 
 def worker(rank, world_size, cfg, gpu_id="0", port=23333):
-    if cfg.dynamic:
-        trace.enabled = False
+    # if cfg.dynamic:
+    #     trace.enabled = False
 
     if world_size > 1:
         dist.init_process_group(
@@ -90,7 +91,7 @@ def worker(rank, world_size, cfg, gpu_id="0", port=23333):
         )
         log_file = os.path.join(cfg.work_dir, 'rank{}_root.log'.format(rank))
         logger = get_root_logger(log_file=log_file, log_level=cfg.log_level)
-    model = build_model(cfg.model, train_cfg=cfg.train_cfg, eval_cfg=cfg.eval_cfg) # 此时参数已经随机化完成
+    model = build_model(cfg.model, workdir=cfg.work_dir, train_cfg=cfg.train_cfg, eval_cfg=cfg.eval_cfg) # 此时参数已经随机化完成
     datasets = [build_dataset(cfg.data.train)]
     train(model, datasets, cfg, rank)
 
@@ -130,7 +131,8 @@ def main():
 
     if world_size > 1:
         # scale weight decay in "SUM" mode
-        port = dist.util.get_free_ports(1)[0]
+        # port = dist.util.get_free_ports(1)[0]
+        port = 23333
         server = dist.Server(port)
         processes = []
         for rank in range(world_size):

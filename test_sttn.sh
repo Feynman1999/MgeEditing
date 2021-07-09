@@ -1,0 +1,1 @@
+python tools/test.py configs/synthesizers/STTN/sttn_mgtv_new_test.py --gpuids 7 -d

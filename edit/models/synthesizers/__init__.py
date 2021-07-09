@@ -1,0 +1,2 @@
+from .sttn_synthesizer import STTN_synthesizer
+from .basic_inpaint import basicinpaint_synthesizer

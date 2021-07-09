@@ -52,9 +52,29 @@ def contrast(image, value):
     image = image * alpha + image.mean() * (1 - alpha)
     return image.clip(0, 255).astype(dtype)
 
-
 @PIPELINES.register_module()
 class Add_contrast(object):
+    def __init__(self, keys, value):
+        self.keys = keys
+        self.value = value
+
+    def __call__(self, results):
+        for key in self.keys:
+            if isinstance(results[key], list):
+                raise NotImplementedError("not support list key")
+            else:
+                if key in ['img', ]:
+                    results[key] = contrast(results[key], value = self.value)
+                else:
+                    raise NotImplementedError("not support key")
+        return results
+
+    def __repr__(self):
+        format_string = self.__class__.__name__
+        return format_string
+
+@PIPELINES.register_module()
+class Add_contrast_opt_sar(object):
     def __init__(self, keys, value_sar = 1, value_optical = 1):
         self.keys = keys
         self.value_sar = value_sar

@@ -1,4 +1,5 @@
 import random
+import numpy as np
 from megengine.data.transform import RandomResizedCrop as mge_RRC
 from megengine.data.transform import Resize as mge_resize
 from ..registry import PIPELINES
@@ -37,8 +38,26 @@ class Resize(object):
                     self.resize.apply(v) for v in results[key]
                 ]
             else:
+                """
+                    当key不是list时，会检测有没有bbox，如果有则进行bbox的调整
+                    先记录下每个key之前的shape
+                """
+                if 'scale_factor' not in results.keys():
+                    old_h, old_w, _ = results[key].shape
+                    results['scale_factor'] = np.array([self.size[1]/old_w, self.size[0]/old_h, self.size[1]/old_w, self.size[0]/old_h])
+                    self._resize_bboxes(results)
                 results[key] = self.resize.apply(results[key])
         return results
+
+    def _resize_bboxes(self, results):
+        """Resize bounding boxes with ``results['scale_factor']``."""
+        num = 0
+        for key in results.keys():
+            if "bbox" in key:
+                num += 1
+                bboxes = np.around(results[key] * results['scale_factor'])
+                results[key] = bboxes
+        assert num <= 2
 
     def __repr__(self):
         interpolate_str = self.interpolation_str

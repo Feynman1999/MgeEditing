@@ -7,3 +7,4 @@ from .augmentation import Flip
 from .resize import RandomResizedCrop, Resize
 from .colorjitter import Bgr2Gray, ColorJitter, Add_contrast
 from .denoising import NLmeanDenoising
+from .masks import GenerateRandomMasks

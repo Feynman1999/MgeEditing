@@ -76,5 +76,8 @@ class EvalIterHook(Hook):
         save_path = os.path.join(self.save_path, "iter_{}".format(iters))  # save for some information. e.g. SVG for everyframe value in VSR.
         eval_res = self.dataloader.dataset.evaluate(results, save_path)
         self.logger.info("*****   eval results for {} iters:   *****".format(iters))
-        for name, val in eval_res.items():
-            self.logger.info("metric: {}  average_val: {:.4f}".format(name, val))
+        
+        namelist = eval_res.keys()
+        namelist = sorted(namelist, key = lambda x:(len(x),x), reverse=False) 
+        for name in namelist:
+            self.logger.info("metric: {}  average_val: {:.4f}".format(name, eval_res[name]))

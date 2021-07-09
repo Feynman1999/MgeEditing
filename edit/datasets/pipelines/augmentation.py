@@ -1,8 +1,10 @@
 import numpy as np
 import os.path as osp
+import random
+from scipy.ndimage.measurements import label
 from ..registry import PIPELINES
 from edit.utils import imflip_, bboxflip_, img_shelter, flowflip_
-
+from edit.utils import scandir
 
 @PIPELINES.register_module()
 class Corner_Shelter(object):
@@ -150,7 +152,7 @@ class Flip(object):
                         else:
                             imflip_(v, self.direction)
                 else:
-                    if key in ('bbox', 'bboxes'):
+                    if 'bboxes' in key:
                         bboxflip_(results[key], self.direction, self.Len)
                     elif key in ('flow'):
                         raise NotImplementedError("not implemented flow for just one frame")
@@ -281,63 +283,9 @@ class GenerateFrameIndiceswithPadding(object):
 
 
 @PIPELINES.register_module()
-class STTN_REDS_GenerateFrameIndices(object):
-    def __init__(self, interval_list, gap = 20):
-        self.interval_list = interval_list
-        self.gap = gap # 前后的间隔
-
-    def __call__(self, results):
-        clip_name, frame_name = results['LRkey'].split('/')  # key example: 000/00000000.png
-        clip_name_HR, _ = results['HRkey'].split('/')  # key example: 000/00000000.png
-        frame_name, ext_name = osp.splitext(frame_name)  # 00000000    .png
-        padding_length = len(frame_name)
-        center_frame_idx = int(frame_name)
-        num_half_frames = results['num_input_frames'] // 2
-        interval = np.random.choice(self.interval_list)
-        start_frame_idx = center_frame_idx - num_half_frames * interval  # ensure not exceeding the borders
-        end_frame_idx = center_frame_idx + num_half_frames * interval
-        start = 0
-        end = start + results['max_frame_num']
-        while (start_frame_idx < start) or (end_frame_idx >= end):
-            center_frame_idx = np.random.randint(start, end)
-            start_frame_idx = center_frame_idx - num_half_frames * interval
-            end_frame_idx = center_frame_idx + num_half_frames * interval
-
-        neighbor_list = list(
-            range(center_frame_idx - num_half_frames * interval,
-                  center_frame_idx + num_half_frames * interval + 1, interval))
-
-        if self.gap >0:
-            # append to neighbor_list two frames (for reds)
-            now_end = neighbor_list[-1]
-            add_end_1 = min(now_end + self.gap, end-1)
-            add_end_2 = min(now_end + self.gap*2, end-1)
-            neighbor_list.append(add_end_1)
-            neighbor_list.append(add_end_2)
-
-            now_start = neighbor_list[0]
-            add_start_1 = max(0, now_start - self.gap)
-            # neighbor_list.insert(0, add_start_1)
-            neighbor_list.append(add_start_1)
-
-        lq_path_root = results['lq_path']
-        gt_path_root = results['gt_path']
-        lq_paths = [
-            osp.join(lq_path_root, clip_name, str(v).zfill(padding_length) + ext_name)
-            for v in neighbor_list
-        ]
-        gt_paths = [
-            osp.join(gt_path_root, clip_name_HR, str(v).zfill(padding_length) + ext_name)
-            for v in neighbor_list
-        ]
-        results['lq_path'] = lq_paths
-        results['gt_path'] = gt_paths
-        results['interval'] = interval
-        return results
-
-@PIPELINES.register_module()
-class GenerateFrameIndices(object):
+class GenerateFrameIndices_LQ_GT(object):
     """
+        for Video Super Resolution
         Generate frame index for many to many or many to one datasets. (for training)
         It also performs temporal augmention with random interval.
 
@@ -465,4 +413,128 @@ class TemporalReverse(object):
     def __repr__(self):
         repr_str = self.__class__.__name__
         repr_str += f'(keys={self.keys}, reverse_ratio={self.reverse_ratio})'
+        return repr_str
+
+
+@PIPELINES.register_module()
+class GenerateContinuousOrDiscontinuousIndices(object):
+    """
+        for video inpainting training
+        从一个视频文件夹里随机选择若干帧（目前需要给定一个和视频总长度相等的mask）
+    """
+    def __init__(self, continuous_probability = 0.5, inputnums = None):
+        self.continuous_probability = continuous_probability
+        self.inputnums = inputnums
+        self.IMG_EXTENSIONS = ('.jpg', '.png')
+
+    def get_ref_index(self, total_length):
+        """
+            随机两种情况，即随机选择n帧或者相邻n帧
+        """
+        if random.uniform(0, 1) > self.continuous_probability:
+            ref_index = random.sample(range(total_length), self.inputnums)
+            ref_index.sort()
+        else:
+            pivot = random.randint(0, total_length-self.inputnums)
+            ref_index = [pivot+i for i in range(self.inputnums)]
+        return ref_index
+
+    def __call__(self, results):
+        path = results['path']
+        key = results['key']
+        total_length = results['max_frame_num']
+        all_masks = results['masks']
+
+        if self.inputnums is None: # for eval and test
+            self.inputnums = total_length
+        
+        ref_index = self.get_ref_index(total_length)
+        # 获得所有排好序后的文件名
+        imgnames = list(scandir(osp.join(path, key), suffix=self.IMG_EXTENSIONS, recursive=False))
+        imgnames = sorted(imgnames)
+        imgnames = [osp.join(path,key,imgname) for imgname in imgnames]
+
+        assert len(imgnames) == total_length
+
+        frames_path = [] 
+        masks = [] # numpy
+        for idx in ref_index:            
+            frames_path.append(imgnames[idx])
+            masks.append(all_masks[idx])
+
+        results['frames_path'] = frames_path
+        # print(results['frames_path'])
+        results['masks'] = masks
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f', continuous_probability={self.continuous_probability}, inputnums={self.inputnums}'
+        return repr_str
+
+
+@PIPELINES.register_module()
+class GenerateFrameIndices_now_and_pre(object):
+    """
+        for mot centertrack
+    """
+    def __init__(self, interval = 3, index_start = 1, name_padding = True):
+        self.interval = interval
+        self.index_start = index_start
+        self.name_padding = name_padding
+
+    def __call__(self, results):
+        clip_name, _, frame_name = results['key'].split('/')
+        frame_name, ext_name = osp.splitext(frame_name)  # 000001    .PNG
+        if self.name_padding:
+            padding_length = len(frame_name)
+        else:
+            padding_length = 0
+        now_frame_idx = int(frame_name)
+
+        if now_frame_idx == self.index_start:
+            results['is_first'] = True
+        else:
+            results['is_first'] = False
+
+        if self.interval == 0:
+            """
+                for test
+            """
+            raise NotImplementedError("")
+        else:
+            """
+                for train or eval
+            """
+            interval = np.random.randint(1, self.interval)
+            # ensure not exceeding the borders
+            pre_frame_idx = now_frame_idx - interval
+            start = self.index_start
+            while (pre_frame_idx < start):
+                now_frame_idx += 1
+                pre_frame_idx = now_frame_idx - interval
+
+            results['img1_path'] = osp.join(results['folder'], clip_name, "img1", str(pre_frame_idx).zfill(padding_length) + ext_name)
+            results['img2_path'] = osp.join(results['folder'], clip_name, "img1", str(now_frame_idx).zfill(padding_length) + ext_name)
+            
+            # collect bboxes and labels from label_dict
+            # gt_bboxes1(S1,4) gt_bboxes2(S2, 4) gt_labels1(S1, 2) gt_labels2(S2, 2)
+            label_dict = results['label_dict'] # key is clip_name + "_" + frame + "_bboxes/_labels"
+            gt_bboxes1 = label_dict[clip_name + "_" + str(pre_frame_idx) + "_bboxes"] # list of (4) numpy
+            gt_bboxes1 = np.stack(gt_bboxes1, axis=0) # (s1, 4)
+            gt_bboxes2 = label_dict[clip_name + "_" + str(now_frame_idx) + "_bboxes"] # list of (4) numpy
+            gt_bboxes2 = np.stack(gt_bboxes2, axis=0) # (s2, 4)
+            gt_labels1 = label_dict[clip_name + "_" + str(pre_frame_idx) + "_labels"]
+            gt_labels1 = np.stack(gt_labels1, axis=0)
+            gt_labels2 = label_dict[clip_name + "_" + str(now_frame_idx) + "_labels"]
+            gt_labels2 = np.stack(gt_labels2, axis=0)
+            results['gt_bboxes1'] = gt_bboxes1
+            results['gt_bboxes2'] = gt_bboxes2
+            results['gt_labels1'] = gt_labels1
+            results['gt_labels2'] = gt_labels2
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f', interval={self.interval}'
         return repr_str

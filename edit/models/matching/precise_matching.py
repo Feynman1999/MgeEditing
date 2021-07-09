@@ -13,6 +13,14 @@ from ..base import BaseModel
 from ..builder import build_backbone
 from ..registry import MODELS
 
+epoch_dict = {}
+
+def adjust_learning_rate(optimizer, epoch):
+    if epoch % 60 == 0  and epoch_dict.get(epoch, None) is None:
+        epoch_dict[epoch] = True
+        for param_group in optimizer.param_groups:
+            param_group["lr"] = param_group["lr"] * 0.9
+        print("adjust lr! , now lr: {}".format(param_group["lr"]))
 
 def train_generator_batch(optical, sar, label, cls_id, file_id, *, gm, netG):
     netG.train()
@@ -20,6 +28,8 @@ def train_generator_batch(optical, sar, label, cls_id, file_id, *, gm, netG):
         cls_score = netG(sar, optical)
         loss, cls_labels = netG.loss(cls_score, label)
         gm.backward(loss)
+        if dist.is_distributed():
+            loss = dist.functional.all_reduce_sum(loss) / dist.get_world_size()
         
     B, _, H, W = cls_score.shape
     cls_score = cls_score.reshape(B, -1)
@@ -31,6 +41,10 @@ def train_generator_batch(optical, sar, label, cls_id, file_id, *, gm, netG):
         output.append(netG.fm_ctr[0, :, H_id, W_id])  # (2, )
     output = F.stack(output, axis=0)  # (B, 2)
     dis = F.norm(F.floor(output[:, 0:2]+0.5) - label[:, 0:2], ord=2, axis = 1)  # (B, )
+    
+    if dist.is_distributed():
+        dis = dist.functional.all_reduce_sum(dis) / dist.get_world_size()
+        
     return [loss*1000, dis.mean()]
 
 
@@ -81,7 +95,7 @@ class PreciseMatching(BaseModel):
         """
         self.generator.init_weights(pretrained)
 
-    def train_step(self, batchdata):
+    def train_step(self, batchdata, now_epoch, now_iter):
         """train step.
 
         Args:
@@ -89,8 +103,12 @@ class PreciseMatching(BaseModel):
         Returns:
             list: loss
         """
-        optical, sar, label, cls_id, file_id = batchdata
-        
+        optical = batchdata['opt']
+        sar = batchdata['sar']
+        label = batchdata['bbox']
+        cls_id = batchdata['class_id']
+        file_id = batchdata['file_id']
+
         # name = random.sample('zyxwvutsrqponmlkjihgfedcba', 3)
         # name = "".join(name) + "_" + str(label[0][0]) + "_" + str(label[0][1]) + "_" + str(label[0][2]) + "_" + str(label[0][3])
         # imwrite(tensor2img(optical[0, ...], min_max=(-0.64, 1.36)), file_path="./workdirs/" + name + "_opt.png") 
@@ -108,6 +126,7 @@ class PreciseMatching(BaseModel):
         #     sar_tensor = sar_tensor.reshape(B*X, C, h, w)
         #     label_tensor = label_tensor.reshape(B*X, 4)
         loss = train_generator_batch(optical_tensor, sar_tensor, label_tensor, cls_id, file_id, gm=self.generator_gm, netG=self.generator)
+        adjust_learning_rate(self.optimizers['generator'], now_epoch)
         self.optimizers['generator'].step()
         self.optimizers['generator'].clear_grad()
         return loss
@@ -123,14 +142,14 @@ class PreciseMatching(BaseModel):
         """
         epoch = kwargs.get('epoch', 0)
         # print("now epoch: {}".format(epoch))
-        optical = batchdata[0]  # [B ,1 , H, W]
-        sar = batchdata[1]
+        optical = batchdata['opt']  # [B ,1 , H, W]
+        sar = batchdata['sar']
         
         optical = ensemble_forward(optical, Type=epoch)
         sar = ensemble_forward(sar, Type=epoch)
 
-        class_id = batchdata[-2]
-        file_id = batchdata[-1]
+        class_id = batchdata["class_id"]
+        file_id = batchdata["file_id"]
         
         optical_tensor = mge.tensor(optical, dtype="float32")
         sar_tensor = mge.tensor(sar, dtype="float32")
@@ -177,9 +196,9 @@ class PreciseMatching(BaseModel):
         :return: eval result
         """
         pre_bbox = F.floor(gathered_outputs[0]+0.5)
-        bbox_gt = gathered_batchdata[2]
-        class_id = gathered_batchdata[-2]
-        file_id = gathered_batchdata[-1]
+        bbox_gt = gathered_batchdata["bbox"]
+        class_id = gathered_batchdata["class_id"]
+        file_id = gathered_batchdata["file_id"]
         assert list(bbox_gt.shape) == list(pre_bbox.shape), "{} != {}".format(list(bbox_gt.shape), list(pre_bbox.shape))
 
         res = []

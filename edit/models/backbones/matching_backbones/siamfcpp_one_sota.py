@@ -4,6 +4,7 @@ import megengine.module as M
 from megengine.module.conv import Conv2d, ConvTranspose2d
 import megengine.functional as F
 from edit.models.builder import BACKBONES, build_loss
+from edit.models.common.utils import default_init_weights
 
 def xcorr_depthwise(x, kernel):
     """
@@ -225,22 +226,9 @@ class SIAMFCPP_one_sota(M.Module):
         return loss, loss_cls, loss_reg, cls_labels
 
     def init_weights(self, pretrained=None, strict=True):
-        # 这里也可以进行参数的load，比如不在之前保存的路径中的模型（预训练好的）
-        pass
-        # """Init weights for models.
-        #
-        # Args:
-        #     pretrained (str, optional): Path for pretrained weights. If given None, pretrained weights will not be loaded. Defaults to None.
-        #     strict (boo, optional): Whether strictly load the pretrained model.
-        #         Defaults to True.
-        # """
-        # if isinstance(pretrained, str):
-        #     load_checkpoint(self, pretrained, strict=strict, logger=logger)
-        # elif pretrained is None:
-        #     pass  # use default initialization
-        # else:
-        #     raise TypeError('"pretrained" must be a str or None. '
-        #                     f'But received {type(pretrained)}.')
+        print("init weights for conv relu")
+        default_init_weights(self.cls_convs)
+        default_init_weights(self.reg_convs)        
 
 
 class AlexNet_stride4(M.Module):
@@ -253,6 +241,7 @@ class AlexNet_stride4(M.Module):
         self.conv3 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1) # 2*48*9*200*200*48       1658880000
         self.conv4 = M.conv_bn.ConvBnRelu2d(ch, ch, 3, 1, 1) # 2*48*9*200*200*48       1658880000
         self.conv5 = M.conv_bn.ConvBn2d(ch, ch, 3, 1, 1) # 2*48*9*200*200*48           1658880000
+        self.initweights()
         #  total: 15121920000 + 2* 2*48*9*200*200*48  = 18439680000   optical
         #          6193938432                         = 7552892928   sar
         # 
@@ -267,3 +256,9 @@ class AlexNet_stride4(M.Module):
         x = self.conv4(x)
         x = self.conv5(x) # 200, 128
         return x
+
+    def initweights(self):
+        default_init_weights(self.conv1)
+        default_init_weights(self.conv2)
+        default_init_weights(self.conv3)
+        default_init_weights(self.conv4)
