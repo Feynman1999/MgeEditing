@@ -27,10 +27,22 @@
 在`configs/mot/`目录下可以找到一个配置文件`centertracker_fish_dla_GN_test.py`，即比赛最终模型的测试配置，可以直接使用，也可以根据自己的情况基于其进行参数的调整
 ![测试配置文件图示](https://img01.sogoucdn.com/app/a/100520146/3891821abf4a2799d2c184df48b937e1)
 ## 单机单卡启动命令
+
 `python tools/test.py configs/mot/centertracker_fish_dla_GN_test.py --gpuids 0 -d`
 > 运行结束后可以在work_dir文件夹中找到最新的以时间戳命名的文件夹，里面存放的是结果txt
 
+## 预训练模型
+
+我们提供了此次比赛的结果模型：
+
+https://pan.baidu.com/s/1kkfBGOkgejjSBQAzWvt8PQ
+
+提取码: 4aps 
+
+
+
 # 代码库
+
 * 基于[MgeEditing](https://github.com/Feynman1999/MgeEditing)，欢迎大家star~
 
 # 说明
