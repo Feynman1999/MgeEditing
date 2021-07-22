@@ -8,7 +8,7 @@ import megengine.functional as F
 from megengine.autodiff import GradManager
 from edit.core.hook.evaluation import psnr, ssim
 from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de_multi_padding, ensemble_forward, ensemble_back
-from edit.utils import img_multi_padding, img_de_multi_padding
+from edit.utils import img_multi_padding, img_de_multi_padding, flow_to_image
 from ..base import BaseModel
 from ..builder import build_backbone, build_loss
 from ..registry import MODELS
@@ -126,11 +126,15 @@ class STTN_synthesizer(BaseModel):
         img = mge.tensor(img, dtype="float32")
         mask = mge.tensor(mask, dtype="float32")
         res = test_batch(img, mask, self.generator)
-        for i in range(start, start + len):
+        for i in range(start, start + len -1):
             print("write clip: {} idx: {}".format(self.now_deal_clip, i))
-            x,y,w,h = self.bboxes[i]
-            imwrite(tensor2img(res[i-start], min_max = self.min_max)[y:y+h, x:x+w, :], os.path.join(save_path, f"video_{str(self.now_deal_clip).zfill(4)}",
+            flow = res[i-start].transpose(1,2,0).numpy()
+            flow = flow_to_image(flow)
+            imwrite(flow[:, :, [2,1,0]], os.path.join(save_path, f"video_{str(self.now_deal_clip).zfill(4)}",
                        f"crop_{str(i).zfill(6)}.png"))
+            # x,y,w,h = self.bboxes[i]
+            # imwrite(tensor2img(res[i-start], min_max = self.min_max)[y:y+h, x:x+w, :], os.path.join(save_path, f"video_{str(self.now_deal_clip).zfill(4)}",
+            #            f"crop_{str(i).zfill(6)}.png"))
 
     def test_step(self, batchdata, **kwargs):
         """
@@ -171,10 +175,11 @@ class STTN_synthesizer(BaseModel):
                 最后一帧, 开始处理并保存
             """
             self.read_bbox()
-            for i in range(0, max_frame_num//5):
-                self.solve(i*5, 5, save_path = kwargs.get("save_path", "./workdirs"))
-            if max_frame_num % 5 != 0:
-                self.solve(max_frame_num//5 * 5, max_frame_num % 5, save_path = kwargs.get("save_path", "./workdirs"))
+            gap = 10
+            for i in range(0, max_frame_num//gap):
+                self.solve(i*gap, gap, save_path = kwargs.get("save_path", "./workdirs"))
+            if max_frame_num % gap != 0:
+                self.solve(max_frame_num//gap * gap, max_frame_num % gap, save_path = kwargs.get("save_path", "./workdirs"))
             return True
         return False
 

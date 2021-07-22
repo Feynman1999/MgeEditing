@@ -58,7 +58,4 @@ def test_batch(frames, masks, netG):
     masked_frame = (frames * (1 - masks))
     netG.eval()
     pred_img = netG(masked_frame, masks)
-    frames = frames.reshape(b*t, c, h, w)
-    masks = masks.reshape(b*t, 1, h, w)
-    comp_img = frames*(1.-masks) + masks*pred_img
-    return comp_img
+    return pred_img

@@ -1,6 +1,7 @@
 import megengine.functional as F
 from typing import List
 from edit.utils import imwrite, tensor2img, bgr2ycbcr, img_multi_padding, img_de_multi_padding
+import random
 import numpy as np
 import copy
 import cv2
@@ -38,6 +39,25 @@ def pooling_nms(hm):
     return hm
 
 nowiter = 0
+
+def num_to_color(num):
+    z = num % 256
+    num = num // 256
+    y = num % 256
+    num = num //256
+    return (num, y, z)
+
+def get_id_to_color_dict(nums = 50):
+    # 随机生成nums种颜色, (x,y,z)  [0,255]
+    assert nums <= 100
+    res = {}
+    random.seed(23333)
+    res2 = random.sample(range(0, 256**3), nums)
+    for id, item in enumerate(res2):
+        res[id+1] = num_to_color(item)
+    return res
+
+color_dict = get_id_to_color_dict()
 
 def test_batch(img1, img2, pre_bboxes, *, netG, pre_labels, gap):
     """
@@ -88,17 +108,14 @@ def test_batch(img1, img2, pre_bboxes, *, netG, pre_labels, gap):
                     """
                         根据origin_center_x和desti_x绘制变化箭头
                     """
-                    cv2.arrowedLine(viz_img, (int(origin_center_x),int(origin_center_y)), (int(desti_x),int(desti_y)), (0,0,255),5,8,0,0.3)
-                    cv2.rectangle(viz_img, (tl_x, tl_y), (br_x, br_y), (0, 0, 255), 1, 8)
+                    cv2.arrowedLine(viz_img, (int(origin_center_x),int(origin_center_y)), (int(desti_x),int(desti_y)), (0,0,255),3,8,0,0.3)
+                    # cv2.rectangle(viz_img, (tl_x, tl_y), (br_x, br_y), (0, 0, 255), 1, 8)
                     # viz_img[tl_y:br_y, tl_x:br_x, :] = 255
                     need_to_deal.append((float(heatmap[0, cla, i, j]), desti_x, desti_y, cla, len(now_bboxes)-1)) # (p, desti_w, desti_h, cla, index) 
     
     return_now_bboxes = []
     return_now_labels = []
 
-    global nowiter
-    imwrite(viz_img, file_path="./viz_{}_{}.png".format(nowiter, gap))
-    nowiter+=1
     # cal id
     if pre_labels is None:
         # 第一帧，直接赋值id，从1开始
@@ -160,6 +177,15 @@ def test_batch(img1, img2, pre_bboxes, *, netG, pre_labels, gap):
                 max_id += 1
             order -= 1
 
+    # 最后，根据检测到的bboxes画带id的bboxes 
+    oooid = 0
+    for item in return_now_bboxes:
+        cv2.rectangle(viz_img, (item[0], item[1]), (item[2], item[3]), color_dict[return_now_labels[oooid][1]], 2, 8)
+        oooid+=1
+    global nowiter
+    # imwrite(viz_img, file_path="./viz_{}_{}.png".format(nowiter, gap))
+    nowiter+=1
+    
     return_now_bboxes = np.array(return_now_bboxes, dtype=np.int64)
     return_now_bboxes = [return_now_bboxes]
     return_now_labels = np.array(return_now_labels, dtype=np.int64)

@@ -784,6 +784,25 @@ def pooling_nms(hm):
 
 nowiter = 0
 
+def num_to_color(num):
+    z = num % 256
+    num = num // 256
+    y = num % 256
+    num = num //256
+    return (num, y, z)
+
+def get_id_to_color_dict(nums = 50):
+    # 随机生成nums种颜色, (x,y,z)  [0,255]
+    assert nums <= 100
+    res = {}
+    random.seed(23333)
+    res2 = random.sample(range(0, 256**3), nums)
+    for id, item in enumerate(res2):
+        res[id+1] = num_to_color(item)
+    return res
+
+color_dict = get_id_to_color_dict()
+
 def test_batch(img1, img2, pre_bboxes, *, netG, pre_labels, gap):
     """
         输入：
@@ -834,16 +853,13 @@ def test_batch(img1, img2, pre_bboxes, *, netG, pre_labels, gap):
                         根据origin_center_x和desti_x绘制变化箭头
                     """
                     cv2.arrowedLine(viz_img, (int(origin_center_x),int(origin_center_y)), (int(desti_x),int(desti_y)), (0,0,255),5,8,0,0.3)
-                    cv2.rectangle(viz_img, (tl_x, tl_y), (br_x, br_y), (0, 0, 255), 1, 8)
+                    # cv2.rectangle(viz_img, (tl_x, tl_y), (br_x, br_y), (0, 0, 255), 1, 8)
                     # viz_img[tl_y:br_y, tl_x:br_x, :] = 255
                     need_to_deal.append((float(heatmap[0, cla, i, j]), desti_x, desti_y, cla, len(now_bboxes)-1)) # (p, desti_w, desti_h, cla, index) 
     
     return_now_bboxes = []
     return_now_labels = []
 
-    global nowiter
-    imwrite(viz_img, file_path="./viz_{}_{}.png".format(nowiter, gap))
-    nowiter+=1
     # cal id
     if pre_labels is None:
         # 第一帧，直接赋值id，从1开始
@@ -905,6 +921,15 @@ def test_batch(img1, img2, pre_bboxes, *, netG, pre_labels, gap):
                 max_id += 1
             order -= 1
 
+    # 最后，根据检测到的bboxes画带id的bboxes 
+    oooid = 0
+    for item in return_now_bboxes:
+        cv2.rectangle(viz_img, (item[0], item[1]), (item[2], item[3]), color_dict[return_now_labels[oooid][1]], 1, 8)
+        oooid+=1
+    global nowiter
+    imwrite(viz_img, file_path="./viz_{}_{}.png".format(nowiter, gap))
+    nowiter+=1
+    
     return_now_bboxes = np.array(return_now_bboxes, dtype=np.int64)
     return_now_bboxes = [return_now_bboxes]
     return_now_labels = np.array(return_now_labels, dtype=np.int64)
@@ -1648,29 +1673,28 @@ class MotFishTestDataset(BaseMotDataset):
         self.logger.info("MotFishTestDataset dataset load ok,   mode: {}   len:{}".format(self.mode, len(self.data_infos)))
 
     def add_infos(self, gap, infos, imgs, clipname):
-        Len = len(imgs)
-        for i in range(Len):
+        Len = 0
+        for i in range(0, len(imgs), gap):
+            Len += 1
+        idx = 0
+        for i in range(0, len(imgs), gap):
             infos.append(
                 dict(
-                    img_path = os.path.join(self.folder, imgs[i]),
+                    img_path = os.path.join(self.folder, clipname, "img1", imgs[i]),
                     total_len = Len,
-                    index = i,
+                    index = idx,
                     clipname= clipname,
                     gap = gap
                 )
             )
+            idx+=1
 
     def load_annotations(self):
-        import json
         data_infos = []
-        json_PATH = os.path.join(self.folder, 'test.json')
-        with open(json_PATH, 'r', encoding='utf8') as fp:
-            valdata_list = json.load(fp)
-
-        for idata in valdata_list['videos']:
-            self.add_infos(gap = 1, infos=data_infos, imgs = idata['image_list'], clipname=idata['file_name'])
-            self.add_infos(gap = 5, infos=data_infos, imgs = idata['image_5list'], clipname=idata['file_name'])
-
+        for clipname in os.listdir(self.folder):
+            imgs = sorted(list(scandir(os.path.join(self.folder, clipname, "img1"), suffix=IMG_EXTENSIONS, recursive=False)))
+            self.add_infos(gap = 1, infos = data_infos, imgs = imgs, clipname = clipname)
+            self.add_infos(gap = 5, infos = data_infos, imgs = imgs, clipname = clipname)
         return data_infos
 
 class Hook:
